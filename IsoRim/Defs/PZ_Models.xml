@@ -2,7 +2,8 @@
 <Defs>
 
   <!-- IsoRim's model of the stairs (loaded only with IsoRim, LoadFolders.xml): a stepped ramp up to one storey at the
-       locked wall height (1.65 + 0.02). Big plain shapes; treads light, risers darker. -->
+       locked wall height (1.65 + 0.02). Big plain shapes with box-projected UVs; treads, sides and back plain "stuff" so
+       the stairs read like walls of the same stuff, risers "stuff_dark", the hidden bottom "stuff_deep". -->
   <IsoRim.ModelDef>
     <defName>R3D_PZ_Stairs</defName>
     <thingDef>PZ_Stairs</thingDef>
