@@ -17,10 +17,12 @@ namespace ProjectZ.Dev
     // Headless harness test (harness 2, `run.sh <tag> - projectz pz=...`). Inert unless the game is started with
     // -quicktest -projectztest. Output: <savedatafolder>/renders/<tag>/ (log.txt, results.txt, *.png, done.txt).
     //   -projectztag=<tag>
-    //   -projectzmode=main|plain|gen|raids|m1b   main: full M1a check; plain: make a no-annex save "pz_plain"
+    //   -projectzmode=main|plain|gen|raids|m1b|m1c   main: full M1a check; plain: make a no-annex save "pz_plain"
     //                                   (component removed, like a save from before the addon); gen: generation + finders
     //                                   only; raids: the M1a raid battery with a reason for each failure; m1b: stairs,
     //                                   upper floor, hauling, sleeping, a raid upstairs, save mid-climb, 3D shots (TestM1b)
+    //                                   m1c: roofs under upper floors, heat between floors, shooting between floors
+    //                                   (sight, hit chances, cover, real fighting, projectile shots), save/reload (TestM1c)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -281,6 +283,11 @@ namespace ProjectZ.Dev
                 StepM1b(map);
                 return;
             }
+            if (stage.StartsWith("c_"))
+            {
+                StepM1c(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -311,6 +318,10 @@ namespace ProjectZ.Dev
                     if (mode == "m1b")
                     {
                         stage = "b_setup";
+                    }
+                    else if (mode == "m1c")
+                    {
+                        stage = "c_setup";
                     }
                     else if (mode == "raids")
                     {

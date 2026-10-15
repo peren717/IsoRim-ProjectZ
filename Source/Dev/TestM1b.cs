@@ -29,6 +29,7 @@ namespace ProjectZ.Dev
         private static string climberId;
         private static IntVec3 climberPos;
         private static Func<bool> tickWatch;
+        private static bool sentDown;
         private static int watchEvery = 60;
 
         internal static void CountClimb(Pawn p)
@@ -169,6 +170,23 @@ namespace ProjectZ.Dev
                     TickUntil(GenDate.TicksPerDay + 2000, () => sleptUpstairsTicks >= 600, "b_sleep_check", 30);
                     return true;
                 case "b_shot2b":
+                    // Everyone already upstairs (they may stay up after the night): send them down first, so the order
+                    // upstairs below has a stair step to save.
+                    if (!sentDown && OnFloor(map, Colonists(map), 0) == 0)
+                    {
+                        sentDown = true;
+                        Info("all colonists upstairs: sent down first");
+                        IntVec3 below = new IntVec3(house.CenterCell.x, 0, house.minZ - 2);
+                        foreach (Pawn p in Colonists(map))
+                        {
+                            p.drafter.Drafted = true;
+                            p.drafter.FireAtWill = false;
+                            p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, CellFinder.StandableCellNear(below, map, 3f)), JobTag.DraftedOrder);
+                        }
+                        TickUntil(4000, () => OnFloor(map, Colonists(map), 0) == Colonists(map).Count, "b_shot2b");
+                        return true;
+                    }
+                    tickWatch = null;
                     FloorView.Set(1);
                     // Draft everyone and send them upstairs (ordered goto over the stairs). The first stair step seen is saved.
                     foreach (Pawn p in Colonists(map))
@@ -291,6 +309,11 @@ namespace ProjectZ.Dev
         // Before every tick-watch check: who sleeps upstairs, how many colonists are up.
         private static void TickHook(Map map)
         {
+            if (mode == "m1c")
+            {
+                KeepFed(map);
+                return;
+            }
             if (mode != "m1b" || house.Area == 0)
             {
                 return;
@@ -318,6 +341,18 @@ namespace ProjectZ.Dev
                 }
             }
             maxUpstairs = Mathf.Max(maxUpstairs, up);
+        }
+
+        // Keep the quick-test colonists fed and calm (m1c).
+        private static void KeepFed(Map map)
+        {
+            foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
+            {
+                if (p.needs?.food != null) p.needs.food.CurLevel = p.needs.food.MaxLevel;
+                if (p.needs?.joy != null) p.needs.joy.CurLevel = 1f;
+                if (p.needs?.rest != null) p.needs.rest.CurLevel = 1f;
+                if (p.InMentalState) p.MentalState.RecoverFromState();
+            }
         }
 
         private static Pawn FindClimber(Map map)
