@@ -23,6 +23,8 @@ namespace ProjectZ.Dev
     //                                   upper floor, hauling, sleeping, a raid upstairs, save mid-climb, 3D shots (TestM1b)
     //                                   m1c: roofs under upper floors, heat between floors, shooting between floors
     //                                   (sight, hit chances, cover, real fighting, projectile shots), save/reload (TestM1c)
+    //                                   m1c2: playtest findings (roofs, stacked walls, map edge, move order, facing, range
+    //                                   ring, mortar under a floor) with screenshots (TestM1c2)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -104,6 +106,7 @@ namespace ProjectZ.Dev
             // Driven from the game loop without a GameComponent (nothing test-only goes into saves).
             h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)));
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
+            h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))
             {
                 try
@@ -288,6 +291,11 @@ namespace ProjectZ.Dev
                 StepM1c(map);
                 return;
             }
+            if (stage.StartsWith("d_"))
+            {
+                StepM1c2(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -322,6 +330,10 @@ namespace ProjectZ.Dev
                     else if (mode == "m1c")
                     {
                         stage = "c_setup";
+                    }
+                    else if (mode == "m1c2")
+                    {
+                        stage = "d_setup";
                     }
                     else if (mode == "raids")
                     {

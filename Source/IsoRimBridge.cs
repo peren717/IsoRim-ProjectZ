@@ -38,6 +38,17 @@ namespace ProjectZ
 
         private static float PitchInner() => IsoRim.View3D.Pitch;
 
+        // IsoRim's roof switch (tests).
+        public static void SetRoofs(bool on)
+        {
+            if (Present)
+            {
+                SetRoofsInner(on);
+            }
+        }
+
+        private static void SetRoofsInner(bool on) => IsoRim.Roofs.Set(on);
+
         // Screen pixel to the cell under it on a floor (tests), via IsoRim's camera maths.
         public static void ScreenToGround(Vector2 px, float height, out Vector3 p)
         {
