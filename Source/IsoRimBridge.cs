@@ -63,6 +63,26 @@ namespace ProjectZ
 
         private static void SetRoofsInner(bool on) => IsoRim.Roofs.Set(on);
 
+        // The ground point the camera shows at the same place on screen as a point raised to a floor (x and z in ground
+        // rows, real height as y): centring the camera on it centres the raised point. Without the 3D view, the point
+        // itself.
+        public static Vector3 DrawnGroundPoint(Vector3 p) => Present ? DrawnGroundPointInner(p) : new Vector3(p.x, 0f, p.z);
+
+        private static Vector3 DrawnGroundPointInner(Vector3 p)
+        {
+            Vector3 flat = new Vector3(p.x, 0f, p.z);
+            if (!IsoRim.View3D.Ready)
+            {
+                return flat;
+            }
+            Vector3 g = IsoRim.View3D.ScreenToGround(IsoRim.View3D.WorldToScreen(p));
+            if (float.IsNaN(g.x) || float.IsNaN(g.z) || float.IsInfinity(g.x) || float.IsInfinity(g.z))
+            {
+                return flat;
+            }
+            return new Vector3(g.x, 0f, g.z);
+        }
+
         // An IsoRim option by its field name (tests); the old value, or null without IsoRim.
         public static object SetOption(string field, object value)
         {

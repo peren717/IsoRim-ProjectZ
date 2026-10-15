@@ -27,6 +27,8 @@ namespace ProjectZ.Dev
     //                                   ring, mortar under a floor) with screenshots (TestM1c2)
     //                                   stairs: the stairs batch (1x3 stairs, stairwell, rebuild from either floor, jumping
     //                                   down, slab height rule, wall-height lock, ornate door) with screenshots (TestStairs)
+    //                                   floorui: building floor 2 through the UI pointer and designators, refusal messages,
+    //                                   no-designator fall-through, language shots (TestFloorUI)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -80,6 +82,7 @@ namespace ProjectZ.Dev
             {
                 days = dd;
             }
+            FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -110,6 +113,10 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
+            if (mode == "floorui")
+            {
+                PatchMouse(h);
+            }
             h.Patch(AccessTools.Method(typeof(Frame), nameof(Frame.FailConstruction)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(BotchPrefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))
             {
@@ -252,6 +259,12 @@ namespace ProjectZ.Dev
 
         public static void OnGUI()
         {
+            if (Active && guiAction != null && Event.current.type == EventType.Repaint)
+            {
+                Action act = guiAction;
+                guiAction = null;
+                act();
+            }
             if (!Active || pendingLoad == null || Event.current.type != EventType.Repaint)
             {
                 return;
@@ -310,6 +323,11 @@ namespace ProjectZ.Dev
                 StepM1c2(map);
                 return;
             }
+            if (stage.StartsWith("u_"))
+            {
+                StepFloorUI(map);
+                return;
+            }
             if (stage.StartsWith("s_"))
             {
                 StepStairs(map);
@@ -354,7 +372,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "d_setup";
                     }
-                    else if (mode == "stairs")
+                    else if (mode == "stairs" || mode == "floorui")
                     {
                         stage = "s_setup";
                     }

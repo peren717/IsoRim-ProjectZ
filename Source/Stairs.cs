@@ -374,7 +374,7 @@ namespace ProjectZ
             }
             if (!SupportedFloorCell(loc, map))
             {
-                return ProjectZ.FloorOf(loc, map) >= 1 ? "PZ_NeedsRoofBelow".Translate() : "PZ_OnlyUpperFloors".Translate();
+                return ProjectZ.FloorOf(loc, map) >= 1 ? "PZ_NeedsRoofBelow".Translate() : ViewFloorAbove();
             }
             Thing tall = HeightRule.TallThingAt(below, map);
             if (tall != null)
@@ -383,6 +383,9 @@ namespace ProjectZ
             }
             return AcceptanceReport.WasAccepted;
         }
+
+        // Laying a floor while working on the ground: it goes on the floor above.
+        public static string ViewFloorAbove() => "PZ_ViewFloorAbove".Translate(FloorView.KeyName(PZKeyDefOf.PZ_FloorUp));
 
         public static bool SupportedFloorCell(IntVec3 loc, Map map)
         {

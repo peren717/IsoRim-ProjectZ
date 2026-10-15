@@ -4,7 +4,7 @@
   <!-- Open air in the annex: only an upper floor (PZ_UpperFloor) can be built on it. -->
   <TerrainAffordanceDef>
     <defName>PZ_FloorSupport</defName>
-    <label>upper floor space</label>
+    <label>open air upstairs</label>
     <order>1500</order>
   </TerrainAffordanceDef>
 

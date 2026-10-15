@@ -359,7 +359,7 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
-            if (mode == "stairs")
+            if (mode == "stairs" || mode == "floorui")
             {
                 StairsHook(map);
                 return;

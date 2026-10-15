@@ -52,6 +52,19 @@ namespace ProjectZ
         }
 
         public static string Label(int floor) => "PZ_FloorLabel".Translate(floor + 1);
+
+        // A key as players read it: = and - rather than the game's "Equals" and "Minus".
+        public static string KeyName(KeyBindingDef k)
+        {
+            switch (k.MainKey)
+            {
+                case KeyCode.Equals: return "=";
+                case KeyCode.Minus: return "-";
+                case KeyCode.KeypadPlus: return "Num +";
+                case KeyCode.KeypadMinus: return "Num -";
+                default: return k.MainKeyLabel;
+            }
+        }
     }
 
     // Keys (= and - by default) and a button in the bottom-right row.
@@ -70,7 +83,7 @@ namespace ProjectZ
                 return;
             }
             int k = FloorView.Current;
-            string tip = "PZ_FloorButtonTip".Translate(FloorView.Label(k), PZKeyDefOf.PZ_FloorUp.MainKeyLabel, PZKeyDefOf.PZ_FloorDown.MainKeyLabel);
+            string tip = "PZ_FloorButtonTip".Translate(FloorView.Label(k), FloorView.KeyName(PZKeyDefOf.PZ_FloorUp), FloorView.KeyName(PZKeyDefOf.PZ_FloorDown));
             if (row.ButtonText(FloorView.Label(k), tip))
             {
                 FloorView.Set(k + 1 >= a.floors ? 0 : k + 1);

@@ -1,0 +1,70 @@
+using HarmonyLib;
+using RimWorld;
+using Verse;
+
+namespace ProjectZ.Patches
+{
+    // Plain refusals for building between floors. The game refuses a terrain it can't build on with its own affordance
+    // message ("requires <affordance>") before any place worker runs, which says nothing useful here:
+    //   - an upper floor on the ground (working on the ground) or on a cell that already has a floor: say what to do;
+    //     elsewhere the upper floor's own rules (PlaceWorker_UpperFloor.Check: roof below, stairwell, tall building);
+    //   - anything else on open air upstairs: lay a floor first.
+    // Every placement goes through GenConstruct.CanPlaceBlueprintAt_NewTemp (designators, copies, rebuilds, installs).
+    [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanPlaceBlueprintAt_NewTemp))]
+    public static class CanPlaceBlueprintAt_Messages_Patch
+    {
+        public static void Postfix(BuildableDef entDef, IntVec3 center, Rot4 rot, Map map, Thing thing, ThingDef stuffDef, ref AcceptanceReport __result)
+        {
+            if (__result.Accepted || entDef == null || map == null || ProjectZ.Annex(map) == null || !IsTerrainRefusal(entDef, stuffDef ?? thing?.Stuff, __result.Reason))
+            {
+                return;
+            }
+            if (entDef == PZDefOf.PZ_UpperFloor)
+            {
+                if (ProjectZ.FloorOf(center, map) < 1)
+                {
+                    __result = PlaceWorker_UpperFloor.ViewFloorAbove();
+                    return;
+                }
+                if (center.GetTerrain(map) != PZDefOf.PZ_OpenAir)
+                {
+                    __result = "PZ_AlreadyFloor".Translate();
+                    return;
+                }
+                AcceptanceReport r = PlaceWorker_UpperFloor.Check(center, map);
+                if (!r.Accepted)
+                {
+                    __result = r;
+                }
+                return;
+            }
+            foreach (IntVec3 c in GenAdj.OccupiedRect(center, rot, entDef.Size))
+            {
+                if (c.InBounds(map) && c.GetTerrain(map) == PZDefOf.PZ_OpenAir)
+                {
+                    __result = "PZ_NeedsFloorFirst".Translate();
+                    return;
+                }
+            }
+        }
+
+        // The game's own "terrain can't support" refusal (GenConstruct.CanPlaceBlueprintAt_NewTemp, same keys and order).
+        private static bool IsTerrainRefusal(BuildableDef entDef, ThingDef stuffDef, string reason)
+        {
+            if (reason.NullOrEmpty())
+            {
+                return false;
+            }
+            TerrainAffordanceDef need = entDef.GetTerrainAffordanceNeed(stuffDef);
+            if (need == null)
+            {
+                return reason == "TerrainCannotSupport".Translate(entDef).CapitalizeFirst();
+            }
+            if (entDef.useStuffTerrainAffordance && stuffDef != null)
+            {
+                return reason == "TerrainCannotSupport_TerrainAffordanceFromStuff".Translate(entDef, need, stuffDef).CapitalizeFirst();
+            }
+            return reason == "TerrainCannotSupport_TerrainAffordance".Translate(entDef, need).CapitalizeFirst();
+        }
+    }
+}

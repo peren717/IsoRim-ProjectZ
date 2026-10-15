@@ -789,7 +789,7 @@ namespace ProjectZ.Dev
             {
                 foreach (Thing t in c.GetThingList(map).ToList())
                 {
-                    if (t is Plant || t.def.category == ThingCategory.Item || t is Filth || t is Building)
+                    if (t.def.destroyable && (t is Plant || t.def.category == ThingCategory.Item || t is Filth || t is Building))
                     {
                         t.Destroy();
                     }
@@ -833,7 +833,7 @@ namespace ProjectZ.Dev
             HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(stairPos, StairRot).Cells);
             foreach (IntVec3 g in sHouseA)
             {
-                if (!well.Contains(g))
+                if (!well.Contains(g) && !(mode == "floorui" && g.x <= sHouseA.maxX - 4))
                 {
                     map.terrainGrid.SetTerrain(UpS(g, map), PZDefOf.PZ_UpperFloor);
                 }
@@ -868,6 +868,12 @@ namespace ProjectZ.Dev
                 AnnexWatch.Reset();
                 stage = from;
                 Info("starting at " + from);
+                return;
+            }
+            if (mode == "floorui")
+            {
+                Info($"floorui: house A {sHouseA}, floor over x > {sHouseA.maxX - 4} only; stairs {stairPos}; far ground {farGround}");
+                stage = "u_start";
                 return;
             }
             Info($"house A {sHouseA} (stairs {stairPos} up {StairRot.ToStringHuman()}), house B {sHouseB} (floor over x <= {sHouseB.minX + 3}, ornate doors {ornUnder} under it, {ornOpen} not), far ground {farGround}");

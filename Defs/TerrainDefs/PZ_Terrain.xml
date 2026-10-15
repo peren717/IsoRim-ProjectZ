@@ -5,7 +5,7 @@
   <TerrainDef>
     <defName>PZ_OpenAir</defName>
     <label>open air</label>
-    <description>Empty space above the ground.</description>
+    <description>Empty space on an upper floor. Lay an upper floor here over a roofed room.</description>
     <dontRender>true</dontRender>
     <passability>Impassable</passability>
     <pathCost>300</pathCost>
@@ -38,7 +38,7 @@
   <TerrainDef>
     <defName>PZ_UpperFloor</defName>
     <label>upper floor</label>
-    <description>Boards on beams for a floor above a roofed room. The cell below must have a roof.</description>
+    <description>Boards on beams for the storey above. View the floor above, then lay it over a roofed room.</description>
     <texturePath>Terrain/Surfaces/WoodFloor</texturePath>
     <color>(126,98,72)</color>
     <edgeType>Hard</edgeType>

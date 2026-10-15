@@ -10,13 +10,15 @@
   <PZ_NoFloorAbove>No floor above</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>Needs a roof here</PZ_NeedsRoofHere>
   <PZ_LandingBlocked>The exit is blocked</PZ_LandingBlocked>
-  <PZ_NeedsRoofBelow>Needs a roof below</PZ_NeedsRoofBelow>
-  <PZ_OnlyUpperFloors>Only on upper floors</PZ_OnlyUpperFloors>
+  <PZ_NeedsRoofBelow>The room below needs a roof</PZ_NeedsRoofBelow>
+  <PZ_ViewFloorAbove>Switch to the floor above first ({0})</PZ_ViewFloorAbove>
+  <PZ_AlreadyFloor>Already has a floor</PZ_AlreadyFloor>
+  <PZ_NeedsFloorFirst>Lay an upper floor here first</PZ_NeedsFloorFirst>
   <PZ_HeightAccuracy>Accuracy from higher floors: +{0}</PZ_HeightAccuracy>
   <PZ_HeightAccuracyTip>Added to the shooter accuracy when shooting down at a lower floor.</PZ_HeightAccuracyTip>
   <PZ_WellNotOpen>Needs open space above</PZ_WellNotOpen>
   <PZ_ExitNeedsSupport>The top needs a floor or a roof under it</PZ_ExitNeedsSupport>
-  <PZ_StairwellBelow>Stairwell below</PZ_StairwellBelow>
+  <PZ_StairwellBelow>Keep the space over the stairs open</PZ_StairwellBelow>
   <PZ_TallBelow>{0} below is too tall</PZ_TallBelow>
   <PZ_TooTallUnderFloor>Too tall for the floor above</PZ_TooTallUnderFloor>
 </LanguageData>
