@@ -12,12 +12,15 @@ namespace ProjectZ
         public int floors = 2;
         // Dev/debug: extra logging, the annex spawn watch and the dev-mode camera bypass.
         public bool debug = false;
+        // Decision D7: shooting down at a lower floor adds this to the shooter's accuracy factor (hit report "shooter").
+        public float heightAccuracy = 0.2f;
 
         public override void ExposeData()
         {
             base.ExposeData();
             Scribe_Values.Look(ref floors, "floors", 2);
             Scribe_Values.Look(ref debug, "debug", false);
+            Scribe_Values.Look(ref heightAccuracy, "heightAccuracy", 0.2f);
             floors = Mathf.Clamp(floors, 1, MaxFloors);
         }
     }
@@ -44,6 +47,9 @@ namespace ProjectZ
             list.Begin(inRect);
             list.Label("PZ_Floors".Translate(Settings.floors), tooltip: "PZ_FloorsTip".Translate());
             Settings.floors = Mathf.RoundToInt(list.Slider(Settings.floors, 1f, ProjectZSettings.MaxFloors));
+            list.Gap();
+            list.Label("PZ_HeightAccuracy".Translate(Settings.heightAccuracy.ToStringPercent()), tooltip: "PZ_HeightAccuracyTip".Translate());
+            Settings.heightAccuracy = UnityEngine.Mathf.Round(list.Slider(Settings.heightAccuracy, 0f, 0.5f) * 20f) / 20f;
             list.Gap();
             list.CheckboxLabeled("PZ_Debug".Translate(), ref Settings.debug, "PZ_DebugTip".Translate());
             list.End();

@@ -29,6 +29,8 @@ Stacked floors for IsoRim Waylith, all on one map.
 
 - Changes gameplay: new maps get extra space for upper floors.
 - Build stairs on a roofed cell and upper floors over roofed rooms; pick the floor you work on with the button in the bottom-right corner or the = and - keys.
+- An upper floor is the roof of the room below, and heat passes between floors.
+- Shooting between floors: only from the edge of a floor, with an accuracy bonus when shooting down. Off with Combat Extended.
 - Not safe to remove from a save that has floors.
 
 Path splicing idea from MigCorp - Skiptech (TheMiggiestMig).
