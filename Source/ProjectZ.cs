@@ -9,6 +9,7 @@ namespace ProjectZ
         public static TerrainDef PZ_OpenAir;
         public static TerrainDef PZ_UpperFloor;
         public static ThingDef PZ_Stairs;
+        public static RoofDef PZ_FloorRoof;
 
         static PZDefOf()
         {
@@ -67,6 +68,8 @@ namespace ProjectZ
             else if (HasAnnex)
             {
                 ProjectZ.DebugLog($"map {map}: size {map.Size}, ground z {groundZ}, stride {stride}, floors {floors}");
+                // D6: roofs under upper floors are the floors' own (saves from before M1c, or anything that slipped through).
+                FloorRoof.Normalize(map);
             }
         }
     }
@@ -182,6 +185,12 @@ namespace ProjectZ
                 return IntVec3.Invalid;
             }
             return new IntVec3(g.x, g.y, g.z + k * a.stride);
+        }
+
+        // An upper-floor cell with a floor built on it (any terrain but open air).
+        public static bool HasFloor(IntVec3 c, Map map)
+        {
+            return c.IsValid && FloorOf(c, map) >= 1 && map.terrainGrid.TerrainAt(c) != PZDefOf.PZ_OpenAir;
         }
 
         // Ground rectangle (the whole map without an annex).
