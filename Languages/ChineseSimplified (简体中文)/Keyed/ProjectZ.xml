@@ -7,17 +7,17 @@
   <PZ_FloorLabel>{0} 楼</PZ_FloorLabel>
   <PZ_FloorButtonTip>当前在 {0}，上面的楼层已隐藏。\n\n点击切换到下一层，或按 {1}、{2}。</PZ_FloorButtonTip>
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
-  <PZ_NoFloorAbove>上面没有楼层</PZ_NoFloorAbove>
+  <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>
-  <PZ_LandingBlocked>出口被挡住了</PZ_LandingBlocked>
+  <PZ_LandingBlocked>楼梯顶端出口那格被挡住了</PZ_LandingBlocked>
   <PZ_NeedsRoofBelow>下面的房间需要屋顶</PZ_NeedsRoofBelow>
   <PZ_ViewFloorAbove>先切换到上一层（{0}）</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>这里已有楼板</PZ_AlreadyFloor>
   <PZ_NeedsFloorFirst>这里要先铺楼板</PZ_NeedsFloorFirst>
   <PZ_HeightAccuracy>从高层射击的命中加成：+{0}</PZ_HeightAccuracy>
   <PZ_HeightAccuracyTip>向低层射击时，加到射手命中上。</PZ_HeightAccuracyTip>
-  <PZ_WellNotOpen>上方需要留空</PZ_WellNotOpen>
-  <PZ_ExitNeedsSupport>出口需要楼板，或下面有屋顶</PZ_ExitNeedsSupport>
+  <PZ_WellNotOpen>楼梯正上方的 3 格要空着，不能有楼板或建筑</PZ_WellNotOpen>
+  <PZ_ExitNeedsSupport>楼梯顶端出口那格要有楼板，或者它下面有屋顶</PZ_ExitNeedsSupport>
   <PZ_StairwellBelow>楼梯上方要留空</PZ_StairwellBelow>
   <PZ_TallBelow>下面的{0}太高</PZ_TallBelow>
   <PZ_TooTallUnderFloor>太高了：上面有楼板</PZ_TooTallUnderFloor>
