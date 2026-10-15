@@ -17,13 +17,15 @@ namespace ProjectZ.Dev
     // Headless harness test (harness 2, `run.sh <tag> - projectz pz=...`). Inert unless the game is started with
     // -quicktest -projectztest. Output: <savedatafolder>/renders/<tag>/ (log.txt, results.txt, *.png, done.txt).
     //   -projectztag=<tag>
-    //   -projectzmode=main|plain|gen   main: full M1a check; plain: make a no-annex save "pz_plain" (component
-    //                                   removed, like a save from before the addon); gen: generation + finders only
+    //   -projectzmode=main|plain|gen|raids|m1b   main: full M1a check; plain: make a no-annex save "pz_plain"
+    //                                   (component removed, like a save from before the addon); gen: generation + finders
+    //                                   only; raids: the M1a raid battery with a reason for each failure; m1b: stairs,
+    //                                   upper floor, hauling, sleeping, a raid upstairs, save mid-climb, 3D shots (TestM1b)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
-    public static class TestRunner
+    public static partial class TestRunner
     {
         public static bool Active;
         public static int FloorsOverride;
@@ -274,6 +276,11 @@ namespace ProjectZ.Dev
                 DoTicks(map);
                 return;
             }
+            if (stage.StartsWith("b_"))
+            {
+                StepM1b(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -301,8 +308,18 @@ namespace ProjectZ.Dev
                 case "gencheck":
                     GenCheck(map, "after generation");
                     FinderStats(map);
-                    if (mode == "gen")
+                    if (mode == "m1b")
                     {
+                        stage = "b_setup";
+                    }
+                    else if (mode == "raids")
+                    {
+                        FireIncidents(map, raidsOnly: true);
+                        Finish();
+                    }
+                    else if (mode == "gen")
+                    {
+                        // D3: temporary maps get the annex too.
                         // D3: temporary maps get the annex too. Generate an enemy settlement's map (its own genSteps).
                         Settlement s = Find.WorldObjects.Settlements.Where(x => x.Faction != null && !x.Faction.IsPlayer && !x.HasMap && x.Tile.Layer == map.Tile.Layer).OrderBy(x => Find.WorldGrid.ApproxDistanceInTiles(x.Tile, map.Tile)).FirstOrDefault();
                         if (s == null)
@@ -437,6 +454,17 @@ namespace ProjectZ.Dev
             {
                 tm.DoSingleTick();
                 ticksLeft--;
+                if (tickWatch != null && (ticksTotal - ticksLeft) % watchEvery == 0)
+                {
+                    TickHook(map);
+                    if (tickWatch())
+                    {
+                        Out($"  condition met after {ticksTotal - ticksLeft} of {ticksTotal} ticks");
+                        ticksTotal -= ticksLeft;
+                        ticksLeft = 0;
+                        break;
+                    }
+                }
                 if ((ticksTotal - ticksLeft) % 15000 == 0)
                 {
                     Out($"  tick {ticksTotal - ticksLeft}/{ticksTotal} (game day {GenDate.DaysPassedFloat:0.00}), pawns {map.mapPawns.AllPawnsSpawnedCount}, annex spawns so far {AnnexWatch.AnnexSpawns}");
@@ -680,13 +708,13 @@ namespace ProjectZ.Dev
             Result(name, ok, $"{n} picks: annex {annex}, invalid {invalid}, on top ground row {topRow}, max z {maxZ} (ground rows 0..{gz - 1})");
         }
 
-        private static void FireIncidents(Map map)
+        private static void FireIncidents(Map map, bool raidsOnly = false)
         {
             int fired = 0, failed = 0;
             List<string> report = new List<string>();
             foreach (PawnsArrivalModeDef arrive in new[] { PawnsArrivalModeDefOf.EdgeWalkIn, PawnsArrivalModeDefOf.EdgeDrop, PawnsArrivalModeDefOf.CenterDrop, PawnsArrivalModeDefOf.RandomDrop, PawnsArrivalModeDefOf.EdgeWalkInGroups })
             {
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < (raidsOnly ? 10 : 3); i++)
                 {
                     IncidentParms parms = StorytellerUtility.DefaultParmsNow(IncidentCategoryDefOf.ThreatBig, map);
                     parms.faction = Find.FactionManager.RandomEnemyFaction(allowNonHumanlike: false);
@@ -694,6 +722,7 @@ namespace ProjectZ.Dev
                     parms.raidArrivalMode = arrive;
                     parms.points = 400f;
                     parms.forced = true;
+                    Faction faction = parms.faction;
                     bool ok = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
                     if (ok)
                     {
@@ -702,9 +731,21 @@ namespace ProjectZ.Dev
                     else
                     {
                         failed++;
+                        // Why: the raid's points after the arrival mode's factor against the cheapest group the faction can
+                        // field. Map-independent: decided before any cell is looked at.
+                        float adjusted = IncidentWorker_Raid.AdjustedRaidPoints(400f, arrive, RaidStrategyDefOf.ImmediateAttack, faction, PawnGroupKindDefOf.Combat, map);
+                        float min = faction?.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) ?? -1f;
+                        string why = $"RaidEnemy/{arrive.defName} failed: faction {faction?.Name} ({faction?.def.defName}, {faction?.def.techLevel}), points 400 -> {adjusted:0} after the arrival factor, cheapest combat group {min:0}, age restriction {parms.raidAgeRestriction?.defName ?? "none"}, arrival now {parms.raidArrivalMode?.defName}, spawn centre {parms.spawnCenter} (annex {ProjectZ.IsAnnex(parms.spawnCenter, map)})";
+                        Out(why);
+                        Info(why + (adjusted < min ? " => not enough points (vanilla, map-independent)" : " => points suffice: look further"));
                     }
-                    report.Add("RaidEnemy/" + arrive.defName + (ok ? "" : "(failed)"));
+                    report.Add("RaidEnemy/" + arrive.defName + (ok ? "" : "(failed)") + "[" + faction?.def.defName + "]");
                 }
+            }
+            if (raidsOnly)
+            {
+                Info($"raids fired {fired}, failed {failed}: {string.Join(", ", report)}");
+                return;
             }
             foreach (string defName in new[] { "ManhunterPack", "HerdMigration", "FarmAnimalsWanderIn", "ThrumboPasses", "ResourcePodCrash", "ShipChunkDrop", "MeteoriteImpact", "TraderCaravanArrival", "WildManWandersIn" })
             {
@@ -763,9 +804,9 @@ namespace ProjectZ.Dev
 
         private static void WatchCheck(Map map, string when)
         {
-            int pawnsInAnnex = map.mapPawns.AllPawnsSpawned.Count(p => ProjectZ.IsAnnex(p.Position, map));
+            int pawnsInAnnex = map.mapPawns.AllPawnsSpawned.Count(p => ProjectZ.IsAnnex(p.Position, map) && (ProjectZ.FloorOf(p.Position, map) < 1 || p.Position.GetTerrain(map) == PZDefOf.PZ_OpenAir));
             Result("nothing spawned in the annex: " + when, AnnexWatch.AnnexSpawns == 0 && pawnsInAnnex == 0,
-                $"{AnnexWatch.Spawns} spawns ({string.Join(",", AnnexWatch.SpawnsByCategory.Select(kv => kv.Key + "x" + kv.Value))}), annex spawns {AnnexWatch.AnnexSpawns} (+{AnnexWatch.AnnexMotes} visual motes) {string.Join(",", AnnexWatch.AnnexByDef.Select(kv => kv.Key + "x" + kv.Value))}, pawns now in annex {pawnsInAnnex}, pawns on map {map.mapPawns.AllPawnsSpawnedCount}");
+                $"{AnnexWatch.Spawns} spawns ({string.Join(",", AnnexWatch.SpawnsByCategory.Select(kv => kv.Key + "x" + kv.Value))}), annex spawns {AnnexWatch.AnnexSpawns} (+{AnnexWatch.AnnexMotes} visual motes) {string.Join(",", AnnexWatch.AnnexByDef.Select(kv => kv.Key + "x" + kv.Value))}, pawns now in the annex off built floors {pawnsInAnnex}, pawns on map {map.mapPawns.AllPawnsSpawnedCount}");
             Info($"weather now {map.weatherManager.curWeather?.defName}, game day {GenDate.DaysPassedFloat:0.00}, errors so far {errors}, warnings {warnings}");
         }
 
