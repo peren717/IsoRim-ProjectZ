@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_Floors>Floors: {0}</PZ_Floors>
+  <PZ_FloorsTip>Storeys including the ground. Applies to new maps only.</PZ_FloorsTip>
+  <PZ_Debug>Debug mode</PZ_Debug>
+  <PZ_DebugTip>Extra log lines and dev tools.</PZ_DebugTip>
+</LanguageData>

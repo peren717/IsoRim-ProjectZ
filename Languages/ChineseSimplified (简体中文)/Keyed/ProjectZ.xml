@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_Floors>楼层数：{0}</PZ_Floors>
+  <PZ_FloorsTip>包括地面在内的层数。只对新地图生效。</PZ_FloorsTip>
+  <PZ_Debug>调试模式</PZ_Debug>
+  <PZ_DebugTip>额外的日志和开发工具。</PZ_DebugTip>
+</LanguageData>
