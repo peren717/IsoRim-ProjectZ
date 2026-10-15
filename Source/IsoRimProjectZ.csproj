@@ -13,6 +13,8 @@
     <DebugType>none</DebugType>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <Optimize>true</Optimize>
+    <!-- IsoRim with the floor API (branch projectz-api until merged): override with -p:IsoRimDll=... -->
+    <IsoRimDll Condition="'$(IsoRimDll)' == ''">..\..\IsoRimModelsWT\1.7\Assemblies\IsoRim.dll</IsoRimDll>
     <DefineConstants>$(DefineConstants);RW17</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
@@ -21,6 +23,7 @@
   <ItemGroup>
     <Reference Include="Assembly-CSharp"><HintPath>..\..\..\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityStubs"><HintPath>..\..\..\UnityStubs.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="IsoRim"><HintPath>$(IsoRimDll)</HintPath><Private>false</Private></Reference>
     <Reference Include="Waylith"><HintPath>..\..\..\Waylith.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>..\..\..\..\..\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>

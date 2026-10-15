@@ -31,6 +31,7 @@ namespace ProjectZ
             Settings = GetSettings<ProjectZSettings>();
             // Never the argument-less PatchAll(): on 1.7 CoreCLR it can patch nothing.
             new Harmony("Peren.IsoRimProjectZ").PatchAll(typeof(ProjectZMod).Assembly);
+            IsoRimBridge.Init();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, floors=" + Settings.floors + " (effective " + ProjectZ.FloorsForNewMaps + ")");
         }

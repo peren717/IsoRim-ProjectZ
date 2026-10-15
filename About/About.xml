@@ -28,5 +28,9 @@
 Stacked floors for IsoRim Waylith, all on one map.
 
 - Changes gameplay: new maps get extra space for upper floors.
-- Not safe to remove from a save that has floors.</description>
+- Build stairs on a roofed cell and upper floors over roofed rooms; pick the floor you work on with the button in the bottom-right corner or the = and - keys.
+- Not safe to remove from a save that has floors.
+
+Path splicing idea from MigCorp - Skiptech (TheMiggiestMig).
+路径拼接思路参考 MigCorp - Skiptech（TheMiggiestMig）</description>
 </ModMetaData>
