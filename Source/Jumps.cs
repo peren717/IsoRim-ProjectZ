@@ -297,8 +297,9 @@ namespace ProjectZ
             return (StairShape.Index(c, s.Position, s.Rotation) + 0.5f) / 3f * IsoRimBridge.StoreyHeight;
         }
 
-        // The pawn's height over the floor of the cell it stands on: along the ramp, on the step between the ramp's top
-        // and the exit, and falling during a jump.
+        // The pawn's height over the floor of the cell it stands on. On and next to a ramp it follows where the pawn is
+        // DRAWN (the tweened position), projected onto the ramp's axis (RampRise): rising smoothly along L0 -> L1 -> H and
+        // on over the step onto the exit, the same function going down; during a jump it falls.
         public static float Rise(Pawn p)
         {
             if (!p.Spawned || ProjectZ.Annex(p.Map) == null)
@@ -307,23 +308,42 @@ namespace ProjectZ
             }
             Map map = p.Map;
             StepKind kind = Kind(p, out int fallen);
-            float pct = p.pather != null ? Mathf.Clamp01(p.pather.MovePercentage) : 0f;
             float storey = IsoRimBridge.StoreyHeight;
-            switch (kind)
+            if (kind == StepKind.Jump)
             {
-                case StepKind.StairUp:
-                    return Mathf.Lerp(RampHeight(p.Position, map), storey, pct);
-                case StepKind.StairDown:
-                    return Mathf.Lerp(0f, RampHeight(p.pather.nextCell, map) - storey, pct);
-                case StepKind.Jump:
-                    return -fallen * storey * pct * pct;
+                float pct = p.pather != null ? Mathf.Clamp01(p.pather.MovePercentage) : 0f;
+                return -fallen * storey * pct * pct;
             }
-            float here = RampHeight(p.Position, map);
-            if (p.pather != null && p.pather.Moving && p.pather.nextCell.IsValid)
+            Building_Stairs s = p.Position.GetEdifice(map) as Building_Stairs;
+            if (s == null && p.pather != null && p.pather.Moving && p.pather.nextCell.IsValid && p.pather.nextCell.InBounds(map))
             {
-                return Mathf.Lerp(here, RampHeight(p.pather.nextCell, map), pct);
+                s = p.pather.nextCell.GetEdifice(map) as Building_Stairs;
             }
-            return here;
+            if (s == null)
+            {
+                return 0f;
+            }
+            Vector3 drawn = p.Drawer?.tweener != null ? p.Drawer.tweener.TweenedPos : p.Position.ToVector3Shifted();
+            return RampRise(s, drawn, map) - (ProjectZ.FloorOf(p.Position, map) - ProjectZ.FloorOf(s.Position, map)) * storey;
+        }
+
+        // The height over the stairs' floor at a drawn world position (on any floor's rows): 0 at the low end's outer edge
+        // to a storey at the high end's outer edge, linear along the ramp's axis and flat past its ends; it fades out in
+        // the half cell beside the ramp (a pawn stepping on or off sideways).
+        public static float RampRise(Building_Stairs s, Vector3 drawn, Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            int row = Mathf.FloorToInt(drawn.z);
+            int k = a == null || row < a.groundZ ? 0 : row / a.stride;
+            float gz = a == null ? drawn.z : drawn.z - k * a.stride;
+            Vector3 centre = ProjectZ.GroundCellOf(s.Position, map).ToVector3Shifted();
+            float dx = drawn.x - centre.x;
+            float dz = gz - centre.z;
+            IntVec3 f = s.Rotation.FacingCell;
+            float along = dx * f.x + dz * f.z;
+            float side = Mathf.Abs(dx * f.z - dz * f.x);
+            float h = Mathf.Clamp01((along + 1.5f) / 3f) * IsoRimBridge.StoreyHeight;
+            return h * Mathf.Clamp01((1f - side) / 0.5f);
         }
 
         // Where a pawn is drawn across the floor during a stair step or jump: from its cell toward the next one's column,

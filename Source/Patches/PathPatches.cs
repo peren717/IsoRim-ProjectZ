@@ -11,7 +11,9 @@ namespace ProjectZ.Patches
     // Paths between floors (design §2.4 B step 3, §8 "path splicing"; idea credited to MigCorp - Skiptech, written here
     // from the 1.7 API only). The game's path finder only knows the 8 neighbours of a cell, so a path to another floor
     // is made of legs on single floors joined by stair steps (and, when no stairs lead there, jumps down):
-    //   start -> stair high end (floor k), [stair step], exit (floor k+1) -> ... -> destination.
+    //   start -> ramp low end L0, L1, high end H (floor k), [stair step], exit (floor k+1) -> ... -> destination;
+    //   going down the reverse (exit, [step], H, L1, L0 -> ...). The ramp is walked along its axis as fixed nodes, so a
+    //   pawn never gets on or off the stairs sideways at the top (it would be lifted in place, Links.Rise).
     // Each leg is a normal path from the game's path finder (FindPathNow, so its own costs, doors and avoid grid); the
     // legs are joined into one PawnPath. A stair step or jump is just two path nodes that are not neighbours: the path
     // follower sets pawn.Position = nextCell without checking adjacency, so the step needs no special job.
@@ -137,7 +139,7 @@ namespace ProjectZ.Patches
             for (int i = 0; i < g.links.Count; i++)
             {
                 StairLink l = g.links[i];
-                if ((dir > 0 ? l.floor == f : l.floor == f - 1) && g.Usable(l))
+                if ((dir > 0 ? l.floor == f : l.floor == f - 1) && (Dev.TestRunner.NoExitFix ? g.Usable(l) : g.Passable(l, tp)))
                 {
                     cands.Add(l);
                 }
@@ -147,20 +149,73 @@ namespace ProjectZ.Patches
             cands.SortBy(l => Octile(fromGround, ProjectZ.GroundCellOf(l.bottom, map)) + Octile(ProjectZ.GroundCellOf(l.bottom, map), destGround));
             for (int i = 0; i < cands.Count && i < CandidatesPerStep; i++)
             {
-                IntVec3 entry = dir > 0 ? cands[i].bottom : cands[i].top;
-                IntVec3 exit = dir > 0 ? cands[i].top : cands[i].bottom;
-                PawnPath leg = Leg(map, from, entry, PathEndMode.OnCell, tp, tuning);
-                if (leg == null)
+                StairLink l = cands[i];
+                IntVec3 f2 = l.stairs.Rotation.FacingCell;
+                IntVec3 low = l.stairs.Position - f2, mid = l.stairs.Position;
+                if (dir > 0)
                 {
-                    ProjectZ.DebugLog($"stair step: no leg {from} -> {entry}");
-                    continue;
+                    // Up: onto the ramp at its low end (or where the pawn already is on it), walk L0 -> L1 -> H, then
+                    // the step to the exit.
+                    int at = from == low ? 0 : from == mid ? 1 : from == l.bottom ? 2 : -1;
+                    PawnPath leg = Leg(map, from, at >= 0 ? from : low, PathEndMode.OnCell, tp, tuning);
+                    if (leg == null)
+                    {
+                        ProjectZ.DebugLog($"stair step: no leg {from} -> {low}");
+                        continue;
+                    }
+                    legs.Add(leg);
+                    cost += (int)leg.TotalCost + StepCost;
+                    List<IntVec3> walk = new List<IntVec3>();
+                    for (int r = Math.Max(at, 0) + 1; r <= 2; r++)
+                    {
+                        walk.Add(r == 1 ? mid : l.bottom);
+                    }
+                    cost += Fixed(walk, legs);
+                    from = l.top;
                 }
-                legs.Add(leg);
-                cost += (int)leg.TotalCost + StepCost;
-                from = exit;
+                else
+                {
+                    // Down: to the exit, the step onto H, then down the ramp to its low end (unless the stairs or a ramp
+                    // cell is where the pawn is going).
+                    PawnPath leg = Leg(map, from, l.top, PathEndMode.OnCell, tp, tuning);
+                    if (leg == null)
+                    {
+                        ProjectZ.DebugLog($"stair step: no leg {from} -> {l.top}");
+                        continue;
+                    }
+                    legs.Add(leg);
+                    cost += (int)leg.TotalCost + StepCost;
+                    if (dest.Cell == l.bottom || dest.Cell == mid || dest.HasThing && dest.Thing == l.stairs)
+                    {
+                        from = l.bottom;
+                    }
+                    else
+                    {
+                        cost += Fixed(new List<IntVec3> { l.bottom, mid }, legs);
+                        from = low;
+                    }
+                }
                 return true;
             }
             return false;
+        }
+
+        public const int RampCellCost = 20;   // path cost of one ramp cell walked as a fixed node
+
+        // Nodes walked as they are (the ramp), as a path piece between legs; its cost.
+        private static int Fixed(List<IntVec3> walkOrder, List<PawnPath> legs)
+        {
+            if (walkOrder.Count == 0)
+            {
+                return 0;
+            }
+            PawnPath p = new PawnPath();
+            for (int i = walkOrder.Count - 1; i >= 0; i--)
+            {
+                p.AddNode(walkOrder[i]);
+            }
+            legs.Add(p);
+            return walkOrder.Count * RampCellCost;
         }
 
         // Down by a jump (pass 2): the jumps out of the regions reachable on this floor whose landing reaches the

@@ -418,7 +418,7 @@ namespace ProjectZ.Dev
                 {
                     Capture("floorui_furniture");
                     // (the next change waits for the shot: a change in this update would show in it)
-                    Wait(2, "u_furniture_next");
+                    Wait(2, "w_start");   // stairs under the floor, blocked exits, the ramp climb (TestStairwell.cs)
                     return true;
                 }
                 case "u_furniture_next":

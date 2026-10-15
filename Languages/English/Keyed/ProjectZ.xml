@@ -16,9 +16,10 @@
   <PZ_NeedsFloorFirst>Lay an upper floor here first</PZ_NeedsFloorFirst>
   <PZ_HeightAccuracy>Accuracy from higher floors: +{0}</PZ_HeightAccuracy>
   <PZ_HeightAccuracyTip>Added to the shooter accuracy when shooting down at a lower floor.</PZ_HeightAccuracyTip>
-  <PZ_WellNotOpen>The 3 cells right above the stairs must stay open, no floor or building</PZ_WellNotOpen>
+  <PZ_WellNotOpen>The 3 cells right above the stairs can't have a building or a stairs exit</PZ_WellNotOpen>
   <PZ_ExitNeedsSupport>The exit cell past the top needs an upper floor, or a roof under it</PZ_ExitNeedsSupport>
   <PZ_StairwellBelow>Keep the space over the stairs open</PZ_StairwellBelow>
   <PZ_TallBelow>{0} below is too tall</PZ_TallBelow>
   <PZ_TooTallUnderFloor>Too tall for the floor above</PZ_TooTallUnderFloor>
+  <PZ_WaitingFloorAbove>Waiting for the floor above to be removed</PZ_WaitingFloorAbove>
 </LanguageData>

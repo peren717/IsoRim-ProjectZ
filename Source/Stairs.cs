@@ -128,6 +128,21 @@ namespace ProjectZ
         {
             return l.stairs != null && l.stairs.Spawned && l.top.InBounds(map) && l.top.Walkable(map) && l.bottom.Walkable(map);
         }
+
+        // THE link test for a traveller: usable, and both ends let it in as the game's region search would (a door it
+        // can't or may not open, a fence, danger: Region.Allows). Reachability (StairRegions.Partners + its region
+        // entry test) and the path splicer (StairRouter.StairStep) agree through this, so a blocked exit means "can't
+        // reach" and a re-path, never a path the follower can't walk.
+        public bool Passable(StairLink l, TraverseParms tp)
+        {
+            if (!Usable(l))
+            {
+                return false;
+            }
+            Region t = map.regionGrid.GetValidRegionAt_NoRebuild(l.top);
+            Region b = map.regionGrid.GetValidRegionAt_NoRebuild(l.bottom);
+            return t != null && b != null && t.Allows(tp, isDestination: false) && b.Allows(tp, isDestination: false);
+        }
     }
 
     public class Building_Stairs : Building
@@ -149,6 +164,18 @@ namespace ProjectZ
             {
                 // Q2: the exit's floor is made with the stairs (the placement checked its support).
                 map.terrainGrid.SetTerrain(top, PZDefOf.PZ_UpperFloor);
+            }
+            if (!respawningAfterLoad)
+            {
+                // Built at once (god mode) under a floor: the stairwell opens now (StairwellFloor).
+                foreach (IntVec3 c in this.OccupiedRect())
+                {
+                    IntVec3 up = StairShape.Above(c, map);
+                    if (StairwellFloor.MustClear(up, map))
+                    {
+                        StairwellFloor.Clear(up, map, doLeavings: true);
+                    }
+                }
             }
             map.GetComponent<StairGrid>()?.Register(this, HighCell, top);
         }
@@ -243,15 +270,20 @@ namespace ProjectZ
         }
     }
 
-    // A stairs thing spawned or gone: its cells' roofs follow the stairwell rule.
+    // A stairs thing spawned or gone: its cells' roofs follow the stairwell rule, and a floor over a new stairs site is
+    // designated for removal (StairwellFloor; the designations it added go again with it).
     [HarmonyPatch(typeof(Thing), nameof(Thing.SpawnSetup))]
     public static class StairThing_Spawn_Patch
     {
-        public static void Postfix(Thing __instance)
+        public static void Postfix(Thing __instance, bool respawningAfterLoad)
         {
             if (Stairwell.IsStairThing(__instance))
             {
                 Stairwell.Refresh(__instance.Map, __instance.OccupiedRect());
+                if (!respawningAfterLoad && StairwellFloor.IsSite(__instance) && ProjectZ.Annex(__instance.Map) != null)
+                {
+                    StairwellFloor.Mark(__instance);
+                }
             }
         }
     }
@@ -269,6 +301,7 @@ namespace ProjectZ
             if (__state != null)
             {
                 Stairwell.Refresh(__state, __instance.OccupiedRect());
+                StairwellFloor.Unmark(__state, __instance.OccupiedRect());
             }
         }
     }
@@ -302,8 +335,20 @@ namespace ProjectZ
                     return "PZ_NoFloorAbove".Translate();
                 }
                 IntVec3 up = StairShape.Above(c, map);
-                if (!up.IsValid || up.GetTerrain(map) != PZDefOf.PZ_OpenAir || up.GetEdifice(map) != null || FloorPlanned(up, map))
+                if (!up.IsValid)
                 {
+                    return "PZ_WellNotOpen".Translate();
+                }
+                if (up.GetTerrain(map) == PZDefOf.PZ_OpenAir)
+                {
+                    if (up.GetEdifice(map) != null || FloorPlanned(up, map))
+                    {
+                        return "PZ_WellNotOpen".Translate();
+                    }
+                }
+                else if (!StairwellFloor.CanClear(up, map))
+                {
+                    // (a floor alone is taken up for the stairs, StairwellFloor)
                     return "PZ_WellNotOpen".Translate();
                 }
             }
@@ -311,6 +356,11 @@ namespace ProjectZ
             if (!top.IsValid)
             {
                 return "PZ_ExitNeedsSupport".Translate();
+            }
+            if (Stairwell.StairThingAt(FloorRoof.Below(top, map), map))
+            {
+                // the exit over another stairwell (its floor is about to go, or already open air)
+                return "PZ_LandingBlocked".Translate();
             }
             if (top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {

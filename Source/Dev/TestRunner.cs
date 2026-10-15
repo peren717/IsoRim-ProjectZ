@@ -37,6 +37,8 @@ namespace ProjectZ.Dev
     {
         public static bool Active;
         public static int FloorsOverride;
+        // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
+        public static bool NoExitFix;
 
         private static string mode = "main";
         private static string tag = "projectz";
@@ -83,6 +85,7 @@ namespace ProjectZ.Dev
                 days = dd;
             }
             FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
+            NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -323,6 +326,11 @@ namespace ProjectZ.Dev
                 StepM1c2(map);
                 return;
             }
+            if (stage.StartsWith("w_") || stage.StartsWith("x_") || stage.StartsWith("r_"))
+            {
+                StepStairwell(map);
+                return;
+            }
             if (stage.StartsWith("u_"))
             {
                 StepFloorUI(map);
@@ -331,6 +339,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("s_"))
             {
                 StepStairs(map);
+                return;
+            }
+            if (stage.StartsWith("l_"))
+            {
+                StepLight(map);
                 return;
             }
             switch (stage)
@@ -375,6 +388,10 @@ namespace ProjectZ.Dev
                     else if (mode == "stairs" || mode == "floorui")
                     {
                         stage = "s_setup";
+                    }
+                    else if (mode == "light")
+                    {
+                        stage = "l_setup";
                     }
                     else if (mode == "raids")
                     {

@@ -31,6 +31,10 @@ namespace ProjectZ.Patches
                 for (int i = 0; i < links.Count; i++)
                 {
                     StairLink l = links[i];
+                    if (!Dev.TestRunner.NoExitFix && !g.Usable(l))
+                    {
+                        continue;   // (the traveller's own test, Region.Allows, is the search's entry test: StairGrid.Passable)
+                    }
                     Region b = rg.GetValidRegionAt_NoRebuild(l.bottom);
                     Region t = rg.GetValidRegionAt_NoRebuild(l.top);
                     if (b == null || t == null || b == t)
