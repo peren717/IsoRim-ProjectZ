@@ -33,6 +33,12 @@ namespace ProjectZ
             return up.IsValid && ProjectZ.HasFloor(up, map);
         }
 
+        // A roof that never drops: a floor's (the floor itself) or the stairwell's (an opening).
+        public static bool Kept(IntVec3 c, Map map)
+        {
+            return c.InBounds(map) && (FloorAbove(c, map) || ProjectZ.Annex(map) != null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
+        }
+
         // The cell under c on the floor below (c on an upper floor), else Invalid.
         public static IntVec3 Below(IntVec3 c, Map map)
         {
@@ -149,6 +155,20 @@ namespace ProjectZ
             {
                 def = PZDefOf.PZ_FloorRoof;
             }
+            else
+            {
+                def = Stairwell.RoofFor(c, map, def);
+            }
+        }
+
+        // A roof changed under open air: where pawns can land from above changed (JumpGrid, reachability).
+        public static void Postfix(RoofGrid __instance, IntVec3 c)
+        {
+            Map map = mapRef(__instance);
+            if (map != null && ProjectZ.Annex(map) != null)
+            {
+                JumpGrid.ColumnChanged(c, map);
+            }
         }
     }
 
@@ -165,13 +185,14 @@ namespace ProjectZ
         }
     }
 
-    // Collapses, drop pods, shells and tornadoes don't drop a floor's roof.
+    // Collapses, drop pods, shells and tornadoes don't drop a floor's roof, nor the stairwell's (it is an opening: there
+    // is nothing up there to fall, Column.OpenAbove).
     [HarmonyPatch(typeof(RoofCollapserImmediate), nameof(RoofCollapserImmediate.DropRoofInCells), new[] { typeof(IntVec3), typeof(Map), typeof(List<Thing>) })]
     public static class DropRoofCell_Patch
     {
         public static bool Prefix(IntVec3 c, Map map)
         {
-            return !FloorRoof.FloorAbove(c, map);
+            return !FloorRoof.Kept(c, map);
         }
     }
 
@@ -182,7 +203,7 @@ namespace ProjectZ
         {
             if (cells != null && ProjectZ.Annex(map) != null)
             {
-                cells = cells.Where(c => !FloorRoof.FloorAbove(c, map)).ToList();
+                cells = cells.Where(c => !FloorRoof.Kept(c, map)).ToList();
             }
         }
     }
@@ -192,9 +213,9 @@ namespace ProjectZ
     {
         public static void Prefix(ref List<IntVec3> cells, Map map)
         {
-            if (cells != null && ProjectZ.Annex(map) != null && cells.Any(c => c.InBounds(map) && FloorRoof.FloorAbove(c, map)))
+            if (cells != null && ProjectZ.Annex(map) != null && cells.Any(c => c.InBounds(map) && FloorRoof.Kept(c, map)))
             {
-                cells = cells.Where(c => !c.InBounds(map) || !FloorRoof.FloorAbove(c, map)).ToList();
+                cells = cells.Where(c => !c.InBounds(map) || !FloorRoof.Kept(c, map)).ToList();
             }
         }
     }

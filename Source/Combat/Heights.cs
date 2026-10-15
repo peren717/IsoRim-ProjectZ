@@ -8,7 +8,7 @@ namespace ProjectZ.Combat
     //
     // Every cell is a column over its ground cell; heights are in wall units (a wall is 1 high). Floor k stands at
     // k * Storey. Between floor k-1 and floor k lies one horizontal plane per column, solid where the cell below has a
-    // roof or the cell above has a floor (the slab): the two always go together (an upper floor needs a roof under it,
+    // roof (but not a stairwell's, Column.OpenAbove) or the cell above has a floor (the slab): the two always go together (an upper floor needs a roof under it,
     // FloorRoof.cs). A line of sight runs from the shooter's eye (floor + Eye) to the target's middle (floor + Middle):
     //   - it is blocked where it crosses a solid plane (slabs and roofs: no shooting through floors or into roofed rooms
     //     from above), and where it passes a cell whose building blocks sight (walls, closed doors, rock) below that
@@ -66,7 +66,7 @@ namespace ProjectZ.Combat
         public static bool Plane(IntVec3 g, int k, Map map, int floors)
         {
             IntVec3 below = ProjectZ.CellOnFloor(g, k - 1, map);
-            if (below.IsValid && map.roofGrid.Roofed(below))
+            if (below.IsValid && !Column.OpenAbove(below, map))
             {
                 return true;
             }

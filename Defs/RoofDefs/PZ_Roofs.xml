@@ -12,4 +12,16 @@
     <soundPunchThrough>PunchThroughRoofMetal</soundPunchThrough>
   </RoofDef>
 
+  <!-- The roof over stairs (stairs design §1, Q1): keeps the room under the stairwell indoors, is never drawn (IsoRim
+       Api.HiddenRoof) and counts as open for jumps, sight and falling shots (Column.OpenAbove). Set and cleared only by
+       the stairwell rule (Stairs.cs, Stairwell.RoofFor). -->
+  <RoofDef>
+    <defName>PZ_StairwellRoof</defName>
+    <label>stairwell</label>
+    <isThickRoof>false</isThickRoof>
+    <canCollapse>false</canCollapse>
+    <filthLeaving>Filth_RubbleBuilding</filthLeaving>
+    <soundPunchThrough>PunchThroughRoofMetal</soundPunchThrough>
+  </RoofDef>
+
 </Defs>

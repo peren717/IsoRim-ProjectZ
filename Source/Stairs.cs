@@ -1,20 +1,56 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using RimWorld;
 using Verse;
-using Verse.AI;
 
 namespace ProjectZ
 {
-    // A stair link: the stair's own cell (bottom, floor k) and the cell right above it on floor k + 1 (top). Pawns step
-    // from one to the other as one (slow) step of their path (Patches/PathPatches.cs); reachability treats the two
-    // cells' regions as linked (Patches/ReachPatches.cs). Built and removed with the stairs; nothing is saved (the
-    // stairs register again when the map loads).
+    // Stairs (design isorim-pz-stairs-jump-design.md §1): a 1x3 ramp on floor k, turned by its rotation. Low end L0,
+    // middle L1, high end H = centre + rot.FacingCell. The exit E is the cell past the high end on floor k + 1. Over the
+    // ramp, floor k + 1 stays open (the stairwell). A pawn walks up the ramp as on any standable building and steps from
+    // H to E (and back) as one path step (Patches/PathPatches.cs); reachability links the regions of H and E
+    // (Patches/ReachPatches.cs). Nothing is saved: the stairs register again when the map loads.
     public struct StairLink
     {
-        public IntVec3 bottom;
-        public IntVec3 top;
-        public int floor;   // floor of the bottom cell
+        public IntVec3 bottom;   // H, floor k
+        public IntVec3 top;      // E, floor k + 1
+        public int floor;        // k
         public Building_Stairs stairs;
+    }
+
+    // Where the parts of a ramp are, for a stairs thing or a placement (centre + rotation).
+    public static class StairShape
+    {
+        public static CellRect Footprint(IntVec3 center, Rot4 rot) => GenAdj.OccupiedRect(center, rot, new IntVec2(1, 3));
+
+        public static IntVec3 High(IntVec3 center, Rot4 rot) => center + rot.FacingCell;
+
+        // The exit: the cell past the high end, on the floor above. Invalid where there is none.
+        public static IntVec3 Exit(IntVec3 center, Rot4 rot, Map map)
+        {
+            int k = ProjectZ.FloorOf(center, map);
+            IntVec3 past = High(center, rot) + rot.FacingCell;
+            if (k < 0 || ProjectZ.FloorOf(past, map) != k)
+            {
+                return IntVec3.Invalid;
+            }
+            return ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(past, map), k + 1, map);
+        }
+
+        // A cell lifted onto the floor above (for a footprint cell: a stairwell cell).
+        public static IntVec3 Above(IntVec3 c, Map map)
+        {
+            int k = ProjectZ.FloorOf(c, map);
+            return k < 0 ? IntVec3.Invalid : ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), k + 1, map);
+        }
+
+        // How far up the ramp a footprint cell is: 0 (low end) .. 2 (high end).
+        public static int Index(IntVec3 c, IntVec3 center, Rot4 rot)
+        {
+            IntVec3 d = c - center;
+            IntVec3 f = rot.FacingCell;
+            return 1 + d.x * f.x + d.z * f.z;
+        }
     }
 
     public class StairGrid : MapComponent
@@ -51,10 +87,10 @@ namespace ProjectZ
             return g != null && g.links.Count > 0 ? g : null;
         }
 
-        public void Register(Building_Stairs s, IntVec3 top)
+        public void Register(Building_Stairs s, IntVec3 bottom, IntVec3 top)
         {
             Deregister(s, false);
-            links.Add(new StairLink { bottom = s.Position, top = top, floor = ProjectZ.FloorOf(s.Position, map), stairs = s });
+            links.Add(new StairLink { bottom = bottom, top = top, floor = ProjectZ.FloorOf(bottom, map), stairs = s });
             Changed();
         }
 
@@ -94,47 +130,12 @@ namespace ProjectZ
         }
     }
 
-    // A pawn is on a stair step when it stands on one end and its next cell is the other end.
-    public static class Climb
-    {
-        public const int StepTicks = 90;
-
-        // +1 going up, -1 going down, 0 not on a stair step. Cheap for every pawn (one row compare first).
-        public static int Direction(Pawn p)
-        {
-            Pawn_PathFollower pather = p.pather;
-            if (pather == null || !pather.Moving || !p.Spawned)
-            {
-                return 0;
-            }
-            IntVec3 pos = p.Position;
-            IntVec3 next = pather.nextCell;
-            int dz = next.z - pos.z;
-            if (dz >= -1 && dz <= 1)
-            {
-                return 0;
-            }
-            StairGrid g = StairGrid.For(p.Map);
-            if (g == null || !g.IsStep(pos, next))
-            {
-                return 0;
-            }
-            return dz > 0 ? 1 : -1;
-        }
-    }
-
     public class Building_Stairs : Building
     {
-        // The cell above the stairs on the next floor up (Invalid without one).
-        public IntVec3 TopCell
-        {
-            get
-            {
-                int k = ProjectZ.FloorOf(Position, Map);
-                IntVec3 g = ProjectZ.GroundCellOf(Position, Map);
-                return k < 0 || !g.IsValid ? IntVec3.Invalid : ProjectZ.CellOnFloor(g, k + 1, Map);
-            }
-        }
+        public IntVec3 HighCell => StairShape.High(Position, Rotation);
+
+        // The exit on the floor above (Invalid without one).
+        public IntVec3 TopCell => Map == null ? IntVec3.Invalid : StairShape.Exit(Position, Rotation, Map);
 
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
@@ -146,10 +147,10 @@ namespace ProjectZ
             }
             if (!respawningAfterLoad && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
-                // The landing: the floor cell above the stairs, made with them.
+                // Q2: the exit's floor is made with the stairs (the placement checked its support).
                 map.terrainGrid.SetTerrain(top, PZDefOf.PZ_UpperFloor);
             }
-            map.GetComponent<StairGrid>()?.Register(this, top);
+            map.GetComponent<StairGrid>()?.Register(this, HighCell, top);
         }
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
@@ -171,7 +172,119 @@ namespace ProjectZ
         }
     }
 
-    // Stairs need a floor above them, over this roofed cell (decision D6: an upper floor needs the roof below it).
+    // The stairwell (Q1): the cells under a stairs thing (built, blueprint or frame) keep their roof, but as the
+    // invisible PZ_StairwellRoof: the room below stays indoors, nothing is drawn there, and the column above stays
+    // open (Column.OpenAbove). Without a stairs thing there any more, it is an ordinary built roof again. One rule
+    // (RoofFor), applied whenever a roof is written (FloorRoof's SetRoof prefix) and when a stairs thing spawns or goes.
+    public static class Stairwell
+    {
+        public static bool IsStairThing(Thing t)
+        {
+            return t != null && (t.def == PZDefOf.PZ_Stairs || t.def.entityDefToBuild == PZDefOf.PZ_Stairs);
+        }
+
+        public static bool StairThingAt(IntVec3 c, Map map)
+        {
+            if (!c.IsValid || !c.InBounds(map))
+            {
+                return false;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (IsStairThing(list[i]))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // The roof a cell really gets when 'def' is written to it.
+        public static RoofDef RoofFor(IntVec3 c, Map map, RoofDef def)
+        {
+            if (def == null || def == PZDefOf.PZ_FloorRoof)
+            {
+                return def;
+            }
+            bool well = StairThingAt(c, map);
+            if (well && def != PZDefOf.PZ_StairwellRoof)
+            {
+                return PZDefOf.PZ_StairwellRoof;
+            }
+            if (!well && def == PZDefOf.PZ_StairwellRoof)
+            {
+                return RoofDefOf.RoofConstructed;
+            }
+            return def;
+        }
+
+        public static void Refresh(Map map, CellRect rect)
+        {
+            if (map == null || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            // (a stairs building site is no landing for jumps: those changed too)
+            JumpGrid.For(map)?.Dirty();
+            map.reachability?.ClearCache();
+            foreach (IntVec3 c in rect)
+            {
+                if (!c.InBounds(map))
+                {
+                    continue;
+                }
+                RoofDef cur = map.roofGrid.RoofAt(c);
+                if (cur != null && RoofFor(c, map, cur) != cur)
+                {
+                    map.roofGrid.SetRoof(c, cur);   // the SetRoof prefix makes it the right one
+                }
+            }
+        }
+    }
+
+    // A stairs thing spawned or gone: its cells' roofs follow the stairwell rule.
+    [HarmonyPatch(typeof(Thing), nameof(Thing.SpawnSetup))]
+    public static class StairThing_Spawn_Patch
+    {
+        public static void Postfix(Thing __instance)
+        {
+            if (Stairwell.IsStairThing(__instance))
+            {
+                Stairwell.Refresh(__instance.Map, __instance.OccupiedRect());
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(Thing), nameof(Thing.DeSpawn))]
+    public static class StairThing_DeSpawn_Patch
+    {
+        public static void Prefix(Thing __instance, out Map __state)
+        {
+            __state = Stairwell.IsStairThing(__instance) ? __instance.Map : null;
+        }
+
+        public static void Postfix(Thing __instance, Map __state)
+        {
+            if (__state != null)
+            {
+                Stairwell.Refresh(__state, __instance.OccupiedRect());
+            }
+        }
+    }
+
+    // The column above a cell is open (nothing stops a fall, a shot or a look): no roof, or the stairwell's.
+    public static class Column
+    {
+        public static bool OpenAbove(IntVec3 c, Map map)
+        {
+            RoofDef r = map.roofGrid.RoofAt(c);
+            return r == null || r == PZDefOf.PZ_StairwellRoof;
+        }
+    }
+
+    // Stairs (§1 placement): the ramp on one floor with a floor above it; the stairwell open; the exit a floor (or open
+    // air over a roofed cell, where the floor is made with the stairs) with nothing impassable on it.
     public class PlaceWorker_Stairs : PlaceWorker
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
@@ -182,34 +295,91 @@ namespace ProjectZ
             {
                 return "PZ_NoFloorAbove".Translate();
             }
-            if (!map.roofGrid.Roofed(loc))
+            foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
-                return "PZ_NeedsRoofHere".Translate();
+                if (ProjectZ.FloorOf(c, map) != k)
+                {
+                    return "PZ_NoFloorAbove".Translate();
+                }
+                IntVec3 up = StairShape.Above(c, map);
+                if (!up.IsValid || up.GetTerrain(map) != PZDefOf.PZ_OpenAir || up.GetEdifice(map) != null || FloorPlanned(up, map))
+                {
+                    return "PZ_WellNotOpen".Translate();
+                }
             }
-            IntVec3 top = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(loc, map), k + 1, map);
+            IntVec3 top = StairShape.Exit(loc, rot, map);
             if (!top.IsValid)
             {
-                return "PZ_NoFloorAbove".Translate();
+                return "PZ_ExitNeedsSupport".Translate();
             }
-            TerrainDef t = top.GetTerrain(map);
+            if (top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
+            {
+                // The exit's floor is made with the stairs: it needs what any floor needs.
+                if (FloorPlanned(top, map))
+                {
+                    return AcceptanceReport.WasAccepted;
+                }
+                if (!PlaceWorker_UpperFloor.SupportedFloorCell(top, map))
+                {
+                    return "PZ_ExitNeedsSupport".Translate();
+                }
+                AcceptanceReport r = PlaceWorker_UpperFloor.Check(top, map);
+                if (!r.Accepted)
+                {
+                    return r;
+                }
+            }
+            else if (top.GetTerrain(map).passability != Traversability.Standable)
+            {
+                return "PZ_LandingBlocked".Translate();
+            }
             Building e = top.GetEdifice(map);
-            bool terrainOk = t == PZDefOf.PZ_OpenAir || t.passability == Traversability.Standable;
-            if (!terrainOk || e != null && e.def.passability == Traversability.Impassable)
+            if (e != null && e.def.passability == Traversability.Impassable)
             {
                 return "PZ_LandingBlocked".Translate();
             }
             return AcceptanceReport.WasAccepted;
         }
+
+        // An upper floor blueprint or frame on this cell.
+        public static bool FloorPlanned(IntVec3 c, Map map)
+        {
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if ((list[i] is Blueprint || list[i] is Frame) && list[i].def.entityDefToBuild == PZDefOf.PZ_UpperFloor)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
-    // An upper floor cell needs the cell right below it roofed.
+    // An upper floor cell needs the cell right below it roofed (D6) and not a stairwell (§1), and nothing there too
+    // tall for the storey (the slab height rule, HeightRule).
     public class PlaceWorker_UpperFloor : PlaceWorker
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
         {
+            return Check(loc, map);
+        }
+
+        public static AcceptanceReport Check(IntVec3 loc, Map map)
+        {
+            IntVec3 below = FloorRoof.Below(loc, map);
+            if (Stairwell.StairThingAt(below, map))
+            {
+                return "PZ_StairwellBelow".Translate();
+            }
             if (!SupportedFloorCell(loc, map))
             {
                 return ProjectZ.FloorOf(loc, map) >= 1 ? "PZ_NeedsRoofBelow".Translate() : "PZ_OnlyUpperFloors".Translate();
+            }
+            Thing tall = HeightRule.TallThingAt(below, map);
+            if (tall != null)
+            {
+                return "PZ_TallBelow".Translate(tall.LabelShort);
             }
             return AcceptanceReport.WasAccepted;
         }
@@ -222,7 +392,7 @@ namespace ProjectZ
                 return false;
             }
             IntVec3 below = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(loc, map), k - 1, map);
-            return below.IsValid && map.roofGrid.Roofed(below);
+            return below.IsValid && map.roofGrid.Roofed(below) && map.roofGrid.RoofAt(below) != PZDefOf.PZ_StairwellRoof;
         }
     }
 }

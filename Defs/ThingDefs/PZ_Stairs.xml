@@ -1,32 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Stairs (decision D4): a building on a roofed cell; pawns step from it to the cell right above it on the next floor
-       (Building_Stairs, StairGrid). Everyone can use them (D9). The landing above is made with the stairs.
-       Placeholder look until it gets its own model. -->
+  <!-- Stairs (decision D4, stairs design §1): a 1x3 ramp, turned by its rotation (it goes up toward the way it faces).
+       The floor above stays open over it (the stairwell); the cell past its top on the floor above is the exit, made with
+       the stairs when it is open air over a roofed cell. Everyone can use them (D9). IsoRim draws its model
+       (IsoRim/Defs/PZ_Models.xml); the sprite is the plain fallback. -->
   <ThingDef ParentName="BuildingBase">
     <defName>PZ_Stairs</defName>
     <label>stairs</label>
-    <description>Stairs up to the floor above. Needs a roof over this cell; the floor cell above is made with the stairs.</description>
+    <description>Stairs up to the floor above. The floor above stays open over them; the cell past the top is the exit on the floor above (made with the stairs if it has a roof under it).</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/Stairs</texPath>
       <graphicClass>Graphic_Single</graphicClass>
-      <drawSize>(1,1)</drawSize>
+      <drawSize>(1,3)</drawSize>
     </graphicData>
     <uiIconPath>ProjectZ/Stairs</uiIconPath>
     <altitudeLayer>Building</altitudeLayer>
     <passability>Standable</passability>
-    <pathCost>20</pathCost>
+    <pathCost>8</pathCost>
     <fillPercent>0.25</fillPercent>
     <castEdgeShadows>false</castEdgeShadows>
     <holdsRoof>false</holdsRoof>
     <blockWind>false</blockWind>
-    <rotatable>false</rotatable>
-    <size>(1,1)</size>
+    <rotatable>true</rotatable>
+    <size>(1,3)</size>
     <statBases>
       <MaxHitPoints>200</MaxHitPoints>
-      <WorkToBuild>800</WorkToBuild>
+      <WorkToBuild>1600</WorkToBuild>
       <Flammability>1.0</Flammability>
       <Beauty>0</Beauty>
     </statBases>
@@ -35,7 +36,7 @@
       <li>Stony</li>
       <li>Metallic</li>
     </stuffCategories>
-    <costStuffCount>30</costStuffCount>
+    <costStuffCount>60</costStuffCount>
     <designationCategory>Structure</designationCategory>
     <placeWorkers>
       <li>ProjectZ.PlaceWorker_Stairs</li>

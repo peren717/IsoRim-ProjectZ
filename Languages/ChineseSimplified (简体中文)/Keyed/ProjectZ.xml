@@ -9,9 +9,14 @@
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>上面没有楼层</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>
-  <PZ_LandingBlocked>上方的格子被挡住了</PZ_LandingBlocked>
+  <PZ_LandingBlocked>出口被挡住了</PZ_LandingBlocked>
   <PZ_NeedsRoofBelow>下方需要屋顶</PZ_NeedsRoofBelow>
   <PZ_OnlyUpperFloors>只能建在楼上</PZ_OnlyUpperFloors>
   <PZ_HeightAccuracy>从高层射击的命中加成：+{0}</PZ_HeightAccuracy>
   <PZ_HeightAccuracyTip>向低层射击时，加到射手命中上。</PZ_HeightAccuracyTip>
+  <PZ_WellNotOpen>上方需要留空</PZ_WellNotOpen>
+  <PZ_ExitNeedsSupport>出口需要楼板，或下面有屋顶</PZ_ExitNeedsSupport>
+  <PZ_StairwellBelow>下面是楼梯井</PZ_StairwellBelow>
+  <PZ_TallBelow>下面的{0}太高</PZ_TallBelow>
+  <PZ_TooTallUnderFloor>太高了：上面有楼板</PZ_TooTallUnderFloor>
 </LanguageData>

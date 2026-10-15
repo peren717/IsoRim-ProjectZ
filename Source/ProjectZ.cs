@@ -11,6 +11,7 @@ namespace ProjectZ
         public static TerrainDef PZ_UpperFloor;
         public static ThingDef PZ_Stairs;
         public static RoofDef PZ_FloorRoof;
+        public static RoofDef PZ_StairwellRoof;
 
         static PZDefOf()
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld;
 using UnityEngine;
 using Verse;
 using Verse.AI;
@@ -9,10 +10,10 @@ namespace ProjectZ.Patches
 {
     // Paths between floors (design §2.4 B step 3, §8 "path splicing"; idea credited to MigCorp - Skiptech, written here
     // from the 1.7 API only). The game's path finder only knows the 8 neighbours of a cell, so a path to another floor
-    // is made of legs on single floors joined by stair steps:
-    //   start -> stair bottom (floor k), [stair step], top (floor k+1) -> ... -> destination.
+    // is made of legs on single floors joined by stair steps (and, when no stairs lead there, jumps down):
+    //   start -> stair high end (floor k), [stair step], exit (floor k+1) -> ... -> destination.
     // Each leg is a normal path from the game's path finder (FindPathNow, so its own costs, doors and avoid grid); the
-    // legs are joined into one PawnPath. A stair step is just two path nodes that are not neighbours: the path
+    // legs are joined into one PawnPath. A stair step or jump is just two path nodes that are not neighbours: the path
     // follower sets pawn.Position = nextCell without checking adjacency, so the step needs no special job.
     // The destination and end mode are never changed, so arriving, failing, jobs and saves all see the real target.
     internal static class StairRouter
@@ -20,8 +21,10 @@ namespace ProjectZ.Patches
         private static readonly AccessTools.FieldRef<PawnPath, float> CostRef = AccessTools.FieldRefAccess<PawnPath, float>("totalCostInt");
         private static readonly AccessTools.FieldRef<PawnPath, int> IndexRef = AccessTools.FieldRefAccess<PawnPath, int>("curNodeIndex");
 
-        public const int StepCost = 120;   // path cost of one stair step
+        public const int StepCost = 120;    // path cost of one stair step
+        public const int JumpCost = 2000;   // path cost of a jump: only when nothing else leads there
         private const int CandidatesPerStep = 3;
+        private const int JumpSearchRegions = 400;
 
         // Set while legs are worked out (the legs never cross floors, but be safe against re-entry).
         [ThreadStatic]
@@ -43,8 +46,7 @@ namespace ProjectZ.Patches
         // The joined path, or null when there is none. tuning/traverseParms as the caller's request.
         public static PawnPath Find(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning)
         {
-            StairGrid g = StairGrid.For(map);
-            if (g == null || busy)
+            if (busy || ProjectZ.Annex(map) == null)
             {
                 return null;
             }
@@ -52,55 +54,23 @@ namespace ProjectZ.Patches
             List<PawnPath> legs = new List<PawnPath>();
             try
             {
-                int fs = ProjectZ.FloorOf(start, map);
-                int fd = ProjectZ.FloorOf(dest.Cell, map);
-                int dir = fd > fs ? 1 : -1;
-                IntVec3 from = start;
-                IntVec3 destGround = ProjectZ.GroundCellOf(dest.Cell, map);
-                int cost = 0;
-                for (int f = fs; f != fd; f += dir)
+                // T5: a stairs thing touched from the floor above: the path ends on the stairwell's rim, on this floor.
+                if (peMode == PathEndMode.Touch && dest.HasThing && StairTouch.Is(dest.Thing) && ProjectZ.FloorOf(start, map) == StairTouch.FloorOf(dest.Thing) + 1)
                 {
-                    // Stairs between floor f and f + dir, best first by straight-line distance (8-way) via them.
-                    List<StairLink> cands = new List<StairLink>();
-                    for (int i = 0; i < g.links.Count; i++)
+                    PawnPath rim = RimPath(map, start, dest.Thing, tp, tuning);
+                    if (rim != null)
                     {
-                        StairLink l = g.links[i];
-                        if ((dir > 0 ? l.floor == f : l.floor == f - 1) && g.Usable(l))
-                        {
-                            cands.Add(l);
-                        }
-                    }
-                    IntVec3 fromGround = ProjectZ.GroundCellOf(from, map);
-                    cands.SortBy(l => Octile(fromGround, ProjectZ.GroundCellOf(l.bottom, map)) + Octile(ProjectZ.GroundCellOf(l.bottom, map), destGround));
-                    bool stepped = false;
-                    for (int i = 0; i < cands.Count && i < CandidatesPerStep; i++)
-                    {
-                        IntVec3 entry = dir > 0 ? cands[i].bottom : cands[i].top;
-                        IntVec3 exit = dir > 0 ? cands[i].top : cands[i].bottom;
-                        PawnPath leg = Leg(map, from, entry, PathEndMode.OnCell, tp, tuning);
-                        if (leg == null)
-                        {
-                            continue;
-                        }
-                        legs.Add(leg);
-                        cost += (int)leg.TotalCost + StepCost;
-                        from = exit;
-                        stepped = true;
-                        break;
-                    }
-                    if (!stepped)
-                    {
-                        return null;
+                        return rim;
                     }
                 }
-                PawnPath last = Leg(map, from, dest, peMode, tp, tuning);
-                if (last == null)
+                int cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: false);
+                if (cost < 0 && ProjectZ.FloorOf(start, map) > ProjectZ.FloorOf(dest.Cell, map))
                 {
-                    return null;
+                    // Pass 2 (J4): no stair route; going down, jumps are allowed.
+                    DisposeAll(legs);
+                    cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: true);
                 }
-                legs.Add(last);
-                cost += (int)last.TotalCost;
-                return Join(legs, cost);
+                return cost < 0 ? null : Join(legs, cost);
             }
             catch (Exception e)
             {
@@ -109,12 +79,160 @@ namespace ProjectZ.Patches
             }
             finally
             {
-                for (int i = 0; i < legs.Count; i++)
-                {
-                    legs[i].Dispose();
-                }
+                DisposeAll(legs);
                 busy = false;
             }
+        }
+
+        private static void DisposeAll(List<PawnPath> legs)
+        {
+            for (int i = 0; i < legs.Count; i++)
+            {
+                legs[i].Dispose();
+            }
+            legs.Clear();
+        }
+
+        // Legs from start to dest, floor by floor; the total cost, or -1.
+        private static int Route(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool jumps)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            int fd = ProjectZ.FloorOf(dest.Cell, map);
+            IntVec3 from = start;
+            int cost = 0;
+            for (int guard = 0; guard < 2 * a.floors + 2; guard++)
+            {
+                int f = ProjectZ.FloorOf(from, map);
+                if (f == fd)
+                {
+                    PawnPath last = Leg(map, from, dest, peMode, tp, tuning);
+                    if (last == null)
+                    {
+                        ProjectZ.DebugLog($"route {start} -> {dest.Cell} (jumps {jumps}): no last leg {from} -> {dest.Cell}");
+                        return -1;
+                    }
+                    legs.Add(last);
+                    return cost + (int)last.TotalCost;
+                }
+                int dir = fd > f ? 1 : -1;
+                if (!StairStep(map, ref from, dir, dest, tp, tuning, legs, ref cost) && !(jumps && dir < 0 && JumpStep(map, ref from, dest, peMode, tp, tuning, legs, ref cost)))
+                {
+                    ProjectZ.DebugLog($"route {start} -> {dest.Cell} (jumps {jumps}): no step from {from} (floor {f}, dir {dir})");
+                    return -1;
+                }
+            }
+            return -1;
+        }
+
+        // To the floor above (dir 1) or below (-1) over stairs, best first by straight-line distance (8-way) via them.
+        private static bool StairStep(Map map, ref IntVec3 from, int dir, LocalTargetInfo dest, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, ref int cost)
+        {
+            StairGrid g = StairGrid.For(map);
+            if (g == null)
+            {
+                return false;
+            }
+            int f = ProjectZ.FloorOf(from, map);
+            List<StairLink> cands = new List<StairLink>();
+            for (int i = 0; i < g.links.Count; i++)
+            {
+                StairLink l = g.links[i];
+                if ((dir > 0 ? l.floor == f : l.floor == f - 1) && g.Usable(l))
+                {
+                    cands.Add(l);
+                }
+            }
+            IntVec3 fromGround = ProjectZ.GroundCellOf(from, map);
+            IntVec3 destGround = ProjectZ.GroundCellOf(dest.Cell, map);
+            cands.SortBy(l => Octile(fromGround, ProjectZ.GroundCellOf(l.bottom, map)) + Octile(ProjectZ.GroundCellOf(l.bottom, map), destGround));
+            for (int i = 0; i < cands.Count && i < CandidatesPerStep; i++)
+            {
+                IntVec3 entry = dir > 0 ? cands[i].bottom : cands[i].top;
+                IntVec3 exit = dir > 0 ? cands[i].top : cands[i].bottom;
+                PawnPath leg = Leg(map, from, entry, PathEndMode.OnCell, tp, tuning);
+                if (leg == null)
+                {
+                    ProjectZ.DebugLog($"stair step: no leg {from} -> {entry}");
+                    continue;
+                }
+                legs.Add(leg);
+                cost += (int)leg.TotalCost + StepCost;
+                from = exit;
+                return true;
+            }
+            return false;
+        }
+
+        // Down by a jump (pass 2): the jumps out of the regions reachable on this floor whose landing reaches the
+        // destination, best first by straight-line distance via them; no landing on fire.
+        private static bool JumpStep(Map map, ref IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, ref int cost)
+        {
+            JumpGrid jg = JumpGrid.For(map);
+            Region start = from.GetRegion(map);
+            if (jg == null || start == null)
+            {
+                return false;
+            }
+            List<Jump> cands = new List<Jump>();
+            StairRegions.suppress++;
+            try
+            {
+                RegionTraverser.BreadthFirstTraverse(start, (Region _, Region r) => r.Allows(tp, isDestination: false), delegate(Region r)
+                {
+                    cands.AddRange(jg.Down(r));
+                    return false;
+                }, JumpSearchRegions);
+            }
+            finally
+            {
+                StairRegions.suppress--;
+            }
+            if (cands.Count == 0)
+            {
+                return false;
+            }
+            IntVec3 fromGround = ProjectZ.GroundCellOf(from, map);
+            IntVec3 destGround = ProjectZ.GroundCellOf(dest.Cell, map);
+            cands.SortBy(j => Octile(fromGround, ProjectZ.GroundCellOf(j.from, map)) + Octile(ProjectZ.GroundCellOf(j.land, map), destGround));
+            int tried = 0;
+            for (int i = 0; i < cands.Count && tried < CandidatesPerStep; i++)
+            {
+                Jump j = cands[i];
+                if (j.land.ContainsStaticFire(map) || !map.reachability.CanReach(j.land, dest, peMode, tp))
+                {
+                    continue;
+                }
+                tried++;
+                PawnPath leg = Leg(map, from, j.from, PathEndMode.OnCell, tp, tuning);
+                if (leg == null)
+                {
+                    continue;
+                }
+                legs.Add(leg);
+                cost += (int)leg.TotalCost + JumpCost;
+                from = j.land;
+                Dev.PZStats.jumpRoutes++;
+                return true;
+            }
+            return false;
+        }
+
+        // T5: to the nearest rim cell of a stairs thing that a leg reaches.
+        private static PawnPath RimPath(Map map, IntVec3 start, Thing stairs, TraverseParms tp, PathFinderCostTuning? tuning)
+        {
+            List<IntVec3> cells = new List<IntVec3>();
+            StairTouch.UpperCells(stairs, cells);
+            cells.SortBy(c => Octile(start, c));
+            for (int i = 0; i < cells.Count && i < CandidatesPerStep; i++)
+            {
+                PawnPath leg = Leg(map, start, cells[i], PathEndMode.OnCell, tp, tuning);
+                if (leg != null)
+                {
+                    Dev.PZStats.rimRoutes++;
+                    return leg;
+                }
+            }
+            return null;
         }
 
         private static int Octile(IntVec3 a, IntVec3 b)
@@ -229,7 +347,7 @@ namespace ProjectZ.Patches
         }
     }
 
-    // The stair step takes Climb.StepTicks instead of a cell's walking cost.
+    // A stair step or jump takes its own time instead of a cell's walking cost (J5).
     [HarmonyPatch(typeof(Pawn_PathFollower), "SetupMoveIntoNextCell")]
     public static class SetupMoveIntoNextCell_Patch
     {
@@ -238,45 +356,78 @@ namespace ProjectZ.Patches
         public static void Postfix(Pawn_PathFollower __instance)
         {
             Pawn pawn = PawnRef(__instance);
-            if (pawn == null || Climb.Direction(pawn) == 0)
+            if (pawn == null)
             {
                 return;
             }
-            __instance.nextCellCostTotal = Climb.StepTicks;
-            __instance.nextCellCostLeft = Climb.StepTicks;
+            StepKind k = Links.Kind(pawn);
+            if (k == StepKind.None)
+            {
+                return;
+            }
+            int ticks = k == StepKind.Jump ? JumpGrid.JumpTicks : Climb.StepTicks;
+            __instance.nextCellCostTotal = ticks;
+            __instance.nextCellCostLeft = ticks;
         }
     }
 
-    // After the step the pawn is drawn at its new cell at once (no slide across the map between the floors' rows).
-    // Not pawn.Notify_Teleported: that ends the job.
+    // After the step the pawn is drawn at its new cell at once (no slide across the map between the floors' rows); after
+    // a jump it lands (bruises, stagger: JumpGrid). Not pawn.Notify_Teleported: that ends the job.
     [HarmonyPatch(typeof(Pawn_PathFollower), "TryEnterNextPathCell")]
     public static class TryEnterNextPathCell_Patch
     {
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
 
-        public static void Prefix(Pawn_PathFollower __instance, out IntVec3 __state)
+        public struct Step
         {
-            Pawn pawn = PawnRef(__instance);
-            __state = pawn != null && Climb.Direction(pawn) != 0 ? pawn.Position : IntVec3.Invalid;
+            public IntVec3 from;
+            public StepKind kind;
+            public int fallen;
         }
 
-        public static void Postfix(Pawn_PathFollower __instance, IntVec3 __state)
+        public static void Prefix(Pawn_PathFollower __instance, out Step __state)
         {
-            if (!__state.IsValid)
+            __state = new Step { from = IntVec3.Invalid };
+            Pawn pawn = PawnRef(__instance);
+            if (pawn == null)
+            {
+                return;
+            }
+            StepKind k = Links.Kind(pawn, out int fallen);
+            if (k != StepKind.None)
+            {
+                __state = new Step { from = pawn.Position, kind = k, fallen = fallen };
+            }
+        }
+
+        public static void Postfix(Pawn_PathFollower __instance, Step __state)
+        {
+            if (!__state.from.IsValid)
             {
                 return;
             }
             Pawn pawn = PawnRef(__instance);
-            if (pawn != null && pawn.Position != __state)
+            if (pawn == null || pawn.Position == __state.from)
             {
-                pawn.Drawer?.tweener?.Notify_Teleported();
+                return;
+            }
+            pawn.Drawer?.tweener?.Notify_Teleported();
+            if (__state.kind == StepKind.Jump)
+            {
+                JumpGrid.For(pawn.Map)?.Landed(pawn, __state.fallen);
+                Dev.TestRunner.CountJump(pawn);
+                ProjectZ.DebugLog($"{pawn} jumped {__state.from} -> {pawn.Position} ({__state.fallen} floor(s))");
+            }
+            else
+            {
                 Dev.TestRunner.CountClimb(pawn);
-                ProjectZ.DebugLog($"{pawn} took the stairs {__state} -> {pawn.Position}");
+                ProjectZ.DebugLog($"{pawn} took the stairs {__state.from} -> {pawn.Position}");
             }
         }
     }
 
-    // During the step the pawn stays over its stair cell (IsoRim raises it as it climbs, IsoRimBridge.ThingOffset).
+    // During a stair step or jump the pawn moves across toward the next cell's column on its own floor's rows (IsoRim
+    // raises or lowers it, Links.Rise).
     [HarmonyPatch(typeof(PawnTweener), "TweenedPosRoot")]
     public static class TweenedPosRoot_Patch
     {
@@ -285,23 +436,20 @@ namespace ProjectZ.Patches
         public static void Postfix(PawnTweener __instance, ref Vector3 __result)
         {
             Pawn pawn = PawnRef(__instance);
-            if (pawn == null || Climb.Direction(pawn) == 0)
+            if (pawn == null || !Links.StepTween(pawn, out Vector3 at))
             {
                 return;
             }
-            Vector3 p = pawn.Position.ToVector3Shifted();
-            __result = new Vector3(p.x, __result.y, p.z);
+            __result = new Vector3(at.x, __result.y, at.z);
         }
     }
 
-    // A pawn saved in the middle of a stair step: its next cell (the other end) is not next to it. Start again from
-    // where it stands; the path is joined again when it resumes.
+    // A pawn saved in the middle of a stair step or jump: its next cell is not next to it. Start again from where it
+    // stands; the path is joined again when it resumes.
     // Patched on Pawn.PostMapInit, which calls it: the one-line TryResumePathingAfterLoading can be inlined.
     [HarmonyPatch(typeof(Pawn), nameof(Pawn.PostMapInit))]
     public static class TryResumePathingAfterLoading_Patch
     {
-        private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
-
         public static void Prefix(Pawn __instance)
         {
             Pawn pawn = __instance;
@@ -314,7 +462,7 @@ namespace ProjectZ.Patches
             IntVec3 pos = pawn.Position;
             if (next.IsValid && (Math.Abs(next.x - pos.x) > 1 || Math.Abs(next.z - pos.z) > 1))
             {
-                ProjectZ.DebugLog($"{pawn} was saved on a stair step ({pos} -> {next}): starting again from {pos}");
+                ProjectZ.DebugLog($"{pawn} was saved on a stair step or jump ({pos} -> {next}): starting again from {pos}");
                 pather.nextCell = pos;
                 pather.nextCellCostLeft = 0f;
                 pather.nextCellCostTotal = 1f;

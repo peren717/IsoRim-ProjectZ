@@ -1,0 +1,12 @@
+# Materials for ProjectZ's models (the same names and colours as IsoRim's isorim.mtl).
+newmtl stuff
+Kd 1.000 1.000 1.000
+map_Kd IsoRim/Swatches/{stuff}
+
+newmtl stuff_dark
+Kd 0.800 0.800 0.800
+map_Kd IsoRim/Swatches/{stuff}
+
+newmtl stuff_deep
+Kd 0.620 0.620 0.620
+map_Kd IsoRim/Swatches/{stuff}
