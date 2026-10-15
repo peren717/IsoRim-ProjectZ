@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Empty annex cell: the space where an upper floor can go. Impassable, not drawn, never buildable. -->
+  <TerrainDef>
+    <defName>PZ_OpenAir</defName>
+    <label>open air</label>
+    <description>Empty space above the ground.</description>
+    <dontRender>true</dontRender>
+    <passability>Impassable</passability>
+    <pathCost>300</pathCost>
+    <fertility>0</fertility>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>300</renderPrecedence>
+    <layerable>false</layerable>
+    <changeable>false</changeable>
+    <holdSnowOrSand>false</holdSnowOrSand>
+    <avoidWander>true</avoidWander>
+    <preventCraters>true</preventCraters>
+    <canEverTerraform>false</canEverTerraform>
+    <supportsRock>false</supportsRock>
+    <canBePolluted>false</canBePolluted>
+    <takeFootprints>false</takeFootprints>
+    <filthAcceptanceMask>
+      <li>None</li>
+    </filthAcceptanceMask>
+    <statBases>
+      <WorkToBuild>0</WorkToBuild>
+      <Flammability>0</Flammability>
+    </statBases>
+    <affordances />
+  </TerrainDef>
+
+</Defs>
