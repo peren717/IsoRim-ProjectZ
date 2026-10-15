@@ -29,6 +29,10 @@ namespace ProjectZ.Dev
     //                                   down, slab height rule, wall-height lock, ornate door) with screenshots (TestStairs)
     //                                   floorui: building floor 2 through the UI pointer and designators, refusal messages,
     //                                   no-designator fall-through, language shots (TestFloorUI)
+    //                                   save: load a player save (-projectzsave=<name>), describe its stairs and colonists,
+    //                                   tick it (-projectzsaveticks=N) until everything planned upstairs is built (TestSave)
+    //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
+    //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -86,6 +90,7 @@ namespace ProjectZ.Dev
             }
             FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
+            GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -346,11 +351,21 @@ namespace ProjectZ.Dev
                 StepLight(map);
                 return;
             }
+            if (stage.StartsWith("v_"))
+            {
+                StepSave(map);
+                return;
+            }
+            if (stage.StartsWith("k_"))
+            {
+                StepDeadEnd(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -388,6 +403,10 @@ namespace ProjectZ.Dev
                     else if (mode == "stairs" || mode == "floorui")
                     {
                         stage = "s_setup";
+                    }
+                    else if (mode == "deadend")
+                    {
+                        stage = "k_setup";
                     }
                     else if (mode == "light")
                     {

@@ -65,12 +65,12 @@ namespace ProjectZ.Patches
                         return rim;
                     }
                 }
-                int cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: false);
+                int cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: false, depth: 0);
                 if (cost < 0 && ProjectZ.FloorOf(start, map) > ProjectZ.FloorOf(dest.Cell, map))
                 {
                     // Pass 2 (J4): no stair route; going down, jumps are allowed.
                     DisposeAll(legs);
-                    cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: true);
+                    cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: true, depth: 0);
                 }
                 return cost < 0 ? null : Join(legs, cost);
             }
@@ -95,47 +95,96 @@ namespace ProjectZ.Patches
             legs.Clear();
         }
 
-        // Legs from start to dest, floor by floor; the total cost, or -1.
-        private static int Route(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool jumps)
+        // Legs from 'from' to dest, floor by floor; the total cost, or -1 (nothing added to legs then).
+        // A step to another floor (stairs, or a jump in pass 2) is kept only when the rest of the route from its far end
+        // works; otherwise its legs are dropped and the next candidate is tried. Reachability links every stairs, so
+        // stairs whose exit leads nowhere (a one-cell landing, a closed-off room) must not end the search while other
+        // stairs lead there: a route that gave up after the first stairs it could get onto left the work givers handing
+        // out the same job again and again with no path (pawns standing with the materials in hand).
+        private static int Route(Map map, IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool jumps, int depth)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int fd = ProjectZ.FloorOf(dest.Cell, map);
-            IntVec3 from = start;
-            int cost = 0;
-            for (int guard = 0; guard < 2 * a.floors + 2; guard++)
+            int f = ProjectZ.FloorOf(from, map);
+            if (f == fd)
             {
-                int f = ProjectZ.FloorOf(from, map);
-                if (f == fd)
+                PawnPath last = Leg(map, from, dest, peMode, tp, tuning);
+                if (last == null)
                 {
-                    PawnPath last = Leg(map, from, dest, peMode, tp, tuning);
-                    if (last == null)
-                    {
-                        ProjectZ.DebugLog($"route {start} -> {dest.Cell} (jumps {jumps}): no last leg {from} -> {dest.Cell}");
-                        return -1;
-                    }
-                    legs.Add(last);
-                    return cost + (int)last.TotalCost;
-                }
-                int dir = fd > f ? 1 : -1;
-                if (!StairStep(map, ref from, dir, dest, tp, tuning, legs, ref cost) && !(jumps && dir < 0 && JumpStep(map, ref from, dest, peMode, tp, tuning, legs, ref cost)))
-                {
-                    ProjectZ.DebugLog($"route {start} -> {dest.Cell} (jumps {jumps}): no step from {from} (floor {f}, dir {dir})");
+                    ProjectZ.DebugLog($"route (jumps {jumps}): no last leg {from} -> {dest.Cell}");
                     return -1;
                 }
+                legs.Add(last);
+                return (int)last.TotalCost;
             }
+            if (f < 0 || depth >= a.floors)
+            {
+                return -1;
+            }
+            int dir = fd > f ? 1 : -1;
+            foreach (StairLink l in StairCandidates(map, from, dir, dest, tp))
+            {
+                int mark = legs.Count;
+                int cost = StairStep(map, l, from, dir, dest, tp, tuning, legs, out IntVec3 next);
+                if (cost >= 0)
+                {
+                    int rest = Route(map, next, dest, peMode, tp, tuning, legs, jumps, depth + 1);
+                    if (rest >= 0)
+                    {
+                        return cost + rest;
+                    }
+                    ProjectZ.DebugLog($"route (jumps {jumps}): the stairs at {l.stairs.Position} lead nowhere toward {dest.Cell}; trying the next");
+                }
+                DisposeFrom(legs, mark);
+                if (cost >= 0 && Dev.TestRunner.GreedyRoute)
+                {
+                    return -1;   // test only: the old router kept the first stairs it could get onto
+                }
+            }
+            if (jumps && dir < 0)
+            {
+                foreach (Jump j in JumpCandidates(map, from, dest, peMode, tp))
+                {
+                    int mark = legs.Count;
+                    PawnPath leg = Leg(map, from, j.from, PathEndMode.OnCell, tp, tuning);
+                    if (leg == null)
+                    {
+                        continue;
+                    }
+                    legs.Add(leg);
+                    int rest = Route(map, j.land, dest, peMode, tp, tuning, legs, jumps, depth + 1);
+                    if (rest >= 0)
+                    {
+                        Dev.PZStats.jumpRoutes++;
+                        return (int)leg.TotalCost + JumpCost + rest;
+                    }
+                    DisposeFrom(legs, mark);
+                }
+            }
+            ProjectZ.DebugLog($"route (jumps {jumps}): no step from {from} (floor {f}, dir {dir}) toward {dest.Cell}");
             return -1;
         }
 
-        // To the floor above (dir 1) or below (-1) over stairs, best first by straight-line distance (8-way) via them.
-        private static bool StairStep(Map map, ref IntVec3 from, int dir, LocalTargetInfo dest, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, ref int cost)
+        private static void DisposeFrom(List<PawnPath> legs, int mark)
         {
+            for (int i = legs.Count - 1; i >= mark; i--)
+            {
+                legs[i].Dispose();
+                legs.RemoveAt(i);
+            }
+        }
+
+        // The stairs to the floor above (dir 1) or below (-1) the traveller may use, best first by straight-line
+        // distance (8-way) via them; at most CandidatesPerStep.
+        private static List<StairLink> StairCandidates(Map map, IntVec3 from, int dir, LocalTargetInfo dest, TraverseParms tp)
+        {
+            List<StairLink> cands = new List<StairLink>();
             StairGrid g = StairGrid.For(map);
             if (g == null)
             {
-                return false;
+                return cands;
             }
             int f = ProjectZ.FloorOf(from, map);
-            List<StairLink> cands = new List<StairLink>();
             for (int i = 0; i < g.links.Count; i++)
             {
                 StairLink l = g.links[i];
@@ -147,57 +196,63 @@ namespace ProjectZ.Patches
             IntVec3 fromGround = ProjectZ.GroundCellOf(from, map);
             IntVec3 destGround = ProjectZ.GroundCellOf(dest.Cell, map);
             cands.SortBy(l => Octile(fromGround, ProjectZ.GroundCellOf(l.bottom, map)) + Octile(ProjectZ.GroundCellOf(l.bottom, map), destGround));
-            for (int i = 0; i < cands.Count && i < CandidatesPerStep; i++)
+            if (cands.Count > CandidatesPerStep)
             {
-                StairLink l = cands[i];
-                IntVec3 f2 = l.stairs.Rotation.FacingCell;
-                IntVec3 low = l.stairs.Position - f2, mid = l.stairs.Position;
-                if (dir > 0)
-                {
-                    // Up: onto the ramp at its low end (or where the pawn already is on it), walk L0 -> L1 -> H, then
-                    // the step to the exit.
-                    int at = from == low ? 0 : from == mid ? 1 : from == l.bottom ? 2 : -1;
-                    PawnPath leg = Leg(map, from, at >= 0 ? from : low, PathEndMode.OnCell, tp, tuning);
-                    if (leg == null)
-                    {
-                        ProjectZ.DebugLog($"stair step: no leg {from} -> {low}");
-                        continue;
-                    }
-                    legs.Add(leg);
-                    cost += (int)leg.TotalCost + StepCost;
-                    List<IntVec3> walk = new List<IntVec3>();
-                    for (int r = Math.Max(at, 0) + 1; r <= 2; r++)
-                    {
-                        walk.Add(r == 1 ? mid : l.bottom);
-                    }
-                    cost += Fixed(walk, legs);
-                    from = l.top;
-                }
-                else
-                {
-                    // Down: to the exit, the step onto H, then down the ramp to its low end (unless the stairs or a ramp
-                    // cell is where the pawn is going).
-                    PawnPath leg = Leg(map, from, l.top, PathEndMode.OnCell, tp, tuning);
-                    if (leg == null)
-                    {
-                        ProjectZ.DebugLog($"stair step: no leg {from} -> {l.top}");
-                        continue;
-                    }
-                    legs.Add(leg);
-                    cost += (int)leg.TotalCost + StepCost;
-                    if (dest.Cell == l.bottom || dest.Cell == mid || dest.HasThing && dest.Thing == l.stairs)
-                    {
-                        from = l.bottom;
-                    }
-                    else
-                    {
-                        cost += Fixed(new List<IntVec3> { l.bottom, mid }, legs);
-                        from = low;
-                    }
-                }
-                return true;
+                cands.RemoveRange(CandidatesPerStep, cands.Count - CandidatesPerStep);
             }
-            return false;
+            return cands;
+        }
+
+        // Over one stairs to the floor above (dir 1) or below (-1): its legs added, their cost, and the cell the pawn is
+        // on after it (next); -1 when the stairs can't be got onto from 'from' (nothing added then).
+        private static int StairStep(Map map, StairLink l, IntVec3 from, int dir, LocalTargetInfo dest, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, out IntVec3 next)
+        {
+            next = IntVec3.Invalid;
+            IntVec3 f2 = l.stairs.Rotation.FacingCell;
+            IntVec3 low = l.stairs.Position - f2, mid = l.stairs.Position;
+            int cost;
+            if (dir > 0)
+            {
+                // Up: onto the ramp at its low end (or where the pawn already is on it), walk L0 -> L1 -> H, then the
+                // step to the exit.
+                int at = from == low ? 0 : from == mid ? 1 : from == l.bottom ? 2 : -1;
+                PawnPath leg = Leg(map, from, at >= 0 ? from : low, PathEndMode.OnCell, tp, tuning);
+                if (leg == null)
+                {
+                    ProjectZ.DebugLog($"stair step: no leg {from} -> {low}");
+                    return -1;
+                }
+                legs.Add(leg);
+                cost = (int)leg.TotalCost + StepCost;
+                List<IntVec3> walk = new List<IntVec3>();
+                for (int r = Math.Max(at, 0) + 1; r <= 2; r++)
+                {
+                    walk.Add(r == 1 ? mid : l.bottom);
+                }
+                cost += Fixed(walk, legs);
+                next = l.top;
+                return cost;
+            }
+            // Down: to the exit, the step onto H, then down the ramp to its low end (unless the stairs or a ramp cell is
+            // where the pawn is going).
+            PawnPath down = Leg(map, from, l.top, PathEndMode.OnCell, tp, tuning);
+            if (down == null)
+            {
+                ProjectZ.DebugLog($"stair step: no leg {from} -> {l.top}");
+                return -1;
+            }
+            legs.Add(down);
+            cost = (int)down.TotalCost + StepCost;
+            if (dest.Cell == l.bottom || dest.Cell == mid || dest.HasThing && dest.Thing == l.stairs)
+            {
+                next = l.bottom;
+            }
+            else
+            {
+                cost += Fixed(new List<IntVec3> { l.bottom, mid }, legs);
+                next = low;
+            }
+            return cost;
         }
 
         public const int RampCellCost = 20;   // path cost of one ramp cell walked as a fixed node
@@ -219,14 +274,15 @@ namespace ProjectZ.Patches
         }
 
         // Down by a jump (pass 2): the jumps out of the regions reachable on this floor whose landing reaches the
-        // destination, best first by straight-line distance via them; no landing on fire.
-        private static bool JumpStep(Map map, ref IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, ref int cost)
+        // destination and is not on fire, best first by straight-line distance via them; at most CandidatesPerStep.
+        private static List<Jump> JumpCandidates(Map map, IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp)
         {
+            List<Jump> result = new List<Jump>();
             JumpGrid jg = JumpGrid.For(map);
             Region start = from.GetRegion(map);
             if (jg == null || start == null)
             {
-                return false;
+                return result;
             }
             List<Jump> cands = new List<Jump>();
             StairRegions.suppress++;
@@ -242,34 +298,18 @@ namespace ProjectZ.Patches
             {
                 StairRegions.suppress--;
             }
-            if (cands.Count == 0)
-            {
-                return false;
-            }
             IntVec3 fromGround = ProjectZ.GroundCellOf(from, map);
             IntVec3 destGround = ProjectZ.GroundCellOf(dest.Cell, map);
             cands.SortBy(j => Octile(fromGround, ProjectZ.GroundCellOf(j.from, map)) + Octile(ProjectZ.GroundCellOf(j.land, map), destGround));
-            int tried = 0;
-            for (int i = 0; i < cands.Count && tried < CandidatesPerStep; i++)
+            for (int i = 0; i < cands.Count && result.Count < CandidatesPerStep; i++)
             {
                 Jump j = cands[i];
-                if (j.land.ContainsStaticFire(map) || !map.reachability.CanReach(j.land, dest, peMode, tp))
+                if (!j.land.ContainsStaticFire(map) && map.reachability.CanReach(j.land, dest, peMode, tp))
                 {
-                    continue;
+                    result.Add(j);
                 }
-                tried++;
-                PawnPath leg = Leg(map, from, j.from, PathEndMode.OnCell, tp, tuning);
-                if (leg == null)
-                {
-                    continue;
-                }
-                legs.Add(leg);
-                cost += (int)leg.TotalCost + JumpCost;
-                from = j.land;
-                Dev.PZStats.jumpRoutes++;
-                return true;
             }
-            return false;
+            return result;
         }
 
         // T5: to the nearest rim cell of a stairs thing that a leg reaches.
