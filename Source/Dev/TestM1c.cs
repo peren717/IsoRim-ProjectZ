@@ -391,7 +391,7 @@ namespace ProjectZ.Dev
             shooter.drafter.FireAtWill = false;
             Teleport(shooter, edgeCell);
             // Same-floor reference: a colonist on the ground just north of B, as far from the raider (sandbags in between).
-            Pawn refPawn = Colonists(map).FirstOrDefault(p => p != shooter);
+            Pawn refPawn = Colonists(map).Where(p => p != shooter).OrderBy(p => p.WorkTagIsDisabled(WorkTags.Violent) ? 1 : 0).FirstOrDefault();   // (one who can shoot: the hit report reads the shooting stat)
             IntVec3 refHome = refPawn?.Position ?? IntVec3.Invalid;
             if (refPawn != null)
             {

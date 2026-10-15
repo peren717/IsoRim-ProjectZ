@@ -43,7 +43,7 @@ namespace ProjectZ.Dev
                     int area = twoStorey.ContractedBy(1).Cells.Count(g => map.areaManager.BuildRoof[Above(g, map)]);
                     Result("upstairs room gets the game's auto-roof area", area == inner, $"{area} of {inner} upstairs cells in the build-roof area");
                     Result("colonists build the upstairs roof", roofed == inner, $"{roofed} of {inner} roofed after {ticksTotal - ticksLeft} ticks");
-                    Result("ground under the upper floor keeps the floor's roof", twoStorey.Cells.All(g => map.roofGrid.RoofAt(g) == PZDefOf.PZ_FloorRoof), "");
+                    Result("ground under the upper floor keeps the floor's roof (the stairwell its own)", twoStorey.Cells.All(g => map.roofGrid.RoofAt(g) == (Stairwell.StairThingAt(g, map) ? PZDefOf.PZ_StairwellRoof : PZDefOf.PZ_FloorRoof)), "");
                     BuildShots(map);
                     shotIndex = 0;
                     stage = "d_shot";
@@ -59,11 +59,20 @@ namespace ProjectZ.Dev
                     Wait(40, "d_shot_take");
                     return true;
                 case "d_shot_take":
+                    if (shots[shotIndex].Key == "ghost_roofwork")
+                    {
+                        // log what is drawn round the house this frame (the striped ghost)
+                        DrawLog.Area = twoStorey.ExpandedBy(3);
+                        DrawLog.Area2 = new CellRect(twoStorey.minX - 3, Above(new IntVec3(twoStorey.minX, 0, twoStorey.minZ), map).z - 3, twoStorey.Width + 6, twoStorey.Height + 6);
+                        DrawLog.Frames = 2;
+                    }
                     Capture("m1c2_" + shots[shotIndex].Key);
                     shotIndex++;
                     stage = "d_shot";
                     return true;
                 case "d_move":
+                    // the striped "cut-away ghost": the game's temporary roof tiles, stood up like icons before the fix
+                    Result("no striped ghost: temporary roof tiles lie flat (none drawn upright)", DrawLog.TempRoofs > 0 && DrawLog.TempRoofsUpright == 0, $"temporary roof tile draws {DrawLog.TempRoofs}, upright {DrawLog.TempRoofsUpright}");
                     StartMove(map);
                     return true;
                 case "d_move_shot":
@@ -208,7 +217,8 @@ namespace ProjectZ.Dev
             {
                 CellRect r = new CellRect(c.x - 12, c.z - 8, 25, 17);
                 CellRect m = r.ExpandedBy(2);
-                if (!m.InBounds(map) || m.maxZ >= ProjectZ.GroundZ(map) - 12)
+                // (6 cells to the map edge: the move test starts its colonist 4 cells south of the house)
+                if (!r.ExpandedBy(6).InBounds(map) || m.maxZ >= ProjectZ.GroundZ(map) - 12)
                 {
                     continue;
                 }
@@ -253,8 +263,14 @@ namespace ProjectZ.Dev
             }
             // Stairs inside the two-storey house (built), walls upstairs on the same line; the roof up there is left to
             // the game (auto-roof) and the colonists.
-            IntVec3 stairCell = new IntVec3(twoStorey.maxX - 1, 0, twoStorey.maxZ - 1);
-            Place(PZDefOf.PZ_Stairs, ThingDefOf.Steel, stairCell, map);
+            // The 1x3 ramp along the east wall going down to the south: its exit is the inside cell past its south end. The
+            // three upper cells over it are the stairwell (no floor).
+            IntVec3 stairCell = new IntVec3(twoStorey.maxX - 1, 0, twoStorey.maxZ - 2);
+            foreach (IntVec3 c in StairShape.Footprint(stairCell, Rot4.South))
+            {
+                map.terrainGrid.SetTerrain(Above(c, map), PZDefOf.PZ_OpenAir);
+            }
+            Place(PZDefOf.PZ_Stairs, ThingDefOf.Steel, stairCell, map, Rot4.South);
             foreach (IntVec3 g in twoStorey.EdgeCells)
             {
                 Place(ThingDefOf.Wall, ThingDefOf.WoodLog, Above(g, map), map);
@@ -300,6 +316,29 @@ namespace ProjectZ.Dev
             int sx = map.Size.x;
             shots.Add(new KeyValuePair<string, Action<Map>>("roofs_f2_on", m => View(m, 1, true, a, 13f)));
             shots.Add(new KeyValuePair<string, Action<Map>>("roofs_f2_off", m => View(m, 1, false, a, 13f)));
+            // The striped "cut-away ghost" in upstairs rooms (seen since M1c-2): the game's temporary roof tiles round a
+            // colonist building a roof, which IsoRim stood up like icons. Two upstairs roof cells are taken off and the
+            // game ticks until someone works on one; what is drawn round the house that frame is logged (DrawLog).
+            shots.Add(new KeyValuePair<string, Action<Map>>("ghost_roofwork", m =>
+            {
+                List<Pawn> cs = Colonists(m);
+                foreach (IntVec3 g0 in new[] { new IntVec3(twoStorey.minX + 1, 0, twoStorey.minZ + 3), new IntVec3(twoStorey.minX + 1, 0, twoStorey.minZ + 4) })
+                {
+                    m.roofGrid.SetRoof(Above(g0, m), null);
+                }
+                foreach (Pawn p in cs)
+                {
+                    p.drafter.Drafted = false;
+                }
+                // until one of the two is roofed again (the game shows its temporary roof tile then)
+                IntVec3 r1 = Above(new IntVec3(twoStorey.minX + 1, 0, twoStorey.minZ + 3), m), r2 = Above(new IntVec3(twoStorey.minX + 1, 0, twoStorey.minZ + 4), m);
+                for (int k = 0; k < 4000 && !m.roofGrid.Roofed(r1) && !m.roofGrid.Roofed(r2); k++)
+                {
+                    Find.TickManager.DoSingleTick();
+                }
+                Info("ghost_roofwork: roof workers " + string.Join(", ", cs.Where(p => p.CurJobDef == JobDefOf.BuildRoof).Select(p => p.LabelShort + " at " + p.Position + " -> " + p.CurJob.targetA)));
+                View(m, 1, false, new Vector3(twoStorey.minX + 3f, 0f, twoStorey.minZ + 3f), 7f);
+            }));
             shots.Add(new KeyValuePair<string, Action<Map>>("roofs_f1_on", m => View(m, 0, true, a, 13f)));
             shots.Add(new KeyValuePair<string, Action<Map>>("roofs_f1_off", m => View(m, 0, false, a, 13f)));
             shots.Add(new KeyValuePair<string, Action<Map>>("walls_close", m => View(m, 1, false, corner, 5f)));

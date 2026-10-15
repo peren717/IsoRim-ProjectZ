@@ -25,6 +25,8 @@ namespace ProjectZ.Dev
     //                                   (sight, hit chances, cover, real fighting, projectile shots), save/reload (TestM1c)
     //                                   m1c2: playtest findings (roofs, stacked walls, map edge, move order, facing, range
     //                                   ring, mortar under a floor) with screenshots (TestM1c2)
+    //                                   stairs: the stairs batch (1x3 stairs, stairwell, rebuild from either floor, jumping
+    //                                   down, slab height rule, wall-height lock, ornate door) with screenshots (TestStairs)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -107,6 +109,8 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)));
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
+            DrawLog.Patch(h);
+            h.Patch(AccessTools.Method(typeof(Frame), nameof(Frame.FailConstruction)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(BotchPrefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))
             {
                 try
@@ -119,6 +123,16 @@ namespace ProjectZ.Dev
                 }
             }
             Out($"test active: mode {mode}, floors {FloorsOverride}, days {days}, out {outDir}");
+        }
+
+        // Construction botches (each loses part of the frame's materials): the m1b "upper floor built" flake.
+        internal static int botches;
+        internal static int botchedMaterials;
+
+        private static void BotchPrefix(Frame __instance)
+        {
+            botches++;
+            botchedMaterials += __instance.resourceContainer?.TotalStackCount ?? 0;
         }
 
         private static void LogPostfix(string text, MethodBase __originalMethod)
@@ -296,6 +310,11 @@ namespace ProjectZ.Dev
                 StepM1c2(map);
                 return;
             }
+            if (stage.StartsWith("s_"))
+            {
+                StepStairs(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -334,6 +353,10 @@ namespace ProjectZ.Dev
                     else if (mode == "m1c2")
                     {
                         stage = "d_setup";
+                    }
+                    else if (mode == "stairs")
+                    {
+                        stage = "s_setup";
                     }
                     else if (mode == "raids")
                     {

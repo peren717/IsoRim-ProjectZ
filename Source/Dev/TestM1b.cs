@@ -19,8 +19,10 @@ namespace ProjectZ.Dev
     public static partial class TestRunner
     {
         private static CellRect house;            // walls included, on the ground
-        private static IntVec3 stairCell;
+        private static IntVec3 stairCell;          // centre of the 1x3 ramp
+        private static Rot4 stairRot = Rot4.North;
         private static int climbsColonists;
+        private static int climbsAtSave;
         private static int climbsHostiles;
         private static int maxUpstairs;
         private static int sleptUpstairsTicks;
@@ -31,6 +33,22 @@ namespace ProjectZ.Dev
         private static Func<bool> tickWatch;
         private static bool sentDown;
         private static int watchEvery = 60;
+
+        internal static void CountJump(Pawn p)
+        {
+            PZStats.jumps++;
+            if (p.Faction == Faction.OfPlayer)
+            {
+                jumpsColonists++;
+            }
+            else if (p.HostileTo(Faction.OfPlayer))
+            {
+                jumpsHostiles++;
+            }
+        }
+
+        private static int jumpsColonists;
+        private static int jumpsHostiles;
 
         internal static void CountClimb(Pawn p)
         {
@@ -92,6 +110,8 @@ namespace ProjectZ.Dev
                     // Upper floor: blueprints over the whole roofed house, and one over unroofed ground that must be refused.
                     int placed = 0, refused = 0;
                     List<string> why = new List<string>();
+                    Result("stairwell stays open, the exit is made with the stairs", StairShape.Footprint(st.Position, st.Rotation).Cells.All(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && top.GetTerrain(map) == PZDefOf.PZ_UpperFloor,
+                        $"well roofs {string.Join(",", StairShape.Footprint(st.Position, st.Rotation).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}, exit {top} {top.GetTerrain(map).defName}");
                     foreach (IntVec3 u in Upstairs(map))
                     {
                         if (u.GetTerrain(map) == PZDefOf.PZ_UpperFloor)
@@ -112,14 +132,14 @@ namespace ProjectZ.Dev
                     }
                     IntVec3 outside = ProjectZ.CellOnFloor(new IntVec3(house.maxX + 3, 0, house.CenterCell.z), 1, map);
                     AcceptanceReport bad = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, outside, Rot4.North, map);
-                    Result("upper floor blueprints over the roof", placed == house.Area - 1 && refused == 0, $"{placed} placed, {refused} refused {string.Join(",", why.Distinct())}");
+                    Result("upper floor blueprints over the roof, refused over the stairwell", placed == house.Area - 4 && refused == 3 && why.All(w => w == "PZ_StairwellBelow".Translate()), $"{placed} placed, {refused} refused {string.Join(",", why.Distinct())}");
                     Result("upper floor refused without a roof below", !bad.Accepted, $"{outside}: {bad.Reason}");
                     IntVec3 groundOnly = new IntVec3(house.maxX + 3, 0, house.CenterCell.z);
                     AcceptanceReport bad2 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, groundOnly, Rot4.North, map);
                     Result("upper floor refused on the ground", !bad2.Accepted, $"{groundOnly}: {bad2.Reason}");
                     AcceptanceReport bad3 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, groundOnly, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
-                    Result("stairs refused without a roof", !bad3.Accepted, $"{groundOnly}: {bad3.Reason}");
-                    int target = house.Area;
+                    Result("stairs refused without support for the exit", !bad3.Accepted, $"{groundOnly}: {bad3.Reason}");
+                    int target = house.Area - 3;
                     TickUntil(90000, () => Upstairs(map).Count(u => u.GetTerrain(map) == PZDefOf.PZ_UpperFloor) >= target, "b_floor_check");
                     return true;
                 }
@@ -127,8 +147,12 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     int built = Upstairs(map).Count(u => u.GetTerrain(map) == PZDefOf.PZ_UpperFloor);
+                    if (built < house.Area - 3)
+                    {
+                        FloorDiagnosis(map);
+                    }
                     string missing = string.Join("; ", Upstairs(map).Where(u => u.GetTerrain(map) != PZDefOf.PZ_UpperFloor).Select(u => u + " [" + string.Join(",", u.GetThingList(map).Select(t => t.def.defName + (t is Frame f ? " " + f.WorkLeft.ToString("0") + " left, mats " + f.resourceContainer.TotalStackCount : ""))) + "] touchable " + Colonists(map).First().CanReach(u, PathEndMode.Touch, Danger.Deadly)));
-                    Result("upper floor built by colonists (upstairs work)", built == house.Area, $"{built} of {house.Area} cells after {ticksTotal - ticksLeft} ticks; colonist stair steps so far {climbsColonists}; not built: {missing}");
+                    Result("upper floor built by colonists (upstairs work)", built == house.Area - 3, $"{built} of {house.Area - 3} cells after {ticksTotal - ticksLeft} ticks; colonist stair steps so far {climbsColonists}; construction botches {botches} (materials in botched frames {botchedMaterials}, about half lost); not built: {missing}");
                     Furnish(map);
                     return true;
                 }
@@ -194,7 +218,7 @@ namespace ProjectZ.Dev
                         p.drafter.Drafted = true;
                         p.drafter.FireAtWill = false;
                     }
-                    List<IntVec3> spots = Upstairs(map).Where(c => c.Standable(map) && c.GetFirstBuilding(map) == null).ToList();
+                    List<IntVec3> spots = SafeSpots(map);
                     int i = 0;
                     foreach (Pawn p in Colonists(map))
                     {
@@ -227,6 +251,7 @@ namespace ProjectZ.Dev
                     return true;
                 case "b_climb_save2":
                     savedTicks = Find.TickManager.TicksGame;
+                    climbsAtSave = climbsColonists;
                     GameDataSaveLoader.SaveGame("pz_climb");
                     Result("saved pz_climb", File.Exists(GenFilePaths.FilePathForSavedGame("pz_climb")), "");
                     stage = "b_climb_loaded";
@@ -237,7 +262,8 @@ namespace ProjectZ.Dev
                     FloorView.Set(1);
                     Pawn cl = map.mapPawns.AllPawnsSpawned.FirstOrDefault(p => p.ThingID == climberId);
                     // Reset on load (PostMapInit), then the joined path starts the step again from the start: a fresh step.
-                    bool ok = cl != null && cl.Position == climberPos && cl.Position.Walkable(map) && PZStats.climbResets >= 1;
+                    // (the game runs a few ticks after loading before the test pauses it: the restarted 30-tick step may be done)
+                    bool ok = cl != null && cl.Position.Walkable(map) && PZStats.climbResets >= 1 && (cl.Position == climberPos || climbsColonists > climbsAtSave);
                     foreach (Pawn p in Colonists(map))
                     {
                         if (ProjectZ.FloorOf(p.Position, map) != 1 && (!p.Drafted || p.CurJobDef != JobDefOf.Goto))
@@ -245,7 +271,7 @@ namespace ProjectZ.Dev
                             Info($"after load {p} drafted {p.Drafted}, job {p.CurJobDef?.defName}: ordered upstairs again");
                             p.drafter.Drafted = true;
                             p.drafter.FireAtWill = false;
-                            p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, Upstairs(map).Where(c => c.Standable(map) && c.GetFirstBuilding(map) == null).RandomElement()), JobTag.DraftedOrder);
+                            p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, SafeSpots(map).RandomElement()), JobTag.DraftedOrder);
                         }
                     }
                     Result("reload with a pawn mid-climb: reset to its cell", ok, cl == null ? "pawn not found" : $"{cl} at {cl.Position} (saved at {climberPos}), next cell {cl.pather.nextCell} at {cl.pather.MovePercentage:P0} (stair steps reset on load {PZStats.climbResets}), job {cl.CurJobDef?.defName}, ticks on load {ticksAfterLoad} vs saved {savedTicks}");
@@ -261,14 +287,33 @@ namespace ProjectZ.Dev
                     Pawn cl = map.mapPawns.AllPawnsSpawned.FirstOrDefault(p => p.ThingID == climberId);
                     Result("drafted colonists ordered upstairs arrive (incl. the reloaded climber)", OnFloor(map, Colonists(map), 1) == Colonists(map).Count, $"{OnFloor(map, Colonists(map), 1)} of {Colonists(map).Count} upstairs; climber {cl} now at {cl?.Position} floor {(cl == null ? -9 : ProjectZ.FloorOf(cl.Position, map))}");
                     // Raid: everyone is upstairs and holds fire; the raiders must come up the stairs.
-                    IncidentParms parms = StorytellerUtility.DefaultParmsNow(IncidentCategoryDefOf.ThreatBig, map);
-                    parms.faction = Find.FactionManager.AllFactions.Where(f => f.HostileTo(Faction.OfPlayer) && !f.def.hidden && f.def.humanlikeFaction && !f.temporary && f.def.pawnGroupMakers != null && f.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) < 250f).RandomElementWithFallback();
-                    parms.raidStrategy = RaidStrategyDefOf.ImmediateAttack;
-                    parms.raidArrivalMode = PawnsArrivalModeDefOf.EdgeWalkIn;
-                    parms.points = 250f;
-                    parms.forced = true;
-                    bool fired = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
-                    Info($"raid ({parms.faction?.Name}, {parms.faction?.def.defName}) fired {fired}: {map.mapPawns.AllPawnsSpawned.Count(p => p.HostileTo(Faction.OfPlayer))} hostiles");
+                    // (a raid can fail to form for a faction, vanilla and map-independent (M1a): then another faction is tried)
+                    IncidentParms parms = null;
+                    bool fired = false;
+                    List<Faction> enemies = Find.FactionManager.AllFactions.Where(f => f.HostileTo(Faction.OfPlayer) && !f.def.hidden && f.def.humanlikeFaction && !f.temporary && f.def.pawnGroupMakers != null && f.def.MinPointsToGeneratePawnGroup(PawnGroupKindDefOf.Combat) < 250f).InRandomOrder().ToList();
+                    for (int attempt = 0; attempt < enemies.Count && !fired; attempt++)
+                    {
+                        parms = StorytellerUtility.DefaultParmsNow(IncidentCategoryDefOf.ThreatBig, map);
+                        parms.faction = enemies[attempt];
+                        parms.raidStrategy = RaidStrategyDefOf.ImmediateAttack;
+                        parms.raidArrivalMode = PawnsArrivalModeDefOf.EdgeWalkIn;
+                        parms.points = 250f;
+                        parms.forced = true;
+                        fired = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
+                    }
+                    // The raid keeps assaulting (no timeout, kidnapping, stealing or fleeing): what is tested is that raiders can
+                    // come up the stairs; a raid that sets fires and leaves after a few walls (seen in about one run in three)
+                    // would test the raid AI instead.
+                    List<Pawn> raiders = map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer) && p.Faction == parms?.faction).ToList();
+                    if (raiders.Count > 0)
+                    {
+                        foreach (Pawn r in raiders)
+                        {
+                            r.GetLord()?.RemovePawn(r);
+                        }
+                        LordMaker.MakeNewLord(parms.faction, new LordJob_AssaultColony(parms.faction, canKidnap: false, canTimeoutOrFlee: false, canSteal: false), map, raiders);
+                    }
+                    Info($"raid ({parms?.faction?.Name}, {parms?.faction?.def.defName}) fired {fired}: {map.mapPawns.AllPawnsSpawned.Count(p => p.HostileTo(Faction.OfPlayer))} hostiles");
                     TickUntil(30000, () =>
                     {
                         if (Find.TickManager.TicksGame % 1500 < 30)
@@ -312,6 +357,11 @@ namespace ProjectZ.Dev
             if (mode == "m1c")
             {
                 KeepFed(map);
+                return;
+            }
+            if (mode == "stairs")
+            {
+                StairsHook(map);
                 return;
             }
             if (mode != "m1b" || house.Area == 0)
@@ -442,9 +492,12 @@ namespace ProjectZ.Dev
             {
                 map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
             }
-            // Materials outside the door, colonists on construction and hauling.
+            // Materials outside the door, colonists on construction and hauling. Steel for the stairs (60) and wood for the
+            // 46 floor cells (184), each with
+            // plenty to spare: quick-test colonists botch many constructions, and a botch loses part of the materials (the
+            // old 225 ran out in about two runs of three: the flaky "upper floor built" check).
             IntVec3 store = new IntVec3(house.CenterCell.x, 0, house.minZ - 3);
-            foreach (ThingDef d in new[] { ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.Steel })
+            foreach (ThingDef d in new[] { ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.Steel, ThingDefOf.Steel })
             {
                 Thing t = ThingMaker.MakeThing(d);
                 t.stackCount = d.stackLimit;
@@ -461,12 +514,14 @@ namespace ProjectZ.Dev
                     }
                 }
             }
-            stairCell = new IntVec3(house.maxX - 1, 0, house.maxZ - 1);
-            AcceptanceReport r0 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, stairCell, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
+            // The ramp along the east wall, going up north; its exit is the inside cell past its top.
+            stairCell = new IntVec3(house.maxX - 1, 0, house.minZ + 2);
+            stairRot = Rot4.North;
+            AcceptanceReport r0 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, stairCell, stairRot, map, stuffDef: ThingDefOf.WoodLog);
             Result("stairs blueprint placeable inside the roofed room", r0.Accepted, $"{stairCell}: {r0.Reason}");
             if (r0.Accepted)
             {
-                GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, stairCell, map, Rot4.North, Faction.OfPlayer, ThingDefOf.Steel);
+                GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, stairCell, map, stairRot, Faction.OfPlayer, ThingDefOf.Steel);
             }
             Pawn first = cols.First();
             Result("upstairs unreachable before the stairs", !first.CanReach(ProjectZ.CellOnFloor(house.CenterCell, 1, map), PathEndMode.Touch, Danger.Deadly), "");
@@ -478,9 +533,9 @@ namespace ProjectZ.Dev
         private static void Furnish(Map map)
         {
             List<IntVec3> up = Upstairs(map).ToList();
-            IntVec3 landing = ProjectZ.CellOnFloor(stairCell, 1, map);
+            IntVec3 landing = StairShape.Exit(stairCell, stairRot, map);
             // Bed in the upstairs south-west corner, owned by the first colonist.
-            IntVec3 bedCell = up.Where(c => c != landing && c.GetTerrain(map) == PZDefOf.PZ_UpperFloor && (c + IntVec3.North).GetTerrain(map) == PZDefOf.PZ_UpperFloor && c + IntVec3.North != landing).OrderBy(c => c.x + c.z).First();
+            IntVec3 bedCell = SafeSpots(map).Where(c => c != landing && (c + IntVec3.North).GetTerrain(map) == PZDefOf.PZ_UpperFloor && c + IntVec3.North != landing).OrderBy(c => c.x + c.z).First();
             Building_Bed bed = (Building_Bed)ThingMaker.MakeThing(ThingDefOf.Bed, ThingDefOf.WoodLog);
             bed.SetFaction(Faction.OfPlayer);
             GenSpawn.Spawn(bed, bedCell, map, Rot4.North);
@@ -520,6 +575,51 @@ namespace ProjectZ.Dev
             TickUntil(30000, () => SteelUpstairs(map) >= steelTotal, "b_haul_check");
         }
 
+        // Upstairs cells in the west half of the inside: not at a slab edge and not beside the stairwell, so nobody there is
+        // seen from below (decision A); the raid then has to come up the stairs.
+        private static List<IntVec3> SafeSpots(Map map)
+        {
+            CellRect inner = house.ContractedBy(1);
+            return inner.Cells.Where(g => g.x <= inner.minX + 1).Select(g => ProjectZ.CellOnFloor(g, 1, map)).Where(c => c.Standable(map) && c.GetFirstBuilding(map) == null).ToList();
+        }
+
+        // Why blueprints are left (the flaky "upper floor built" check): materials on the map and what the delivery and
+        // build work givers say about each one.
+        private static void FloorDiagnosis(Map map)
+        {
+            List<Thing> wood = map.listerThings.ThingsOfDef(ThingDefOf.WoodLog);
+            Info($"diagnosis: wood stacks {wood.Count}, total {wood.Sum(t => t.stackCount)}, forbidden {wood.Where(t => t.IsForbidden(Faction.OfPlayer)).Sum(t => t.stackCount)}, upstairs {wood.Where(t => ProjectZ.FloorOf(t.Position, map) == 1).Sum(t => t.stackCount)}; carried {string.Join(",", Colonists(map).Select(p => p + ":" + p.carryTracker?.CarriedThing))}; in frames {map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame).OfType<Frame>().Sum(f => f.resourceContainer.TotalStackCount)}");
+            Pawn c = Colonists(map).FirstOrDefault(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction));
+            WorkGiver_ConstructDeliverResourcesToBlueprints wbp = new WorkGiver_ConstructDeliverResourcesToBlueprints();
+            WorkGiver_ConstructDeliverResourcesToFrames wfr = new WorkGiver_ConstructDeliverResourcesToFrames();
+            WorkGiver_ConstructFinishFrames wfin = new WorkGiver_ConstructFinishFrames();
+            foreach (WorkGiverDef d in DefDatabase<WorkGiverDef>.AllDefs)
+            {
+                if (d.giverClass == typeof(WorkGiver_ConstructDeliverResourcesToBlueprints)) wbp.def = d;
+                if (d.giverClass == typeof(WorkGiver_ConstructDeliverResourcesToFrames)) wfr.def = d;
+                if (d.giverClass == typeof(WorkGiver_ConstructFinishFrames)) wfin.def = d;
+            }
+            foreach (IntVec3 u in Upstairs(map))
+            {
+                foreach (Thing t in u.GetThingList(map).Where(t => t is Blueprint || t is Frame).ToList())
+                {
+                    JobFailReason.Clear();
+                    Job j = null;
+                    Frame fr = t as Frame;
+                    string giver = fr == null ? "deliver to blueprint" : fr.IsCompleted() ? "finish frame" : "deliver to frame";
+                    try
+                    {
+                        j = fr == null ? wbp.JobOnThing(c, t, false) : fr.IsCompleted() ? wfin.JobOnThing(c, t, false) : wfr.JobOnThing(c, t, false);
+                    }
+                    catch (Exception e)
+                    {
+                        giver += " threw " + e.Message;
+                    }
+                    Info($"diagnosis: {t} at {u} [{giver}] -> job {j?.def?.defName ?? "none"} reason '{JobFailReason.Reason}' reserved {map.reservationManager.IsReservedByAnyoneOf(t, Faction.OfPlayer)} spot {GenConstruct.CanTouchTargetFromValidCell(t, c)} for {c} at {c?.Position}");
+                }
+            }
+        }
+
         private static void PrepareShot(Map map, int floor)
         {
             FloorView.Set(floor);
@@ -554,5 +654,9 @@ namespace ProjectZ.Dev
         public static int spliceFails;
         public static int findNow;
         public static int climbResets;
+        public static int jumps;
+        public static int landings;
+        public static int jumpRoutes;
+        public static int rimRoutes;
     }
 }
