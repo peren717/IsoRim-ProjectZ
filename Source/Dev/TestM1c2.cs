@@ -88,7 +88,7 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Result("drafted colonist ordered to floor 2 gets there", mover.Position == moveDest, $"{mover} at {mover.Position}, wanted {moveDest}");
                     Find.Selector.ClearSelection();
-                    stage = "d_face";
+                    stage = "d_click";   // orders by pointer through floors (TestM1c2Pointer), then d_face
                     return true;
                 case "d_face":
                     StartFacing(map);
@@ -196,7 +196,7 @@ namespace ProjectZ.Dev
                     Finish();
                     return true;
             }
-            return false;
+            return StepPointer(map);
         }
 
         private static void SetupM1c2(Map map)
