@@ -121,6 +121,7 @@ namespace ProjectZ
             if (oldTerr == PZDefOf.PZ_OpenAir || newTerr == PZDefOf.PZ_OpenAir)
             {
                 FloorRoof.Changed(c, map);
+                FloorHeat.Dirty();
             }
         }
     }
@@ -135,6 +136,7 @@ namespace ProjectZ
         {
             if (def == PZDefOf.PZ_FloorRoof)
             {
+                FloorHeat.Dirty();
                 return;
             }
             Map map = mapRef(__instance);
@@ -142,6 +144,7 @@ namespace ProjectZ
             {
                 return;
             }
+            FloorHeat.Dirty();
             if (FloorRoof.FloorAbove(c, map))
             {
                 def = PZDefOf.PZ_FloorRoof;
