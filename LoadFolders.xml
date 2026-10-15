@@ -3,6 +3,6 @@
   <v1.7>
     <li>/</li>
     <li>1.7</li>
-    <li IfModActive="Peren.IsoRim17, Peren.IsoRim17ModelsWT">IsoRim</li>
+    <li IfModActive="Peren.IsoRim17, Peren.IsoRim17ModelsWT, Peren.IsoRim17Preview">IsoRim</li>
   </v1.7>
 </loadFolders>
