@@ -7,6 +7,8 @@ namespace ProjectZ
     public static class PZDefOf
     {
         public static TerrainDef PZ_OpenAir;
+        public static TerrainDef PZ_UpperFloor;
+        public static ThingDef PZ_Stairs;
 
         static PZDefOf()
         {

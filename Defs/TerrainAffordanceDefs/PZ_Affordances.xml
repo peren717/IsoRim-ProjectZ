@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Open air in the annex: only an upper floor (PZ_UpperFloor) can be built on it. -->
+  <TerrainAffordanceDef>
+    <defName>PZ_FloorSupport</defName>
+    <label>upper floor space</label>
+    <order>1500</order>
+  </TerrainAffordanceDef>
+
+</Defs>

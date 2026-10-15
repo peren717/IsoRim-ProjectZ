@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Empty annex cell: the space where an upper floor can go. Impassable, not drawn, never buildable. -->
+  <!-- Empty annex cell: the space where an upper floor can go. Impassable, not drawn; only an upper floor can be built on it. -->
   <TerrainDef>
     <defName>PZ_OpenAir</defName>
     <label>open air</label>
@@ -13,7 +13,7 @@
     <edgeType>Hard</edgeType>
     <renderPrecedence>300</renderPrecedence>
     <layerable>false</layerable>
-    <changeable>false</changeable>
+    <changeable>true</changeable>
     <holdSnowOrSand>false</holdSnowOrSand>
     <avoidWander>true</avoidWander>
     <preventCraters>true</preventCraters>
@@ -28,7 +28,50 @@
       <WorkToBuild>0</WorkToBuild>
       <Flammability>0</Flammability>
     </statBases>
-    <affordances />
+    <affordances>
+      <li>PZ_FloorSupport</li>
+    </affordances>
+  </TerrainDef>
+
+  <!-- An upper floor cell (M1b): built on open air over a roofed cell (PlaceWorker_UpperFloor, decision D6). Walkable; walls,
+       furniture and normal floors can go on it. Placeholder look: plain wood boards. -->
+  <TerrainDef>
+    <defName>PZ_UpperFloor</defName>
+    <label>upper floor</label>
+    <description>Boards on beams for a floor above a roofed room. The cell below must have a roof.</description>
+    <texturePath>Terrain/Surfaces/WoodFloor</texturePath>
+    <color>(126,98,72)</color>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>250</renderPrecedence>
+    <layerable>false</layerable>
+    <affordances>
+      <li>Light</li>
+      <li>Medium</li>
+      <li>Heavy</li>
+      <li>Walkable</li>
+    </affordances>
+    <tags>
+      <li>Floor</li>
+    </tags>
+    <designationCategory>Structure</designationCategory>
+    <drawStyleCategory>Floors</drawStyleCategory>
+    <terrainAffordanceNeeded>PZ_FloorSupport</terrainAffordanceNeeded>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_UpperFloor</li>
+    </placeWorkers>
+    <pathCost>0</pathCost>
+    <fertility>0</fertility>
+    <constructEffect>ConstructWood</constructEffect>
+    <canEverTerraform>false</canEverTerraform>
+    <supportsRock>false</supportsRock>
+    <preventCraters>true</preventCraters>
+    <statBases>
+      <WorkToBuild>300</WorkToBuild>
+      <Flammability>0</Flammability>
+    </statBases>
+    <costList>
+      <WoodLog>4</WoodLog>
+    </costList>
   </TerrainDef>
 
 </Defs>

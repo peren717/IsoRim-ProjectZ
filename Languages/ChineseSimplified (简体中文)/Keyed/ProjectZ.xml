@@ -4,4 +4,12 @@
   <PZ_FloorsTip>包括地面在内的层数。只对新地图生效。</PZ_FloorsTip>
   <PZ_Debug>调试模式</PZ_Debug>
   <PZ_DebugTip>额外的日志和开发工具。</PZ_DebugTip>
+  <PZ_FloorLabel>{0} 楼</PZ_FloorLabel>
+  <PZ_FloorButtonTip>当前在 {0}，上面的楼层已隐藏。\n\n点击切换到下一层，或按 {1}、{2}。</PZ_FloorButtonTip>
+  <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
+  <PZ_NoFloorAbove>上面没有楼层</PZ_NoFloorAbove>
+  <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>
+  <PZ_LandingBlocked>上方的格子被挡住了</PZ_LandingBlocked>
+  <PZ_NeedsRoofBelow>下方需要屋顶</PZ_NeedsRoofBelow>
+  <PZ_OnlyUpperFloors>只能建在楼上</PZ_OnlyUpperFloors>
 </LanguageData>

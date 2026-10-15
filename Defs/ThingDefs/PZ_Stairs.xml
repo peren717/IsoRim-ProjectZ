@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Stairs (decision D4): a building on a roofed cell; pawns step from it to the cell right above it on the next floor
+       (Building_Stairs, StairGrid). Everyone can use them (D9). The landing above is made with the stairs.
+       Placeholder look until it gets its own model. -->
+  <ThingDef ParentName="BuildingBase">
+    <defName>PZ_Stairs</defName>
+    <label>stairs</label>
+    <description>Stairs up to the floor above. Needs a roof over this cell; the floor cell above is made with the stairs.</description>
+    <thingClass>ProjectZ.Building_Stairs</thingClass>
+    <graphicData>
+      <texPath>ProjectZ/Stairs</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>ProjectZ/Stairs</uiIconPath>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>Standable</passability>
+    <pathCost>20</pathCost>
+    <fillPercent>0.25</fillPercent>
+    <castEdgeShadows>false</castEdgeShadows>
+    <holdsRoof>false</holdsRoof>
+    <blockWind>false</blockWind>
+    <rotatable>false</rotatable>
+    <size>(1,1)</size>
+    <statBases>
+      <MaxHitPoints>200</MaxHitPoints>
+      <WorkToBuild>800</WorkToBuild>
+      <Flammability>1.0</Flammability>
+      <Beauty>0</Beauty>
+    </statBases>
+    <stuffCategories>
+      <li>Woody</li>
+      <li>Stony</li>
+      <li>Metallic</li>
+    </stuffCategories>
+    <costStuffCount>30</costStuffCount>
+    <designationCategory>Structure</designationCategory>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_Stairs</li>
+    </placeWorkers>
+    <building>
+      <isInert>true</isInert>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <uiOrder>2900</uiOrder>
+  </ThingDef>
+
+</Defs>

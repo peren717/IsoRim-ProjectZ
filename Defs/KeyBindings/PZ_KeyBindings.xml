@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <KeyBindingCategoryDef>
+    <defName>ProjectZ</defName>
+    <label>IsoRim ProjectZ</label>
+    <description>Keys for the floors.</description>
+  </KeyBindingCategoryDef>
+
+  <KeyBindingDef>
+    <defName>PZ_FloorUp</defName>
+    <label>floor up</label>
+    <category>ProjectZ</category>
+    <defaultKeyCodeA>Equals</defaultKeyCodeA>
+  </KeyBindingDef>
+
+  <KeyBindingDef>
+    <defName>PZ_FloorDown</defName>
+    <label>floor down</label>
+    <category>ProjectZ</category>
+    <defaultKeyCodeA>Minus</defaultKeyCodeA>
+  </KeyBindingDef>
+
+</Defs>

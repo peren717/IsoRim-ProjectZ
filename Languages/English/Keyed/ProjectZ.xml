@@ -4,4 +4,12 @@
   <PZ_FloorsTip>Storeys including the ground. Applies to new maps only.</PZ_FloorsTip>
   <PZ_Debug>Debug mode</PZ_Debug>
   <PZ_DebugTip>Extra log lines and dev tools.</PZ_DebugTip>
+  <PZ_FloorLabel>Floor {0}</PZ_FloorLabel>
+  <PZ_FloorButtonTip>Working on {0}. Floors above it are hidden.\n\nClick for the next floor, or use {1} and {2}.</PZ_FloorButtonTip>
+  <PZ_StairsLeadTo>Leads up to floor {0}</PZ_StairsLeadTo>
+  <PZ_NoFloorAbove>No floor above</PZ_NoFloorAbove>
+  <PZ_NeedsRoofHere>Needs a roof here</PZ_NeedsRoofHere>
+  <PZ_LandingBlocked>The cell above is blocked</PZ_LandingBlocked>
+  <PZ_NeedsRoofBelow>Needs a roof below</PZ_NeedsRoofBelow>
+  <PZ_OnlyUpperFloors>Only on upper floors</PZ_OnlyUpperFloors>
 </LanguageData>
