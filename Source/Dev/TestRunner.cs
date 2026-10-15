@@ -33,6 +33,8 @@ namespace ProjectZ.Dev
     //                                   tick it (-projectzsaveticks=N) until everything planned upstairs is built (TestSave)
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
     //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
+    //                                   staircolour: stairs of wood, steel and granite next to walls of the same stuff, day and
+    //                                   night, floor 1 and 2 views, roofs on and off (TestStairColour)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -361,6 +363,11 @@ namespace ProjectZ.Dev
                 StepDeadEnd(map);
                 return;
             }
+            if (stage.StartsWith("q_"))
+            {
+                StepStairColour(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -407,6 +414,10 @@ namespace ProjectZ.Dev
                     else if (mode == "deadend")
                     {
                         stage = "k_setup";
+                    }
+                    else if (mode == "staircolour")
+                    {
+                        stage = "q_setup";
                     }
                     else if (mode == "light")
                     {
