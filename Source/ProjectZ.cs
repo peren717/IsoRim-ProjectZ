@@ -1,4 +1,5 @@
 using RimWorld;
+using UnityEngine;
 using Verse;
 
 namespace ProjectZ
@@ -191,6 +192,29 @@ namespace ProjectZ
         public static bool HasFloor(IntVec3 c, Map map)
         {
             return c.IsValid && FloorOf(c, map) >= 1 && map.terrainGrid.TerrainAt(c) != PZDefOf.PZ_OpenAir;
+        }
+
+        // THE gameplay map (design "M1c-2 coordinates", section 2): a world position on any floor to its virtual 3D
+        // position: x and z over the ground, y its height above the ground in cells (floor k at k * Storey). Every
+        // geometry decision between floors (facing, AI radii, ground distance) goes through this.
+        public static Vector3 Virtual(Vector3 p, Map map)
+        {
+            AnnexMapComponent a = Annex(map);
+            if (a == null || p.z < a.groundZ)
+            {
+                return new Vector3(p.x, 0f, p.z);
+            }
+            int k = Mathf.FloorToInt(p.z) / a.stride;
+            return new Vector3(p.x, k * Combat.Heights.Storey, p.z - k * a.stride);
+        }
+
+        public static Vector3 Virtual(IntVec3 c, Map map) => Virtual(c.ToVector3Shifted(), map);
+
+        // Flat distance between two positions over the ground.
+        public static float VirtualFlatDistance(Vector3 a, Vector3 b, Map map)
+        {
+            Vector3 d = Virtual(b, map) - Virtual(a, map);
+            return Mathf.Sqrt(d.x * d.x + d.z * d.z);
         }
 
         // Ground rectangle (the whole map without an annex).

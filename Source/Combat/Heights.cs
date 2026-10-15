@@ -53,13 +53,7 @@ namespace ProjectZ.Combat
         // Horizontal distance between two cells, each over its ground cell.
         public static float GroundDistance(IntVec3 a, IntVec3 b, Map map)
         {
-            IntVec3 ga = ProjectZ.GroundCellOf(a, map);
-            IntVec3 gb = ProjectZ.GroundCellOf(b, map);
-            if (!ga.IsValid || !gb.IsValid)
-            {
-                return (a - b).LengthHorizontal;
-            }
-            return (ga - gb).LengthHorizontal;
+            return ProjectZ.VirtualFlatDistance(a.ToVector3Shifted(), b.ToVector3Shifted(), map);
         }
 
         // An upper-floor cell with a floor on it (any terrain but open air).
