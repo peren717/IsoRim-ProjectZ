@@ -176,10 +176,10 @@ namespace ProjectZ
             }
             if (!respawningAfterLoad && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
-                // Q2: the landing is made with the stairs (the placement checked the cell under it).
+                // Q2: the landing is made with the stairs (the placement checked the cell under it), of their stuff.
                 IntVec3 below = FloorRoof.Below(top, map);
                 landingRoofLaid = below.IsValid && !map.roofGrid.Roofed(below);
-                map.terrainGrid.SetTerrain(top, PZDefOf.PZ_UpperFloor);
+                map.terrainGrid.SetTerrain(top, SlabDefs.For(Stuff));
                 landingLaid = true;
             }
             if (!respawningAfterLoad)
@@ -229,7 +229,7 @@ namespace ProjectZ
             }
             landingLaid = false;
             TerrainDef covering = map.terrainGrid.TopTerrainAt(top);
-            if (covering != PZDefOf.PZ_UpperFloor)
+            if (!SlabDefs.Is(covering))
             {
                 GenLeaving.DoLeavingsFor(covering, top, map);
             }
@@ -454,7 +454,7 @@ namespace ProjectZ
             List<Thing> list = map.thingGrid.ThingsListAtFast(c);
             for (int i = 0; i < list.Count; i++)
             {
-                if ((list[i] is Blueprint || list[i] is Frame) && list[i].def.entityDefToBuild == PZDefOf.PZ_UpperFloor)
+                if ((list[i] is Blueprint || list[i] is Frame) && SlabDefs.Is(list[i].def.entityDefToBuild))
                 {
                     return true;
                 }

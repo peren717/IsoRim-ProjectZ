@@ -35,13 +35,19 @@
 
   <!-- An upper floor cell (M1b): built on open air where a roof could be held below (PlaceWorker_UpperFloor, decision D6 as
        changed by the removal design §7), taken up with the remove-foundation tool (Slabs.cs). Walkable; walls,
-       furniture and normal floors can go on it. Placeholder look: plain wood boards. -->
+       furniture and normal floors can go on it. A beam lattice (redesign §9; a floor laid on it hides the lattice), made of
+       any Woody, Metallic or Stony stuff: one slab def per stuff, like the game's stone tiles, in one build-menu dropdown.
+       This def is the wood slab (the defName older saves have). SlabDefs.cs makes the others from it at load, for every
+       such stuff incl. modded ones, and sets each one's label, colour, icon colour, cost (4 of the stuff) and work (300,
+       scaled by the stuff like a wall's). Not flammable, even wood (§9). -->
   <TerrainDef>
     <defName>PZ_UpperFloor</defName>
     <label>upper floor</label>
-    <description>Boards on beams for the storey above. View the floor above, then lay it where a roof could go: near walls, columns or stairs below.</description>
-    <texturePath>Terrain/Surfaces/WoodFloor</texturePath>
-    <color>(126,98,72)</color>
+    <description>A grid of beams for the storey above. View the floor above, then lay it where a roof could go: near walls, columns or stairs below.</description>
+    <texturePath>ProjectZ/Terrain/SlabLattice</texturePath>
+    <uiIconPath>ProjectZ/UpperFloor_MenuIcon</uiIconPath>
+    <cropIcon>false</cropIcon>
+    <designatorDropdown>PZ_UpperFloors</designatorDropdown>
     <edgeType>Hard</edgeType>
     <renderPrecedence>250</renderPrecedence>
     <layerable>false</layerable>
@@ -69,10 +75,16 @@
     <statBases>
       <WorkToBuild>300</WorkToBuild>
       <Flammability>0</Flammability>
+      <Beauty>-1</Beauty>
     </statBases>
     <costList>
       <WoodLog>4</WoodLog>
     </costList>
   </TerrainDef>
+
+  <DesignatorDropdownGroupDef>
+    <defName>PZ_UpperFloors</defName>
+    <label>upper floor</label>
+  </DesignatorDropdownGroupDef>
 
 </Defs>

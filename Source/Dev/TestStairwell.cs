@@ -171,7 +171,7 @@ namespace ProjectZ.Dev
                     int des = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null);
                     StairwellMarks marks = map.GetComponent<StairwellMarks>();
                     Result("stairs placed under a laid floor: blueprint, and the 3 floor cells over it designated for removal (marked as the site's)",
-                        ok.Accepted && wSite is Blueprint && des == 3 && well.All(c => marks.cells.Contains(c)) && well.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor),
+                        ok.Accepted && wSite is Blueprint && des == 3 && well.All(c => marks.cells.Contains(c)) && well.All(c => SlabDefs.Is(c.GetTerrain(map))),
                         $"site {wSite} at {wSite?.Position}, designations {des}/3, marks {marks.cells.Count}, exit {wExit}");
                     // W1b: a stairwell over the stairs exits (W's, a blueprint; the old stairs', built): turned west at (minX + 6, minZ + 4)
                     SetRot(wStairs, Rot4.West);
@@ -221,7 +221,7 @@ namespace ProjectZ.Dev
                     int left = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null);
                     StairwellMarks marks = map.GetComponent<StairwellMarks>();
                     Result("cancelled with the cancel designator: its designations go, the floor stays, W's stay",
-                        cancel != null && (cSite == null || !cSite.Spawned) && left == 0 && well.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor && !marks.cells.Contains(c)) && WellUp(map, wCenter, Rot4.North).All(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null),
+                        cancel != null && (cSite == null || !cSite.Spawned) && left == 0 && well.All(c => SlabDefs.Is(c.GetTerrain(map)) && !marks.cells.Contains(c)) && WellUp(map, wCenter, Rot4.North).All(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null),
                         $"cancel {cancel != null}, site spawned {cSite?.Spawned}, designations left {left}, marks {marks.cells.Count}");
                     ViewUp(map, wCenter, 5f);
                     Find.Selector.Select(wSite);

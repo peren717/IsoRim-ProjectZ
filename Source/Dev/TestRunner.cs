@@ -40,6 +40,9 @@ namespace ProjectZ.Dev
     //                                   bugs4: ground sun/moon shadows while floor 2 is viewed (-projectznoshadowfix: the
     //                                   old open-air shadow mask), floors laid on a stairs landing by colonists, stairs
     //                                   with a carpeted landing deconstructed (TestBugs4)
+    //                                   slabstuff: slabs of any stuff (defs, dropdown, colonists building wood, steel,
+    //                                   granite and marble slabs, a carpet on them, a stone slab taken up, steel stairs' landing,
+    //                                   a collapse) with shots; slabold: a save from before it (-projectzsave=<name>) (TestSlabStuff)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -129,7 +132,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff")
             {
                 PatchMouse(h);
             }
@@ -379,6 +382,11 @@ namespace ProjectZ.Dev
                 StepStairColour(map);
                 return;
             }
+            if (stage.StartsWith("p_"))
+            {
+                StepSlabStuff(map);
+                return;
+            }
             if (stage.StartsWith("y_"))
             {
                 StepBugs4(map);
@@ -388,7 +396,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "slabold" ? "p_oldload" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -438,6 +446,10 @@ namespace ProjectZ.Dev
                     else if (mode == "staircolour")
                     {
                         stage = "q_setup";
+                    }
+                    else if (mode == "slabstuff")
+                    {
+                        stage = "p_setup";
                     }
                     else if (mode == "bugs4")
                     {

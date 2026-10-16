@@ -332,12 +332,12 @@ namespace ProjectZ.Dev
                 }
                 case "u_bp_shot":
                     Capture("floorui_blueprints");
-                    TickUntil(60000, () => uFloorCells.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor), "u_built", 250);
+                    TickUntil(60000, () => uFloorCells.All(c => SlabDefs.Is(c.GetTerrain(map))), "u_built", 250);
                     return true;
                 case "u_built":
                 {
                     tickWatch = null;
-                    int built = uFloorCells.Count(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor);
+                    int built = uFloorCells.Count(c => SlabDefs.Is(c.GetTerrain(map)));
                     Result("colonists build the dragged upper floor", built == uFloorCells.Count, $"{built}/{uFloorCells.Count} built after {ticksTotal} ticks");
                     ViewUp(map, sHouseA.CenterCell, 9f);
                     Wait(30, "u_built_shot");

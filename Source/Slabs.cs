@@ -11,7 +11,7 @@ namespace ProjectZ
     // about slabs, and every way a slab goes away runs through this file:
     //   - Remove: the designator, its work giver and job (and god mode) via TerrainGrid.CanRemoveFoundationAt /
     //     RemoveFoundation; a stairwell's floor (StairwellFloor, same designation); the stairs' own landing when they go.
-    //     A floor laid on the slab (carpet) is a separate vanilla job first. Half the wood back, pawns and items moved off.
+    //     A floor laid on the slab (carpet) is a separate vanilla job first. Half the slab's stuff back, pawns and items moved off.
     //   - Blocker: what keeps a slab from being taken up (built things on it, stairs landing there, a slab above).
     //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer).
     //   - SlabCollapse: the roof under a slab collapses (vanilla support rules), the slab falls with everything on it.
@@ -25,7 +25,7 @@ namespace ProjectZ
                 return false;
             }
             TerrainGrid tg = map.terrainGrid;
-            return tg.TopTerrainAt(c) == PZDefOf.PZ_UpperFloor || tg.UnderTerrainAt(c) == PZDefOf.PZ_UpperFloor;
+            return SlabDefs.Is(tg.TopTerrainAt(c)) || SlabDefs.Is(tg.UnderTerrainAt(c));
         }
 
         // Why a slab can't be taken up now (null: it can). Built things on it (the vanilla foundation rule, any building,
@@ -817,7 +817,7 @@ namespace ProjectZ
     {
         public static bool Prefix(Thing t, ref bool __result)
         {
-            if (t == null || !t.Spawned || t.def.entityDefToBuild != PZDefOf.PZ_UpperFloor || ProjectZ.Annex(t.Map) == null)
+            if (t == null || !t.Spawned || !SlabDefs.Is(t.def.entityDefToBuild) || ProjectZ.Annex(t.Map) == null)
             {
                 return true;
             }

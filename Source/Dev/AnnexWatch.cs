@@ -55,7 +55,7 @@ namespace ProjectZ.Dev
             {
                 return true;
             }
-            return (t is Blueprint || t is Frame) && t.def.entityDefToBuild == PZDefOf.PZ_UpperFloor;
+            return (t is Blueprint || t is Frame) && SlabDefs.Is(t.def.entityDefToBuild);
         }
 
         public static void Reset()

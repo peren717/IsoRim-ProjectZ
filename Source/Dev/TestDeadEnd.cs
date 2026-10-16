@@ -182,7 +182,7 @@ namespace ProjectZ.Dev
             {
                 StairRegions.suppress--;
             }
-            Result("dead end: set up as in the save (2 links; the dead-end exit a floor island, the good exit on the room's floor)", StairGrid.For(map)?.Count == 2 && deadExit != null && deadExit.CellCount == 1 && !sameFloorLinked && dead.TopCell.GetTerrain(map) == PZDefOf.PZ_UpperFloor,
+            Result("dead end: set up as in the save (2 links; the dead-end exit a floor island, the good exit on the room's floor)", StairGrid.For(map)?.Count == 2 && deadExit != null && deadExit.CellCount == 1 && !sameFloorLinked && SlabDefs.Is(dead.TopCell.GetTerrain(map)),
                 $"dead-end stairs {kDeadPos} exit {dead.TopCell} ({dead.TopCell.GetTerrain(map)?.defName}, region cells {deadExit?.CellCount}, joined on its floor to the good exit {sameFloorLinked}); good stairs {kGoodPos} exit {good.TopCell}");
             // The bed upstairs, by the north wall; its wood outside the door.
             IntVec3 bedAt = IntVec3.Invalid;

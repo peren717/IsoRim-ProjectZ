@@ -110,11 +110,11 @@ namespace ProjectZ.Dev
                     // Upper floor: blueprints over the whole roofed house, and one over unroofed ground that must be refused.
                     int placed = 0, refused = 0;
                     List<string> why = new List<string>();
-                    Result("stairwell stays open, the exit is made with the stairs", StairShape.Footprint(st.Position, st.Rotation).Cells.All(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && top.GetTerrain(map) == PZDefOf.PZ_UpperFloor,
+                    Result("stairwell stays open, the exit is made with the stairs", StairShape.Footprint(st.Position, st.Rotation).Cells.All(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && SlabDefs.Is(top.GetTerrain(map)),
                         $"well roofs {string.Join(",", StairShape.Footprint(st.Position, st.Rotation).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}, exit {top} {top.GetTerrain(map).defName}");
                     foreach (IntVec3 u in Upstairs(map))
                     {
-                        if (u.GetTerrain(map) == PZDefOf.PZ_UpperFloor)
+                        if (SlabDefs.Is(u.GetTerrain(map)))
                         {
                             continue;
                         }
@@ -140,18 +140,18 @@ namespace ProjectZ.Dev
                     AcceptanceReport bad3 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, groundOnly, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
                     Result("stairs in the open accepted (they hold their own landing, removal design §7)", bad3.Accepted, $"{groundOnly}: {bad3.Reason}");
                     int target = house.Area - 3;
-                    TickUntil(90000, () => Upstairs(map).Count(u => u.GetTerrain(map) == PZDefOf.PZ_UpperFloor) >= target, "b_floor_check");
+                    TickUntil(90000, () => Upstairs(map).Count(u => SlabDefs.Is(u.GetTerrain(map))) >= target, "b_floor_check");
                     return true;
                 }
                 case "b_floor_check":
                 {
                     tickWatch = null;
-                    int built = Upstairs(map).Count(u => u.GetTerrain(map) == PZDefOf.PZ_UpperFloor);
+                    int built = Upstairs(map).Count(u => SlabDefs.Is(u.GetTerrain(map)));
                     if (built < house.Area - 3)
                     {
                         FloorDiagnosis(map);
                     }
-                    string missing = string.Join("; ", Upstairs(map).Where(u => u.GetTerrain(map) != PZDefOf.PZ_UpperFloor).Select(u => u + " [" + string.Join(",", u.GetThingList(map).Select(t => t.def.defName + (t is Frame f ? " " + f.WorkLeft.ToString("0") + " left, mats " + f.resourceContainer.TotalStackCount : ""))) + "] touchable " + Colonists(map).First().CanReach(u, PathEndMode.Touch, Danger.Deadly)));
+                    string missing = string.Join("; ", Upstairs(map).Where(u => !SlabDefs.Is(u.GetTerrain(map))).Select(u => u + " [" + string.Join(",", u.GetThingList(map).Select(t => t.def.defName + (t is Frame f ? " " + f.WorkLeft.ToString("0") + " left, mats " + f.resourceContainer.TotalStackCount : ""))) + "] touchable " + Colonists(map).First().CanReach(u, PathEndMode.Touch, Danger.Deadly)));
                     Result("upper floor built by colonists (upstairs work)", built == house.Area - 3, $"{built} of {house.Area - 3} cells after {ticksTotal - ticksLeft} ticks; colonist stair steps so far {climbsColonists}; construction botches {botches} (materials in botched frames {botchedMaterials}, about half lost); not built: {missing}");
                     Furnish(map);
                     return true;
@@ -359,7 +359,7 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
-            if (mode == "stairs" || mode == "floorui" || mode == "deadend" || mode == "slabremove")
+            if (mode == "stairs" || mode == "floorui" || mode == "deadend" || mode == "slabremove" || mode == "slabstuff")
             {
                 StairsHook(map);
                 return;
@@ -535,7 +535,7 @@ namespace ProjectZ.Dev
             List<IntVec3> up = Upstairs(map).ToList();
             IntVec3 landing = StairShape.Exit(stairCell, stairRot, map);
             // Bed in the upstairs south-west corner, owned by the first colonist.
-            IntVec3 bedCell = SafeSpots(map).Where(c => c != landing && (c + IntVec3.North).GetTerrain(map) == PZDefOf.PZ_UpperFloor && c + IntVec3.North != landing).OrderBy(c => c.x + c.z).First();
+            IntVec3 bedCell = SafeSpots(map).Where(c => c != landing && SlabDefs.Is((c + IntVec3.North).GetTerrain(map)) && c + IntVec3.North != landing).OrderBy(c => c.x + c.z).First();
             Building_Bed bed = (Building_Bed)ThingMaker.MakeThing(ThingDefOf.Bed, ThingDefOf.WoodLog);
             bed.SetFaction(Faction.OfPlayer);
             GenSpawn.Spawn(bed, bedCell, map, Rot4.North);

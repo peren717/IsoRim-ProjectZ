@@ -8,7 +8,7 @@ namespace ProjectZ
     public static class PZDefOf
     {
         public static TerrainDef PZ_OpenAir;
-        public static TerrainDef PZ_UpperFloor;
+        public static TerrainDef PZ_UpperFloor;   // the wood slab (SlabDefs: test slabs with SlabDefs.Is, not against this)
         public static ThingDef PZ_Stairs;
         public static RoofDef PZ_FloorRoof;
         public static RoofDef PZ_StairwellRoof;

@@ -19,7 +19,7 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            if (entDef == PZDefOf.PZ_UpperFloor)
+            if (SlabDefs.Is(entDef))
             {
                 if (ProjectZ.FloorOf(center, map) < 1)
                 {

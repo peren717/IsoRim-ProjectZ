@@ -16,7 +16,7 @@
       <graphicClass>Graphic_Single</graphicClass>
       <drawSize>(1,3)</drawSize>
     </graphicData>
-    <uiIconPath>ProjectZ/Stairs</uiIconPath>
+    <uiIconPath>ProjectZ/Stairs_MenuIcon</uiIconPath>
     <altitudeLayer>Building</altitudeLayer>
     <passability>Standable</passability>
     <pathCost>8</pathCost>
