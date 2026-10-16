@@ -53,7 +53,11 @@ namespace ProjectZ.Dev
     //                                   space: the orbital relay map of the gravship start (Odyssey): stairs, landing, upper
     //                                   floors, walking up, taking a slab up, vacuum under the floors; -projectzspacefloors
     //                                   applies IsoRim's proposed space-map fix at run time (TestSpace)
-    //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
+    //                                   power: power across floors (conduit risers over 3 floors, a battery that must
+    //                                   not join, hidden conduits under walls, hookups at the band edge, a colonist
+    //                                   deconstructing and rebuilding the riser's ground conduit, save/reload) with
+    //                                   power-overlay shots; run with -projectzfloors=3 (TestPower)
+    //   -projectzfloors=N  floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
@@ -142,7 +146,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power")
             {
                 PatchMouse(h);
             }
@@ -426,6 +430,11 @@ namespace ProjectZ.Dev
                 StepSpace(map);
                 return;
             }
+            if (stage.StartsWith("n_"))
+            {
+                StepPower(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -504,6 +513,10 @@ namespace ProjectZ.Dev
                     else if (mode == "space")
                     {
                         stage = "e_setup";
+                    }
+                    else if (mode == "power")
+                    {
+                        stage = "n_setup";
                     }
                     else if (mode == "light")
                     {
