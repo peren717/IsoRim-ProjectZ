@@ -37,6 +37,9 @@ namespace ProjectZ.Dev
     //                                   night, floor 1 and 2 views, roofs on and off (TestStairColour)
     //                                   slabremove: taking up upper floors (peel order, carpet, blockers), stairs in an
     //                                   open field, a slab collapsing; run with -projectzfloors=3 (TestSlabRemove)
+    //                                   bugs4: ground sun/moon shadows while floor 2 is viewed (-projectznoshadowfix: the
+    //                                   old open-air shadow mask), floors laid on a stairs landing by colonists, stairs
+    //                                   with a carpeted landing deconstructed (TestBugs4)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -94,6 +97,7 @@ namespace ProjectZ.Dev
             }
             FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
+            TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
             if (mode == "plain")
             {
@@ -125,7 +129,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4")
             {
                 PatchMouse(h);
             }
@@ -375,6 +379,11 @@ namespace ProjectZ.Dev
                 StepStairColour(map);
                 return;
             }
+            if (stage.StartsWith("y_"))
+            {
+                StepBugs4(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -429,6 +438,10 @@ namespace ProjectZ.Dev
                     else if (mode == "staircolour")
                     {
                         stage = "q_setup";
+                    }
+                    else if (mode == "bugs4")
+                    {
+                        stage = "y_setup";
                     }
                     else if (mode == "light")
                     {

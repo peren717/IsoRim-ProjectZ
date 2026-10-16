@@ -84,7 +84,11 @@ namespace ProjectZ.Patches
         }
     }
 
-    // T1
+    // T1. Also, on maps with floors: the target's own cells. The game reaches a touch target through the regions of the
+    // cells around it only (standing on it counts as touching, IsAdjacentOrInsideAndAllowedToTouch, but is never needed
+    // as a goal: a cell one can stand on always has a walkable neighbour). Up here a cell can be reached by a stair step
+    // alone, a stairs landing in the open with open air all round: nothing on it (a floor blueprint or frame, an item,
+    // filth) could be reached to touch. Its own region, entered over the stair link, is a goal too.
     [HarmonyPatch(typeof(TouchPathEndModeUtility), nameof(TouchPathEndModeUtility.AddAllowedAdjacentRegions))]
     public static class AddAllowedAdjacentRegions_Patch
     {
@@ -92,6 +96,19 @@ namespace ProjectZ.Patches
 
         public static void Postfix(LocalTargetInfo dest, TraverseParms traverseParams, Map map, List<Region> regions)
         {
+            if (ProjectZ.Annex(map) == null || !dest.IsValid)
+            {
+                return;
+            }
+            CellRect own = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+            foreach (IntVec3 c in own)
+            {
+                Region r = c.InBounds(map) ? c.GetRegion(map) : null;
+                if (r != null && r.Allows(traverseParams, isDestination: true) && !regions.Contains(r))
+                {
+                    regions.Add(r);
+                }
+            }
             if (!dest.HasThing || !StairTouch.Is(dest.Thing))
             {
                 return;
@@ -205,12 +222,26 @@ namespace ProjectZ.Patches
         }
     }
 
-    // T4: a pawn upstairs works from the rim; one on the ground that finds no spot down there tries the rim too.
+    // T4: a pawn upstairs works from the rim; one on the ground that finds no spot down there tries the rim too. And, as in
+    // T1, with no spot round a target on a map with floors, the target's own cell (a landing reached by its stair step
+    // alone): the game's builders, haulers and cleaners stand on it.
     [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.TryFindGoodAdjacentSpotToTouch))]
     public static class TryFindGoodAdjacentSpotToTouch_Patch
     {
         public static void Postfix(Pawn toucher, Thing touchee, ref IntVec3 result, ref bool __result)
         {
+            if (!__result && toucher != null && touchee != null && touchee.Spawned && ProjectZ.Annex(touchee.Map) != null && !StairTouch.Is(touchee))
+            {
+                foreach (IntVec3 own in touchee.OccupiedRect())
+                {
+                    if (own.WalkableBy(touchee.Map, toucher) && toucher.CanReach(own, PathEndMode.OnCell, Danger.Deadly))
+                    {
+                        result = own;
+                        __result = true;
+                        return;
+                    }
+                }
+            }
             if (toucher == null || !StairTouch.Is(touchee))
             {
                 return;

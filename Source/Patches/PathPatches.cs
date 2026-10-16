@@ -45,6 +45,70 @@ namespace ProjectZ.Patches
             return fs >= 0 && fd >= 0 && fs != fd;
         }
 
+        private static readonly int[] SameFloorDirs = { -1, 1 };
+        private static readonly HashSet<Region> goalRegions = new HashSet<Region>();
+
+        // THE test for the router: a path to another floor, or to a place on the same upper floor that can't be walked
+        // to on that floor alone (a stairs landing in the open, the floor of another building): both only over stairs.
+        public static bool Needed(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp)
+        {
+            return CrossFloor(map, start, dest.Cell) || SplitFloor(map, start, dest, peMode, tp);
+        }
+
+        // Same upper floor, and no walk on it (regions without the stair links) from start to the destination's region
+        // (or, touching, a region next to it). Upper floors are small: a plain region search.
+        public static bool SplitFloor(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (a == null || busy || !start.IsValid || !dest.IsValid || start.z < a.groundZ || !start.InBounds(map) || !dest.Cell.InBounds(map))
+            {
+                return false;
+            }
+            int f = ProjectZ.FloorOf(start, map);
+            if (f < 1 || f != ProjectZ.FloorOf(dest.Cell, map))
+            {
+                return false;
+            }
+            Region from = map.regionGrid.GetValidRegionAt_NoRebuild(start);
+            if (from == null)
+            {
+                return false;
+            }
+            goalRegions.Clear();
+            CellRect rect = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+            if (peMode != PathEndMode.OnCell)
+            {
+                rect = rect.ExpandedBy(1);
+            }
+            foreach (IntVec3 c in rect)
+            {
+                Region r = c.InBounds(map) ? map.regionGrid.GetValidRegionAt_NoRebuild(c) : null;
+                if (r != null)
+                {
+                    goalRegions.Add(r);
+                }
+            }
+            if (goalRegions.Count == 0 || goalRegions.Contains(from))
+            {
+                return false;
+            }
+            bool found = false;
+            StairRegions.suppress++;
+            try
+            {
+                RegionTraverser.BreadthFirstTraverse(from, (Region _, Region r) => r.Allows(tp, isDestination: false) || goalRegions.Contains(r), delegate(Region r)
+                {
+                    found = goalRegions.Contains(r);
+                    return found;
+                });
+            }
+            finally
+            {
+                StairRegions.suppress--;
+            }
+            return !found;
+        }
+
         // The joined path, or null when there is none. tuning/traverseParms as the caller's request.
         public static PawnPath Find(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning)
         {
@@ -66,7 +130,7 @@ namespace ProjectZ.Patches
                     }
                 }
                 int cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: false, depth: 0);
-                if (cost < 0 && ProjectZ.FloorOf(start, map) > ProjectZ.FloorOf(dest.Cell, map))
+                if (cost < 0 && ProjectZ.FloorOf(start, map) >= ProjectZ.FloorOf(dest.Cell, map))
                 {
                     // Pass 2 (J4): no stair route; going down, jumps are allowed.
                     DisposeAll(legs);
@@ -109,39 +173,46 @@ namespace ProjectZ.Patches
             if (f == fd)
             {
                 PawnPath last = Leg(map, from, dest, peMode, tp, tuning);
-                if (last == null)
+                if (last != null)
                 {
-                    ProjectZ.DebugLog($"route (jumps {jumps}): no last leg {from} -> {dest.Cell}");
+                    legs.Add(last);
+                    return (int)last.TotalCost;
+                }
+                ProjectZ.DebugLog($"route (jumps {jumps}): no last leg {from} -> {dest.Cell}");
+                if (f < 0 || depth >= a.floors)
+                {
                     return -1;
                 }
-                legs.Add(last);
-                return (int)last.TotalCost;
+                // The same floor but not joined on it (SplitFloor: a landing in the open, another building's floor):
+                // down and back up (or up and down) by other stairs.
             }
             if (f < 0 || depth >= a.floors)
             {
                 return -1;
             }
-            int dir = fd > f ? 1 : -1;
-            foreach (StairLink l in StairCandidates(map, from, dir, dest, tp))
+            foreach (int dir in f == fd ? SameFloorDirs : new[] { fd > f ? 1 : -1 })
             {
-                int mark = legs.Count;
-                int cost = StairStep(map, l, from, dir, dest, tp, tuning, legs, out IntVec3 next);
-                if (cost >= 0)
+                foreach (StairLink l in StairCandidates(map, from, dir, dest, tp))
                 {
-                    int rest = Route(map, next, dest, peMode, tp, tuning, legs, jumps, depth + 1);
-                    if (rest >= 0)
+                    int mark = legs.Count;
+                    int cost = StairStep(map, l, from, dir, dest, tp, tuning, legs, out IntVec3 next);
+                    if (cost >= 0)
                     {
-                        return cost + rest;
+                        int rest = Route(map, next, dest, peMode, tp, tuning, legs, jumps, depth + 1);
+                        if (rest >= 0)
+                        {
+                            return cost + rest;
+                        }
+                        ProjectZ.DebugLog($"route (jumps {jumps}): the stairs at {l.stairs.Position} lead nowhere toward {dest.Cell}; trying the next");
                     }
-                    ProjectZ.DebugLog($"route (jumps {jumps}): the stairs at {l.stairs.Position} lead nowhere toward {dest.Cell}; trying the next");
-                }
-                DisposeFrom(legs, mark);
-                if (cost >= 0 && Dev.TestRunner.GreedyRoute)
-                {
-                    return -1;   // test only: the old router kept the first stairs it could get onto
+                    DisposeFrom(legs, mark);
+                    if (cost >= 0 && Dev.TestRunner.GreedyRoute)
+                    {
+                        return -1;   // test only: the old router kept the first stairs it could get onto
+                    }
                 }
             }
-            if (jumps && dir < 0)
+            if (jumps && fd <= f)
             {
                 foreach (Jump j in JumpCandidates(map, from, dest, peMode, tp))
                 {
@@ -161,7 +232,7 @@ namespace ProjectZ.Patches
                     DisposeFrom(legs, mark);
                 }
             }
-            ProjectZ.DebugLog($"route (jumps {jumps}): no step from {from} (floor {f}, dir {dir}) toward {dest.Cell}");
+            ProjectZ.DebugLog($"route (jumps {jumps}): no step from {from} (floor {f} -> {fd}) toward {dest.Cell}");
             return -1;
         }
 
@@ -394,12 +465,12 @@ namespace ProjectZ.Patches
             Pawn pawn = PawnRef(__instance);
             Map map = pawn?.Map;
             LocalTargetInfo dest = __instance.Destination;
-            if (map == null || !dest.IsValid || !StairRouter.CrossFloor(map, __instance.nextCell, dest.Cell))
+            PathEndMode mode = ModeRef(__instance);
+            if (map == null || !dest.IsValid || !StairRouter.Needed(map, __instance.nextCell, dest, mode, __result.TraverseParms))
             {
                 return;
             }
             PathRequest pushed = __result;
-            PathEndMode mode = ModeRef(__instance);
             PathRequest answered = map.pathFinder.CreateRequest(__instance.nextCell, dest, null, pawn, PathFinderCostTuning.For(pawn), mode);
             pushed.Dispose();
             PawnPath path = StairRouter.Find(map, __instance.nextCell, dest, mode, answered.TraverseParms, answered.Tuning);
@@ -432,7 +503,7 @@ namespace ProjectZ.Patches
                 return true;
             }
             Map map = MapRef(__instance);
-            if (map == null || !StairRouter.CrossFloor(map, start, target.Cell))
+            if (map == null || !StairRouter.Needed(map, start, target, peMode, traverseParms))
             {
                 return true;
             }
