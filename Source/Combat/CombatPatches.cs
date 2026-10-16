@@ -103,7 +103,8 @@ namespace ProjectZ.Combat
         }
     }
 
-    // Range between floors: measured over the ground (no range bonus for height).
+    // Range between floors: the 3D rule with the high-ground bonus (Range3D). Behind CanHitTarget/CanHitTargetFrom,
+    // TryFindShootLineFromTo, abilities (Verb_CastAbility) and drafted attack orders.
     [HarmonyPatch(typeof(Verb), nameof(Verb.OutOfRange))]
     public static class Verb_OutOfRange_Patch
     {
@@ -116,11 +117,8 @@ namespace ProjectZ.Combat
             {
                 return true;
             }
-            IntVec3 r = Heights.OnFloorOf(root, targ.Cell, map);
             float min = __instance.verbProps.EffectiveMinRange(targ, __instance.caster);
-            float d2 = occupiedRect.ClosestDistSquaredTo(r);
-            float range = __instance.EffectiveRange;
-            __result = d2 > range * range || d2 < min * min;
+            __result = Range3D.OutOfRange(root, occupiedRect, targ.Cell, __instance.EffectiveRange, min, map);
             return false;
         }
     }
@@ -271,6 +269,8 @@ namespace ProjectZ.Combat
             candidates.AddRange(map.attackTargetsCache.GetPotentialTargetsFor(searcher));
             IAttackTarget best = null;
             float bestScore = float.MinValue;
+            IAttackTarget bestNoHit = null;
+            float bestNoHitScore = float.MinValue;
             for (int i = 0; i < candidates.Count; i++)
             {
                 IAttackTarget t = candidates[i];
@@ -279,8 +279,10 @@ namespace ProjectZ.Combat
                 {
                     continue;
                 }
-                float d = Heights.GroundDistance(s.Position, th.Position, map);
-                if (d > maxDist || d < minDist)
+                // Range filters by the range rule (maxDist is the weapon's range or a search radius); the score by the
+                // real 3D distance.
+                float d = Range3D.Distance(s.Position, th.Position, map);
+                if (Range3D.RangeDistance(s.Position, th.Position, map) > maxDist || d < minDist)
                 {
                     continue;
                 }
@@ -298,6 +300,20 @@ namespace ProjectZ.Combat
                 }
                 if (!verb.CanHitTargetFrom(s.Position, th))
                 {
+                    // The game's NeedReachableIfCantHitFromMyPos between floors: a target this pawn sees but can't hit
+                    // from here counts when it can walk under it (to the target's column on its own floor), where the
+                    // cast position search (CastSpots) finds it a spot within range. Only when the game found nothing.
+                    if (__result == null && sp != null && (flags & TargetScanFlags.NeedReachableIfCantHitFromMyPos) != 0
+                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSee(s.Position, th.Position, map))
+                        && CanWalkUnder(sp, th, ks, map))
+                    {
+                        float sn = Score(t, searcher, verb, s, th, d, map);
+                        if (sn > bestNoHitScore)
+                        {
+                            bestNoHitScore = sn;
+                            bestNoHit = t;
+                        }
+                    }
                     continue;
                 }
                 float sc = Score(t, searcher, verb, s, th, d, map);
@@ -310,6 +326,10 @@ namespace ProjectZ.Combat
             candidates.Clear();
             if (best == null)
             {
+                if (bestNoHit != null && __result == null)
+                {
+                    __result = bestNoHit;
+                }
                 return;
             }
             Thing r = __result?.Thing;
@@ -319,6 +339,13 @@ namespace ProjectZ.Combat
                 return;   // the game's pick on this floor scores at least as well
             }
             __result = best;
+        }
+
+        // The pawn can walk to (touch) the target's column on its own floor k.
+        private static bool CanWalkUnder(Pawn p, Thing th, int k, Map map)
+        {
+            IntVec3 under = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(th.Position, map), k, map);
+            return under.IsValid && under.InBounds(map) && map.reachability.CanReach(p.Position, under, PathEndMode.Touch, TraverseParms.For(p, Danger.Deadly));
         }
 
         // The game's target filters (AttackTargetFinder.BestAttackTarget's validator) that don't depend on distance.
@@ -392,8 +419,9 @@ namespace ProjectZ.Combat
         }
     }
 
-    // A shooter that can already hit its target on another floor from where it stands stays there (the cast position
-    // search measures from cells around the target, on the target's floor).
+    // A shooter that can already hit its target on another floor from where it stands stays there. Otherwise a spot on its
+    // own floor within the range rule (CastSpots.OwnFloor); only then the game's search, which looks round the target's
+    // cell, on the target's floor.
     [HarmonyPatch(typeof(CastPositionFinder), nameof(CastPositionFinder.TryFindCastPosition))]
     public static class CastPositionFinder_Patch
     {
@@ -415,6 +443,12 @@ namespace ProjectZ.Combat
                 __result = true;
                 return false;
             }
+            if (CastSpots.OwnFloor(newReq, out dest))
+            {
+                __result = true;
+                return false;
+            }
+            dest = IntVec3.Invalid;
             return true;
         }
     }

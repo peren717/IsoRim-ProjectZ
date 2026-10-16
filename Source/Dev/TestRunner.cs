@@ -57,6 +57,9 @@ namespace ProjectZ.Dev
     //                                   not join, hidden conduits under walls, hookups at the band edge, a colonist
     //                                   deconstructing and rebuilding the riser's ground conduit, save/reload) with
     //                                   power-overlay shots; run with -projectzfloors=3 (TestPower)
+    //                                   range: weapon range across floors (3D distance + 1 per floor down): shotguns vs
+    //                                   floors 13, 2 and 5, a sniper on floor 5, a turret on floor 2, a raider walking in,
+    //                                   a mortar, and the range preview shots; run with -projectzfloors=13 (TestRange)
     //   -projectzfloors=N  floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -435,6 +438,11 @@ namespace ProjectZ.Dev
                 StepPower(map);
                 return;
             }
+            if (stage.StartsWith("g_"))
+            {
+                StepRange(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -517,6 +525,10 @@ namespace ProjectZ.Dev
                     else if (mode == "power")
                     {
                         stage = "n_setup";
+                    }
+                    else if (mode == "range")
+                    {
+                        stage = "g_setup";
                     }
                     else if (mode == "light")
                     {

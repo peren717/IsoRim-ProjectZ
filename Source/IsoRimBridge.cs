@@ -124,6 +124,56 @@ namespace ProjectZ
         {
             p = IsoRim.View3D.ScreenToHeight(px, height);
         }
+
+        // ---- the range preview's shell (Combat.RangeShell)
+
+        // The 3D view draws now.
+        public static bool View3DOn => Present && View3DOnInner();
+
+        private static bool View3DOnInner() => IsoRim.View3D.Ready;
+
+        // How the 3D view squashes heights (drawn y = true height / Squash).
+        public static float Squash => Present ? SquashInner() : 1f;
+
+        private static float SquashInner() => IsoRim.View3D.Squash;
+
+        // Unit direction toward the camera in true space.
+        public static Vector3 TowardCamera() => Present ? TowardCameraInner() : Vector3.up;
+
+        private static Vector3 TowardCameraInner()
+        {
+            return -(Quaternion.Euler(IsoRim.View3D.Pitch, IsoRim.View3D.Yaw, 0f) * Vector3.forward);
+        }
+
+        // How high a shooter fires from over its feet, in cells (IsoRim's muzzle: where its bullets start).
+        public static float MuzzleHeight(Thing t) => Present ? MuzzleHeightInner(t) : 0.5f;
+
+        private static float MuzzleHeightInner(Thing t) => IsoRim.Projectiles.MuzzleHeight(t);
+
+        // (made on first use, on the main thread; the holder keeps the game's static-asset check quiet)
+        [StaticConstructorOnStartup]
+        private static class ShellHolder
+        {
+            public static Material mat;
+        }
+
+        private static bool shellTried;
+
+        // See-through, vertex-coloured, depth-tested without writing depth, both sides, unlit; queued after the game's
+        // light overlay (3100) so night never darkens it. Null without IsoRim.
+        public static Material ShellMaterial()
+        {
+            if (!shellTried)
+            {
+                shellTried = true;
+                ShellHolder.mat = Present ? ShellMaterialInner() : null;
+            }
+            return ShellHolder.mat;
+        }
+
+        public const int ShellQueue = 3110;
+
+        private static Material ShellMaterialInner() => IsoRim.R3DMaterials.Make(IsoRim.R3DMaterials.BlendDef, "PZ_RangeShell", ShellQueue);
     }
 
     public class FloorLayout : IsoRim.IFloorLayout
