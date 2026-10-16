@@ -23,7 +23,8 @@ namespace ProjectZ.Patches
     //      gone, so every stacked cell holding a conduit is a candidate; TryCreateNetAt does nothing where a net exists.
     // Each call is swapped for the matching PowerRisers.Adjacent overload by one transpiler. Nets aren't saved: after a
     // load every transmitter re-registers and the same code joins the floors again. PowerNetGrid, the power overlay
-    // and the conduit link graphics work per cell and need nothing.
+    // and the conduit link graphics work per cell and need nothing; the vertical link is drawn by RiserView (same rule,
+    // PowerRisers.Riser).
     //
     // Second, separate rule (ConnectRange): a building's wireless hookup to a transmitter within 6 cells stays on its
     // own floor. Vanilla searches a rect clipped to the map; floors are bands of the same map with only a few void rows
@@ -52,16 +53,25 @@ namespace ProjectZ.Patches
             return null;
         }
 
+        // The one rule for a vertical link (also what RiserView draws): the stacked cell directly above (up) or below c,
+        // if it holds a conduit; IntVec3.Invalid otherwise. A link needs a conduit at both ends: Adjacent only asks from a
+        // conduit, and RiserView only from a conduit cell.
+        public static IntVec3 Riser(IntVec3 c, Map map, bool up)
+        {
+            IntVec3 s = up ? StairShape.Above(c, map) : FloorRoof.Below(c, map);
+            return ConduitAt(s, map) != null ? s : IntVec3.Invalid;
+        }
+
         // The stacked cells above and below c that hold a conduit.
         public static IEnumerable<IntVec3> Risers(IntVec3 c, Map map)
         {
-            IntVec3 up = StairShape.Above(c, map);
-            if (ConduitAt(up, map) != null)
+            IntVec3 up = Riser(c, map, true);
+            if (up.IsValid)
             {
                 yield return up;
             }
-            IntVec3 down = FloorRoof.Below(c, map);
-            if (ConduitAt(down, map) != null)
+            IntVec3 down = Riser(c, map, false);
+            if (down.IsValid)
             {
                 yield return down;
             }

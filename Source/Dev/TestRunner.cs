@@ -149,7 +149,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser")
             {
                 PatchMouse(h);
             }
@@ -438,6 +438,11 @@ namespace ProjectZ.Dev
                 StepPower(map);
                 return;
             }
+            if (stage.StartsWith("j_"))
+            {
+                StepRiser(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -525,6 +530,10 @@ namespace ProjectZ.Dev
                     else if (mode == "power")
                     {
                         stage = "n_setup";
+                    }
+                    else if (mode == "riser")
+                    {
+                        stage = "j_setup";
                     }
                     else if (mode == "range")
                     {

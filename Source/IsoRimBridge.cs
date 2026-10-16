@@ -174,6 +174,25 @@ namespace ProjectZ
         public const int ShellQueue = 3110;
 
         private static Material ShellMaterialInner() => IsoRim.R3DMaterials.Make(IsoRim.R3DMaterials.BlendDef, "PZ_RangeShell", ShellQueue);
+
+        // ---- solid pieces (RiserView): IsoRim's lit vertex-coloured model material, drawn with its light mark as
+        // IsoRim draws its own models (sun shading per face, night and lamp light per cell). Does nothing without IsoRim.
+        public static void DrawLitSolid(Mesh mesh, Matrix4x4 matrix)
+        {
+            if (Present)
+            {
+                DrawLitSolidInner(mesh, matrix);
+            }
+        }
+
+        private static void DrawLitSolidInner(Mesh mesh, Matrix4x4 matrix)
+        {
+            Material mat = IsoRim.R3DMaterials.LitModel;
+            if (mat != null)
+            {
+                IsoRim.IsoGlow.DrawLit(mesh, matrix, mat, 0);
+            }
+        }
     }
 
     public class FloorLayout : IsoRim.IFloorLayout
