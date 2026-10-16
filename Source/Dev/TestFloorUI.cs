@@ -17,10 +17,10 @@ namespace ProjectZ.Dev
     // colonists build the blueprints with real ticks.
     //   1. no designator: the pointer over open air on floor 2 falls through to the ground (the move-order feature);
     //   2. every designator in the architect menu keeps the pointer on the viewed floor;
-    //   3. refusals: an upper floor while viewing the ground, over a cell with no roof below, over the stairwell; a wall
+    //   3. refusals: an upper floor while viewing the ground, too far from a wall below, over the stairwell; a wall
     //      on open air;
-    //   4. dragging the upper floor over house A's open part on floor 2: blueprints on floor 2 (none past the roof),
-    //      colonists build them;
+    //   4. dragging the upper floor over house A's open part on floor 2: blueprints on floor 2 (past the roof only next to
+    //      the wall), colonists build them;
     //   5. a wall line and a bed on the new floor, a stockpile and the home area on floor 2;
     //   6. no designator again: a drafted move order on open air goes to the ground;
     //   7. screenshots of the floor button, the inspect pane, the architect menu and the mod settings (language check).
@@ -271,7 +271,7 @@ namespace ProjectZ.Dev
                 {
                     IntVec3 outside = new IntVec3(sHouseA.minX - 3, 0, sHouseA.minZ + 3);
                     AcceptanceReport o = RefusalAt(uFloor, ScreenOf(outside, 1), out IntVec3 oc);
-                    Result("upper floor with no roof below: 'the room below needs a roof'", !o.Accepted && o.Reason == "PZ_NeedsRoofBelow".Translate() && oc == OnFloor(outside, 1, map), $"{oc}: '{o.Reason}'");
+                    Result("upper floor far from any wall below: 'too far from a wall or column below'", !o.Accepted && o.Reason == "PZ_NoSupportBelow".Translate() && oc == OnFloor(outside, 1, map), $"{oc}: '{o.Reason}'");
                     AcceptanceReport s = RefusalAt(uFloor, ScreenOf(stairPos, 1), out IntVec3 sc);
                     Result("upper floor over the stairs: 'keep the space over the stairs open'", !s.Accepted && s.Reason == "PZ_StairwellBelow".Translate() && sc == OnFloor(stairPos, 1, map), $"{sc}: '{s.Reason}'");
                     AcceptanceReport e = RefusalAt(uFloor, ScreenOf(new IntVec3(sHouseA.maxX - 2, 0, sHouseA.minZ + 1), 1), out IntVec3 ec);
@@ -323,9 +323,10 @@ namespace ProjectZ.Dev
                     List<Thing> placed = PlannedOn(map, uFloorCells, PZDefOf.PZ_UpperFloor);
                     List<Thing> wrong = PlannedOn(map, past, PZDefOf.PZ_UpperFloor);
                     List<Thing> ground = PlannedOn(map, new CellRect(sHouseA.minX - 1, sHouseA.minZ, sHouseA.Width + 1, sHouseA.Height).Cells, PZDefOf.PZ_UpperFloor);
-                    Result("dragged upper floor: blueprints on every open cell over the room on floor 2, none past the roof, none on the ground",
-                        placed.Count == uFloorCells.Count && wrong.Count == 0 && ground.Count == 0,
-                        $"{placed.Count}/{uFloorCells.Count} placed, {wrong.Count} past the roof, {ground.Count} on the ground; drag had {drag.Count} cells");
+                    // (removal design §7: past the roof only where a roof could be held, i.e. right next to the house wall)
+                    Result("dragged upper floor: blueprints on every open cell over the room on floor 2, past the roof only where the wall holds it, none on the ground",
+                        placed.Count == uFloorCells.Count && wrong.All(t => SlabSupport.Supported(FloorRoof.Below(t.Position, map), map)) && ground.Count == 0,
+                        $"{placed.Count}/{uFloorCells.Count} placed, {wrong.Count} past the roof (all held by the wall: {wrong.All(t => SlabSupport.Supported(FloorRoof.Below(t.Position, map), map))}), {ground.Count} on the ground; drag had {drag.Count} cells");
                     Wait(20, "u_bp_shot");
                     return true;
                 }

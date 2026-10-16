@@ -45,7 +45,7 @@ namespace ProjectZ
             return null;
         }
 
-        // A floor (built, or a blueprint or frame of one) right over a cell.
+        // A floor (built, or a blueprint or frame of one, or the landing of stairs still to be built) right over a cell.
         public static bool FloorOver(IntVec3 c, Map map)
         {
             if (FloorRoof.FloorAbove(c, map))
@@ -53,7 +53,7 @@ namespace ProjectZ
                 return true;
             }
             IntVec3 up = StairShape.Above(c, map);
-            return up.IsValid && up.InBounds(map) && PlaceWorker_Stairs.FloorPlanned(up, map);
+            return up.IsValid && up.InBounds(map) && (PlaceWorker_Stairs.FloorPlanned(up, map) || StairwellFloor.IsStairsExit(up, map));
         }
     }
 

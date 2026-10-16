@@ -10,16 +10,21 @@
   <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>
   <PZ_LandingBlocked>楼梯顶端出口那格被挡住了</PZ_LandingBlocked>
-  <PZ_NeedsRoofBelow>下面的房间需要屋顶</PZ_NeedsRoofBelow>
   <PZ_ViewFloorAbove>先切换到上一层（{0}）</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>这里已有楼板</PZ_AlreadyFloor>
   <PZ_NeedsFloorFirst>这里要先铺楼板</PZ_NeedsFloorFirst>
   <PZ_HeightAccuracy>从高层射击的命中加成：+{0}</PZ_HeightAccuracy>
   <PZ_HeightAccuracyTip>向低层射击时，加到射手命中上。</PZ_HeightAccuracyTip>
   <PZ_WellNotOpen>楼梯正上方的 3 格不能有建筑或楼梯出口</PZ_WellNotOpen>
-  <PZ_ExitNeedsSupport>楼梯顶端出口那格要有楼板，或者它下面有屋顶</PZ_ExitNeedsSupport>
+  <PZ_NoExitCell>楼梯顶端前方没有出口的位置</PZ_NoExitCell>
+  <PZ_NoSupportBelow>离下层的墙或柱子太远</PZ_NoSupportBelow>
   <PZ_StairwellBelow>楼梯上方要留空</PZ_StairwellBelow>
   <PZ_TallBelow>下面的{0}太高</PZ_TallBelow>
   <PZ_TooTallUnderFloor>太高了：上面有楼板</PZ_TooTallUnderFloor>
   <PZ_WaitingFloorAbove>等待拆除上方的楼板</PZ_WaitingFloorAbove>
+  <PZ_RemoveUpperFloor>拆除楼板</PZ_RemoveUpperFloor>
+  <PZ_RemoveUpperFloorDesc>拆掉楼板。先拆离楼梯最远的格子。</PZ_RemoveUpperFloorDesc>
+  <PZ_StairsLandHere>这里是楼梯的落脚处</PZ_StairsLandHere>
+  <PZ_FloorAboveFirst>先拆上一层的楼板</PZ_FloorAboveFirst>
+  <PZ_FartherFirst>先拆离楼梯更远的格子</PZ_FartherFirst>
 </LanguageData>

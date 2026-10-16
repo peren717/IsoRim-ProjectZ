@@ -138,7 +138,7 @@ namespace ProjectZ.Dev
                     AcceptanceReport bad2 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, groundOnly, Rot4.North, map);
                     Result("upper floor refused on the ground", !bad2.Accepted, $"{groundOnly}: {bad2.Reason}");
                     AcceptanceReport bad3 = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, groundOnly, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
-                    Result("stairs refused without support for the exit", !bad3.Accepted, $"{groundOnly}: {bad3.Reason}");
+                    Result("stairs in the open accepted (they hold their own landing, removal design §7)", bad3.Accepted, $"{groundOnly}: {bad3.Reason}");
                     int target = house.Area - 3;
                     TickUntil(90000, () => Upstairs(map).Count(u => u.GetTerrain(map) == PZDefOf.PZ_UpperFloor) >= target, "b_floor_check");
                     return true;
@@ -359,7 +359,7 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
-            if (mode == "stairs" || mode == "floorui" || mode == "deadend")
+            if (mode == "stairs" || mode == "floorui" || mode == "deadend" || mode == "slabremove")
             {
                 StairsHook(map);
                 return;
@@ -658,5 +658,6 @@ namespace ProjectZ.Dev
         public static int landings;
         public static int jumpRoutes;
         public static int rimRoutes;
+        public static int slabCollapses;
     }
 }

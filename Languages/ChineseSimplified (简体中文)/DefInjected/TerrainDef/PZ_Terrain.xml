@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
   <PZ_OpenAir.label>空中</PZ_OpenAir.label>
-  <PZ_OpenAir.description>楼上的空处。可以在有屋顶的房间上方铺楼板。</PZ_OpenAir.description>
+  <PZ_OpenAir.description>楼上的空处。可以在下层的墙或柱子附近铺楼板。</PZ_OpenAir.description>
   <PZ_UpperFloor.label>楼板</PZ_UpperFloor.label>
-  <PZ_UpperFloor.description>架在梁上的木板，作为上一层的地面。切换到上一层，铺在有屋顶的房间上方。</PZ_UpperFloor.description>
+  <PZ_UpperFloor.description>架在梁上的木板，作为上一层的地面。切换到上一层，铺在能盖屋顶的地方：下层的墙、柱子或楼梯附近。</PZ_UpperFloor.description>
 </LanguageData>

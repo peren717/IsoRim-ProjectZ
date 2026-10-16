@@ -35,6 +35,8 @@ namespace ProjectZ.Dev
     //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
     //                                   staircolour: stairs of wood, steel and granite next to walls of the same stuff, day and
     //                                   night, floor 1 and 2 views, roofs on and off (TestStairColour)
+    //                                   slabremove: taking up upper floors (peel order, carpet, blockers), stairs in an
+    //                                   open field, a slab collapsing; run with -projectzfloors=3 (TestSlabRemove)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -123,7 +125,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui")
+            if (mode == "floorui" || mode == "slabremove")
             {
                 PatchMouse(h);
             }
@@ -363,6 +365,11 @@ namespace ProjectZ.Dev
                 StepDeadEnd(map);
                 return;
             }
+            if (stage.StartsWith("z_"))
+            {
+                StepSlabRemove(map);
+                return;
+            }
             if (stage.StartsWith("q_"))
             {
                 StepStairColour(map);
@@ -414,6 +421,10 @@ namespace ProjectZ.Dev
                     else if (mode == "deadend")
                     {
                         stage = "k_setup";
+                    }
+                    else if (mode == "slabremove")
+                    {
+                        stage = "z_setup";
                     }
                     else if (mode == "staircolour")
                     {

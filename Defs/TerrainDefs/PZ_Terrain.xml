@@ -5,7 +5,7 @@
   <TerrainDef>
     <defName>PZ_OpenAir</defName>
     <label>open air</label>
-    <description>Empty space on an upper floor. Lay an upper floor here over a roofed room.</description>
+    <description>Empty space on an upper floor. Lay an upper floor here near walls or columns below.</description>
     <dontRender>true</dontRender>
     <passability>Impassable</passability>
     <pathCost>300</pathCost>
@@ -33,12 +33,13 @@
     </affordances>
   </TerrainDef>
 
-  <!-- An upper floor cell (M1b): built on open air over a roofed cell (PlaceWorker_UpperFloor, decision D6). Walkable; walls,
+  <!-- An upper floor cell (M1b): built on open air where a roof could be held below (PlaceWorker_UpperFloor, decision D6 as
+       changed by the removal design §7), taken up with the remove-foundation tool (Slabs.cs). Walkable; walls,
        furniture and normal floors can go on it. Placeholder look: plain wood boards. -->
   <TerrainDef>
     <defName>PZ_UpperFloor</defName>
     <label>upper floor</label>
-    <description>Boards on beams for the storey above. View the floor above, then lay it over a roofed room.</description>
+    <description>Boards on beams for the storey above. View the floor above, then lay it where a roof could go: near walls, columns or stairs below.</description>
     <texturePath>Terrain/Surfaces/WoodFloor</texturePath>
     <color>(126,98,72)</color>
     <edgeType>Hard</edgeType>

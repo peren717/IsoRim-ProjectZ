@@ -55,7 +55,7 @@ namespace ProjectZ.Dev
             {
                 return true;
             }
-            return (t is Blueprint || t is Frame) && PlaceWorker_UpperFloor.SupportedFloorCell(c, map);
+            return (t is Blueprint || t is Frame) && t.def.entityDefToBuild == PZDefOf.PZ_UpperFloor;
         }
 
         public static void Reset()

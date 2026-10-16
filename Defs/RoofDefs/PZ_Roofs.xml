@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- The roof of a cell with an upper floor over it (M1c, decision D6): the floor itself. Thin, never collapses; it can't
-       be removed while the floor is there (FloorRoof.cs). Removing the floor turns it back into a constructed roof. -->
+  <!-- The roof of a cell with an upper floor over it (M1c, decision D6): the floor itself. Thin; it can't be removed while
+       the floor is there, and it collapses like a built roof when its support goes, taking the floor with it (FloorRoof.cs,
+       Slabs.cs SlabCollapse). Removing the floor turns it back into a constructed roof. -->
   <RoofDef>
     <defName>PZ_FloorRoof</defName>
     <label>upper floor</label>
     <isThickRoof>false</isThickRoof>
-    <canCollapse>false</canCollapse>
+    <canCollapse>true</canCollapse>
     <filthLeaving>Filth_RubbleBuilding</filthLeaving>
     <soundPunchThrough>PunchThroughRoofMetal</soundPunchThrough>
   </RoofDef>

@@ -6,14 +6,16 @@ using Verse;
 
 namespace ProjectZ
 {
-    // Decision D6: an upper floor is built only over a roofed cell, and from then on that roof IS the floor above. The
-    // cell below gets the roof PZ_FloorRoof ("upper floor": thin, never collapses), so rooms, weather, temperature,
-    // light and "indoors" treat it as roofed through the game's own roof grid.
+    // Decision D6, as changed on 2026-10-16 (removal design §7): an upper floor is built where a roof could be held (the
+    // game's support rules, SlabSupport), and from then on the roof under it IS the floor above. The cell below gets the
+    // roof PZ_FloorRoof ("upper floor", thin), so rooms, weather, temperature, light and "indoors" treat it as roofed
+    // through the game's own roof grid.
     //
-    // While the floor is there its roof can't go: removing it (no-roof area), collapse, drop pods, mortar shells and
-    // tornadoes leave it alone, and any other roof written to that cell becomes the floor's roof again. Removing the
-    // floor turns it back into an ordinary constructed roof. Saves from before M1c (and anything that slipped through)
-    // are put right when the map loads: every cell under a floor gets the floor's roof, also where it had none.
+    // While the floor is there its roof can't be taken away: the no-roof area, drop pods, mortar shells and tornadoes
+    // leave it alone, and any other roof written to that cell becomes the floor's roof again. It does collapse like a
+    // built roof when its support goes, and the floor falls with it (SlabCollapse). Removing the floor turns it back into
+    // an ordinary constructed roof. Saves from before M1c (and anything that slipped through) are put right when the
+    // map loads: every cell under a floor gets the floor's roof, also where it had none.
     public static class FloorRoof
     {
         // The cell right above c on the next floor has a floor on it.
@@ -128,11 +130,13 @@ namespace ProjectZ
             {
                 FloorRoof.Changed(c, map);
                 FloorHeat.Dirty();
+                SlabPeel.Dirty(map);
             }
         }
     }
 
-    // Any roof written under a floor is the floor's roof (also "no roof": the floor stays the ceiling).
+    // Any roof written under a floor is the floor's roof (also "no roof": the floor stays the ceiling), except the game
+    // dropping an unsupported one (SlabCollapse: the floor falls).
     [HarmonyPatch(typeof(RoofGrid), nameof(RoofGrid.SetRoof))]
     public static class SetRoof_FloorRoof_Patch
     {
@@ -153,6 +157,10 @@ namespace ProjectZ
             FloorHeat.Dirty();
             if (FloorRoof.FloorAbove(c, map))
             {
+                if (def == null && SlabCollapse.LetRoofGo(c, map))
+                {
+                    return;
+                }
                 def = PZDefOf.PZ_FloorRoof;
             }
             else
@@ -185,8 +193,9 @@ namespace ProjectZ
         }
     }
 
-    // Collapses, drop pods, shells and tornadoes don't drop a floor's roof, nor the stairwell's (it is an opening: there
-    // is nothing up there to fall, Column.OpenAbove).
+    // Drop pods, shells and tornadoes don't drop a floor's roof, nor the stairwell's (it is an opening: there is nothing
+    // up there to fall, Column.OpenAbove). A collapse for want of support (the game's collapse buffer, the list
+    // overload) drops a floor's roof with its floor (SlabCollapse).
     [HarmonyPatch(typeof(RoofCollapserImmediate), nameof(RoofCollapserImmediate.DropRoofInCells), new[] { typeof(IntVec3), typeof(Map), typeof(List<Thing>) })]
     public static class DropRoofCell_Patch
     {
@@ -211,9 +220,30 @@ namespace ProjectZ
     [HarmonyPatch(typeof(RoofCollapserImmediate), nameof(RoofCollapserImmediate.DropRoofInCells), new[] { typeof(List<IntVec3>), typeof(Map), typeof(List<Thing>) })]
     public static class DropRoofCellList_Patch
     {
-        public static void Prefix(ref List<IntVec3> cells, Map map)
+        public static void Prefix(ref List<IntVec3> cells, Map map, List<Thing> outCrushedThings)
         {
-            if (cells != null && ProjectZ.Annex(map) != null && cells.Any(c => c.InBounds(map) && FloorRoof.Kept(c, map)))
+            if (cells == null || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            if (SlabCollapse.Resolving)
+            {
+                // (by index: walls falling with a slab add the roofs they held to this same list, the buffer's own)
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    IntVec3 c = cells[i];
+                    if (c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof && FloorRoof.FloorAbove(c, map))
+                    {
+                        SlabCollapse.BufferCollapse(c, map, outCrushedThings);
+                    }
+                }
+                if (cells.Any(c => c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof))
+                {
+                    cells = cells.Where(c => !c.InBounds(map) || map.roofGrid.RoofAt(c) != PZDefOf.PZ_StairwellRoof).ToList();
+                }
+                return;
+            }
+            if (cells.Any(c => c.InBounds(map) && FloorRoof.Kept(c, map)))
             {
                 cells = cells.Where(c => !c.InBounds(map) || !FloorRoof.Kept(c, map)).ToList();
             }

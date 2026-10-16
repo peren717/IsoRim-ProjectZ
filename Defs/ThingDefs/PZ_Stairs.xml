@@ -2,13 +2,14 @@
 <Defs>
 
   <!-- Stairs (decision D4, stairs design §1): a 1x3 ramp, turned by its rotation (it goes up toward the way it faces).
-       The floor above stays open over it (the stairwell); the cell past its top on the floor above is the exit, made with
-       the stairs when it is open air over a roofed cell. Everyone can use them (D9). IsoRim draws its model
+       The floor above stays open over it (the stairwell); the cell past its top on the floor above is the exit (the landing),
+       laid with the stairs where it is open air and taken away with them. Stairs hold roofs and floors up like a wall
+       (removal design §7), so they can stand anywhere. Everyone can use them (D9). IsoRim draws its model
        (IsoRim/Defs/PZ_Models.xml); the sprite is the plain fallback. -->
   <ThingDef ParentName="BuildingBase">
     <defName>PZ_Stairs</defName>
     <label>stairs</label>
-    <description>Stairs up to the floor above. The floor above stays open over them; the cell past the top is the exit on the floor above (made with the stairs if it has a roof under it).</description>
+    <description>Stairs up to the floor above. The floor above stays open over them; the cell past the top is the landing on the floor above, built with the stairs. Like a wall, stairs hold up roofs and floors nearby.</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/Stairs</texPath>
@@ -21,7 +22,7 @@
     <pathCost>8</pathCost>
     <fillPercent>0.25</fillPercent>
     <castEdgeShadows>false</castEdgeShadows>
-    <holdsRoof>false</holdsRoof>
+    <holdsRoof>true</holdsRoof>
     <blockWind>false</blockWind>
     <rotatable>true</rotatable>
     <size>(1,3)</size>

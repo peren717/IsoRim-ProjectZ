@@ -12,7 +12,7 @@ namespace ProjectZ.Dev
     // (StairGrid.Passable). House A has a floor over all of it by now (west part dragged and built by the colonists).
     //   W1 refusals through the stairs designator: a bed upstairs over the stairwell; a stairwell over another stairs'
     //      exit;
-    //   W2 stairs W placed under the floor (designator click): remove-floor designations on its 3 stairwell cells, the
+    //   W2 stairs W placed under the floor (designator click): remove-upper-floor designations on its 3 stairwell cells, the
     //      blueprint waits (inspect line, CanConstruct reason); a drafted colonist and an item on the stairwell;
     //   W3 stairs C placed in house B (turned east) and cancelled with the cancel designator: its designations go, the
     //      floor stays;
@@ -168,7 +168,7 @@ namespace ProjectZ.Dev
                     UiDesignate(ScreenOf(wCenter, 0), ScreenOf(wCenter, 0));
                     wSite = SiteAt(map, wCenter);
                     wExit = StairShape.Exit(wCenter, Rot4.North, map);
-                    int des = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFloor) != null);
+                    int des = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null);
                     StairwellMarks marks = map.GetComponent<StairwellMarks>();
                     Result("stairs placed under a laid floor: blueprint, and the 3 floor cells over it designated for removal (marked as the site's)",
                         ok.Accepted && wSite is Blueprint && des == 3 && well.All(c => marks.cells.Contains(c)) && well.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor),
@@ -209,7 +209,7 @@ namespace ProjectZ.Dev
                     SetRot(wStairs, Rot4.North);
                     cSite = SiteAt(map, cCenter);
                     List<IntVec3> well = WellUp(map, cCenter, Rot4.East);
-                    int des = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFloor) != null);
+                    int des = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null);
                     Result("stairs turned east under house B's floor: blueprint, 3 designations", cSite != null && cSite.Rotation == Rot4.East && des == 3, $"site {cSite} at {cSite?.Position} rot {cSite?.Rotation}, designations {des}/3 on {string.Join(", ", well)}");
                     Designator cancel = AllDesignators().OfType<Designator_Cancel>().FirstOrDefault();
                     if (cancel != null)
@@ -218,10 +218,10 @@ namespace ProjectZ.Dev
                         UiDesignate(ScreenOf(cCenter, 0), ScreenOf(cCenter, 0));
                     }
                     Find.DesignatorManager.Deselect();
-                    int left = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFloor) != null);
+                    int left = well.Count(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null);
                     StairwellMarks marks = map.GetComponent<StairwellMarks>();
                     Result("cancelled with the cancel designator: its designations go, the floor stays, W's stay",
-                        cancel != null && (cSite == null || !cSite.Spawned) && left == 0 && well.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor && !marks.cells.Contains(c)) && WellUp(map, wCenter, Rot4.North).All(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFloor) != null),
+                        cancel != null && (cSite == null || !cSite.Spawned) && left == 0 && well.All(c => c.GetTerrain(map) == PZDefOf.PZ_UpperFloor && !marks.cells.Contains(c)) && WellUp(map, wCenter, Rot4.North).All(c => map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) != null),
                         $"cancel {cancel != null}, site spawned {cSite?.Spawned}, designations left {left}, marks {marks.cells.Count}");
                     ViewUp(map, wCenter, 5f);
                     Find.Selector.Select(wSite);
@@ -231,7 +231,7 @@ namespace ProjectZ.Dev
                 case "w_designated_shot":
                 {
                     CellRect view = Find.CameraDriver.CurrentViewRect;
-                    Info($"view rect {view}; stairwell cells in it (expanded by 3): {string.Join(", ", WellUp(map, wCenter, Rot4.North).Select(c => c + " " + view.ExpandedBy(3).Contains(c)))}; designations RemoveFloor on the map {map.designationManager.SpawnedDesignationsOfDef(DesignationDefOf.RemoveFloor).Count()}");
+                    Info($"view rect {view}; stairwell cells in it (expanded by 3): {string.Join(", ", WellUp(map, wCenter, Rot4.North).Select(c => c + " " + view.ExpandedBy(3).Contains(c)))}; designations RemoveFoundation on the map {map.designationManager.SpawnedDesignationsOfDef(DesignationDefOf.RemoveFoundation).Count()}");
                     Capture("stairwell_designated");
                 }
                     Wait(2, "w_remove");

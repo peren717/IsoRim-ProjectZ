@@ -6,20 +6,17 @@ using Verse.AI;
 
 namespace ProjectZ
 {
-    // Stairs placed under a floor that is already laid (stairs design §1): the floor over the stairwell gets the game's
-    // own remove-floor designation, colonists take it up with the normal job (materials back as usual), and the stairs
-    // are not built before the stairwell is open. One predicate, MustClear (a floor cell on the floor above a stairs
-    // thing), used by:
-    //   - placement (PlaceWorker_Stairs): a stairwell cell with only a floor on it is fine (CanClear);
-    //   - TerrainGrid.CanRemoveTopLayerAt: such a floor can be removed (an upper floor can't anywhere else), and
-    //     RemoveTopLayer takes it down to open air at once (also a floor laid on the upper floor), with the leavings,
-    //     and moves pawns and items off (MoveOff) and drops the zone cell;
-    //   - the remove-floor checks for a building in the way: any building on it blocks;
+    // Stairs placed under a floor that is already laid (stairs design §1): the floor over the stairwell gets the
+    // remove-upper-floor designation (the game's remove-foundation one, Slabs.cs), colonists take it up with the normal
+    // jobs like any slab (peel order, materials back), and the stairs are not built before the stairwell is open. One
+    // predicate, MustClear (a floor cell on the floor above a stairs thing), used by:
+    //   - placement (PlaceWorker_Stairs): a stairwell cell with only a floor on it is fine (CanClear: nothing blocks
+    //     its removal, Slab.Blocker);
     //   - GenConstruct.CanConstruct: the stairs' blueprint or frame waits ("waiting for the floor above to be
     //     removed"), also in its inspect string;
     //   - the designations follow the stairs site (Mark / Unmark from the stairs-thing spawn and despawn patches): added
     //     when a blueprint or frame spawns, and the ones it added removed again when it goes before the floor did.
-    //   Built stairs (god mode places them at once) clear their stairwell when they spawn.
+    //   Built stairs (god mode places them at once) clear their stairwell when they spawn (Slab.Remove).
     public static class StairwellFloor
     {
         // A stairs blueprint or frame (not the built stairs).
@@ -35,23 +32,11 @@ namespace ProjectZ
             return Stairwell.StairThingAt(FloorRoof.Below(c, map), map);
         }
 
-        // Placement: a stairwell cell with a floor on it can be cleared when nothing else is there that must stay (a
-        // building, a blueprint or frame, the exit of other stairs).
+        // Placement: a stairwell cell with a floor on it can be cleared when nothing keeps that floor there (a building,
+        // a blueprint or frame, the exit of other stairs, a floor above it).
         public static bool CanClear(IntVec3 up, Map map)
         {
-            if (!ProjectZ.HasFloor(up, map))
-            {
-                return false;
-            }
-            List<Thing> list = map.thingGrid.ThingsListAtFast(up);
-            for (int i = 0; i < list.Count; i++)
-            {
-                if (list[i] is Building || list[i] is Blueprint || list[i] is Frame)
-                {
-                    return false;
-                }
-            }
-            return !IsStairsExit(up, map);
+            return Slab.At(up, map) && Slab.Blocker(up, map) == null;
         }
 
         // The exit of any stairs thing (built, blueprint or frame).
@@ -104,9 +89,9 @@ namespace ProjectZ
             foreach (IntVec3 c in site.OccupiedRect())
             {
                 IntVec3 up = StairShape.Above(c, map);
-                if (MustClear(up, map) && map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFloor) == null)
+                if (MustClear(up, map) && map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation) == null)
                 {
-                    map.designationManager.AddDesignation(new Designation(up, DesignationDefOf.RemoveFloor));
+                    map.designationManager.AddDesignation(new Designation(up, DesignationDefOf.RemoveFoundation));
                     marks?.cells.Add(up);
                 }
             }
@@ -130,83 +115,13 @@ namespace ProjectZ
                 if (up.IsValid && marks.cells.Contains(up) && !Stairwell.StairThingAt(c, map))
                 {
                     marks.cells.Remove(up);
-                    map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFloor)?.Delete();
-                }
-            }
-        }
-
-        // Takes the floor (and any floor laid on it) down to open air: the room below keeps its roof (the stairwell's,
-        // FloorRoof / Stairwell.RoofFor), materials come back as from any removed floor, pawns and items move off.
-        public static void Clear(IntVec3 c, Map map, bool doLeavings)
-        {
-            TerrainGrid tg = map.terrainGrid;
-            TerrainDef top = tg.TopTerrainAt(c);
-            TerrainDef under = tg.UnderTerrainAt(c);
-            Zone zone = map.zoneManager.ZoneAt(c);
-            if (zone != null)
-            {
-                zone.RemoveCell(c);
-                if (zone.cells.Count > 0)
-                {
-                    zone.CheckContiguous();
-                }
-            }
-            tg.SetTerrain(c, PZDefOf.PZ_OpenAir);
-            if (doLeavings)
-            {
-                // (dropped next to the cell: nothing can be placed on open air)
-                GenLeaving.DoLeavingsFor(top, c, map);
-                if (under != null && under != PZDefOf.PZ_OpenAir)
-                {
-                    GenLeaving.DoLeavingsFor(under, c, map);
-                }
-            }
-            MoveOff(c, map);
-            ProjectZ.DebugLog($"stairwell floor at {c} removed ({top.defName}{(under != null ? " on " + under.defName : "")})");
-        }
-
-        // Pawns and items on a cell that just became open air step to the nearest cell on the same floor that can hold
-        // them (as the game's own recovery from an unwalkable cell, Pawn_PathFollower.TryRecoverFromUnwalkablePosition).
-        private static void MoveOff(IntVec3 c, Map map)
-        {
-            int k = ProjectZ.FloorOf(c, map);
-            List<Thing> list = c.GetThingList(map);
-            for (int i = list.Count - 1; i >= 0; i--)
-            {
-                Thing t = list[i];
-                if (t is Pawn p)
-                {
-                    IntVec3 to = IntVec3.Invalid;
-                    for (int r = 1; r < GenRadial.NumCellsInRadius(6f); r++)
-                    {
-                        IntVec3 x = c + GenRadial.RadialPattern[r];
-                        if (x.InBounds(map) && ProjectZ.FloorOf(x, map) == k && x.Standable(map))
-                        {
-                            to = x;
-                            break;
-                        }
-                    }
-                    if (to.IsValid)
-                    {
-                        // The pawn taking the floor up keeps its job (it is finishing); anyone else starts again.
-                        bool remover = p.CurJob != null && p.CurJob.def == JobDefOf.RemoveFloor && p.CurJob.targetA.Cell == c;
-                        p.Position = to;
-                        p.Notify_Teleported(endCurrentJob: !remover, resetTweenedPos: false);
-                    }
-                }
-                else if (t.def.category == ThingCategory.Item)
-                {
-                    t.DeSpawn();
-                    if (!GenPlace.TryPlaceThing(t, c, map, ThingPlaceMode.Near, null, x => ProjectZ.FloorOf(x, map) == k))
-                    {
-                        GenSpawn.Spawn(t, c, map);
-                    }
+                    map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation)?.Delete();
                 }
             }
         }
     }
 
-    // The cells whose remove-floor designation a stairs site added (so cancelling it takes back only those).
+    // The cells whose removal designation a stairs site added (so cancelling it takes back only those).
     public class StairwellMarks : MapComponent
     {
         public HashSet<IntVec3> cells = new HashSet<IntVec3>();
@@ -224,51 +139,29 @@ namespace ProjectZ
                 cells = new HashSet<IntVec3>();
             }
         }
-    }
 
-    [HarmonyPatch(typeof(TerrainGrid), nameof(TerrainGrid.CanRemoveTopLayerAt))]
-    public static class CanRemoveTopLayer_Stairwell_Patch
-    {
-        private static readonly AccessTools.FieldRef<TerrainGrid, Map> mapRef = AccessTools.FieldRefAccess<TerrainGrid, Map>("map");
-
-        public static void Postfix(TerrainGrid __instance, IntVec3 c, ref bool __result)
+        // Saves from before the slab removal: a stairwell marked with the remove-floor designation gets the slab's.
+        public override void FinalizeInit()
         {
-            if (!__result && StairwellFloor.MustClear(c, mapRef(__instance)))
+            base.FinalizeInit();
+            int moved = 0;
+            foreach (IntVec3 c in cells)
             {
-                __result = true;
+                Designation old = c.InBounds(map) ? map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFloor) : null;
+                if (old != null && Slab.At(c, map))
+                {
+                    old.Delete();
+                    if (map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) == null)
+                    {
+                        map.designationManager.AddDesignation(new Designation(c, DesignationDefOf.RemoveFoundation));
+                    }
+                    moved++;
+                }
             }
-        }
-    }
-
-    [HarmonyPatch(typeof(TerrainGrid), nameof(TerrainGrid.RemoveTopLayer))]
-    public static class RemoveTopLayer_Stairwell_Patch
-    {
-        private static readonly AccessTools.FieldRef<TerrainGrid, Map> mapRef = AccessTools.FieldRefAccess<TerrainGrid, Map>("map");
-
-        public static bool Prefix(TerrainGrid __instance, IntVec3 c, bool doLeavings)
-        {
-            Map map = mapRef(__instance);
-            if (!StairwellFloor.MustClear(c, map))
+            if (moved > 0)
             {
-                return true;
+                ProjectZ.DebugLog($"map {map}: {moved} stairwell designation(s) moved to the upper floor removal");
             }
-            StairwellFloor.Clear(c, map, doLeavings);
-            return false;
-        }
-    }
-
-    // Any building on a stairwell floor keeps it there (it would be left on open air).
-    [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFloor), nameof(WorkGiver_ConstructRemoveFloor.AnyBuildingBlockingFloorRemoval))]
-    public static class FloorRemovalBlocked_Stairwell_Patch
-    {
-        public static bool Prefix(IntVec3 c, Map map, ref bool __result)
-        {
-            if (!StairwellFloor.MustClear(c, map))
-            {
-                return true;
-            }
-            __result = c.GetFirstBuilding(map) != null;
-            return false;
         }
     }
 

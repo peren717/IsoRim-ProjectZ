@@ -106,6 +106,7 @@ namespace ProjectZ
         private void Changed()
         {
             map.reachability?.ClearCache();
+            SlabPeel.Dirty(map);
             ProjectZ.DebugLog($"stairs on {map}: {links.Count} link(s)");
         }
 
@@ -152,6 +153,19 @@ namespace ProjectZ
         // The exit on the floor above (Invalid without one).
         public IntVec3 TopCell => Map == null ? IntVec3.Invalid : StairShape.Exit(Position, Rotation, Map);
 
+        // The landing (§7) is part of the stairs: laid with them on open air, the roof under it with it where there was
+        // none (the stairs hold it, holdsRoof), and taken away with them. (False for stairs from older saves and for
+        // stairs that came out onto a floor already there: that floor stays.)
+        private bool landingLaid;
+        private bool landingRoofLaid;
+
+        public override void ExposeData()
+        {
+            base.ExposeData();
+            Scribe_Values.Look(ref landingLaid, "landingLaid", false);
+            Scribe_Values.Look(ref landingRoofLaid, "landingRoofLaid", false);
+        }
+
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
         {
             base.SpawnSetup(map, respawningAfterLoad);
@@ -162,8 +176,11 @@ namespace ProjectZ
             }
             if (!respawningAfterLoad && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
-                // Q2: the exit's floor is made with the stairs (the placement checked its support).
+                // Q2: the landing is made with the stairs (the placement checked the cell under it).
+                IntVec3 below = FloorRoof.Below(top, map);
+                landingRoofLaid = below.IsValid && !map.roofGrid.Roofed(below);
                 map.terrainGrid.SetTerrain(top, PZDefOf.PZ_UpperFloor);
+                landingLaid = true;
             }
             if (!respawningAfterLoad)
             {
@@ -173,7 +190,7 @@ namespace ProjectZ
                     IntVec3 up = StairShape.Above(c, map);
                     if (StairwellFloor.MustClear(up, map))
                     {
-                        StairwellFloor.Clear(up, map, doLeavings: true);
+                        Slab.Remove(up, map, doLeavings: true);
                     }
                 }
             }
@@ -182,8 +199,40 @@ namespace ProjectZ
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
         {
-            Map?.GetComponent<StairGrid>()?.Deregister(this);
+            Map map = Map;
+            map?.GetComponent<StairGrid>()?.Deregister(this);
+            if (map != null && mode != DestroyMode.WillReplace)
+            {
+                TakeLanding(map);
+            }
             base.DeSpawn(mode);
+        }
+
+        // The stairs go: so does the landing they laid (nothing comes back for it, it came with them), unless something
+        // has been built on it since (then it stays a floor like any other, held up or not by what is left). The roof
+        // they brought under it goes too unless something else holds it now.
+        private void TakeLanding(Map map)
+        {
+            IntVec3 top = TopCell;
+            if (!landingLaid || !top.IsValid || !Slab.At(top, map))
+            {
+                return;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(top);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] is Building || list[i] is Blueprint || list[i] is Frame)
+                {
+                    return;
+                }
+            }
+            landingLaid = false;
+            Slab.Remove(top, map, doLeavings: false, cause: this);
+            IntVec3 below = FloorRoof.Below(top, map);
+            if (landingRoofLaid && below.IsValid && map.roofGrid.Roofed(below) && !SlabSupport.Supported(below, map, ignore: this))
+            {
+                map.roofGrid.SetRoof(below, null);
+            }
         }
 
         public override string GetInspectString()
@@ -316,8 +365,9 @@ namespace ProjectZ
         }
     }
 
-    // Stairs (§1 placement): the ramp on one floor with a floor above it; the stairwell open; the exit a floor (or open
-    // air over a roofed cell, where the floor is made with the stairs) with nothing impassable on it.
+    // Stairs (§1 placement, §7): the ramp on one floor with a floor above it; the stairwell open; the exit a floor (or
+    // open air anywhere a roof could cover the cell under it: the landing is made with the stairs) with nothing
+    // impassable on it.
     public class PlaceWorker_Stairs : PlaceWorker
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
@@ -355,7 +405,7 @@ namespace ProjectZ
             IntVec3 top = StairShape.Exit(loc, rot, map);
             if (!top.IsValid)
             {
-                return "PZ_ExitNeedsSupport".Translate();
+                return "PZ_NoExitCell".Translate();
             }
             if (Stairwell.StairThingAt(FloorRoof.Below(top, map), map))
             {
@@ -364,16 +414,13 @@ namespace ProjectZ
             }
             if (top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
-                // The exit's floor is made with the stairs: it needs what any floor needs.
+                // The landing is made with the stairs and held up by them (§7: stairs build anywhere): the cell under it
+                // only has to be one a roof could cover.
                 if (FloorPlanned(top, map))
                 {
                     return AcceptanceReport.WasAccepted;
                 }
-                if (!PlaceWorker_UpperFloor.SupportedFloorCell(top, map))
-                {
-                    return "PZ_ExitNeedsSupport".Translate();
-                }
-                AcceptanceReport r = PlaceWorker_UpperFloor.Check(top, map);
+                AcceptanceReport r = SlabSupport.CoverOk(FloorRoof.Below(top, map), map);
                 if (!r.Accepted)
                 {
                     return r;
@@ -394,6 +441,10 @@ namespace ProjectZ
         // An upper floor blueprint or frame on this cell.
         public static bool FloorPlanned(IntVec3 c, Map map)
         {
+            if (!c.IsValid || !c.InBounds(map))
+            {
+                return false;
+            }
             List<Thing> list = map.thingGrid.ThingsListAtFast(c);
             for (int i = 0; i < list.Count; i++)
             {
@@ -406,8 +457,9 @@ namespace ProjectZ
         }
     }
 
-    // An upper floor cell needs the cell right below it roofed (D6) and not a stairwell (§1), and nothing there too
-    // tall for the storey (the slab height rule, HeightRule).
+    // An upper floor cell (§7): a roof could be held under it (the game's support rules: a wall, column or stairs within
+    // 6.9 cells over roofed cells, the slabs planned next to it counting as roofs), the cell below not a stairwell (§1),
+    // and nothing there too tall for the storey (the slab height rule, HeightRule). The slab brings the roof under it.
     public class PlaceWorker_UpperFloor : PlaceWorker
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
@@ -417,35 +469,24 @@ namespace ProjectZ
 
         public static AcceptanceReport Check(IntVec3 loc, Map map)
         {
+            if (ProjectZ.FloorOf(loc, map) < 1)
+            {
+                return ViewFloorAbove();
+            }
             IntVec3 below = FloorRoof.Below(loc, map);
-            if (Stairwell.StairThingAt(below, map))
+            AcceptanceReport r = SlabSupport.CoverOk(below, map);
+            if (!r.Accepted)
             {
-                return "PZ_StairwellBelow".Translate();
+                return r;
             }
-            if (!SupportedFloorCell(loc, map))
+            if (!SlabSupport.Supported(below, map, countPlanned: true))
             {
-                return ProjectZ.FloorOf(loc, map) >= 1 ? "PZ_NeedsRoofBelow".Translate() : ViewFloorAbove();
-            }
-            Thing tall = HeightRule.TallThingAt(below, map);
-            if (tall != null)
-            {
-                return "PZ_TallBelow".Translate(tall.LabelShort);
+                return "PZ_NoSupportBelow".Translate();
             }
             return AcceptanceReport.WasAccepted;
         }
 
         // Laying a floor while working on the ground: it goes on the floor above.
         public static string ViewFloorAbove() => "PZ_ViewFloorAbove".Translate(FloorView.KeyName(PZKeyDefOf.PZ_FloorUp));
-
-        public static bool SupportedFloorCell(IntVec3 loc, Map map)
-        {
-            int k = ProjectZ.FloorOf(loc, map);
-            if (k < 1)
-            {
-                return false;
-            }
-            IntVec3 below = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(loc, map), k - 1, map);
-            return below.IsValid && map.roofGrid.Roofed(below) && map.roofGrid.RoofAt(below) != PZDefOf.PZ_StairwellRoof;
-        }
     }
 }
