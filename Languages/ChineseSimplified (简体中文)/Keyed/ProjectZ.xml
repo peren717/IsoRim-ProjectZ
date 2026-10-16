@@ -5,7 +5,11 @@
   <PZ_Debug>调试模式</PZ_Debug>
   <PZ_DebugTip>额外的日志和开发工具。</PZ_DebugTip>
   <PZ_FloorLabel>{0} 楼</PZ_FloorLabel>
-  <PZ_FloorButtonTip>当前在 {0}，上面的楼层已隐藏。\n\n点击切换到下一层，或按 {1}、{2}。</PZ_FloorButtonTip>
+  <PZ_FloorHudTip>{0}\n\n点击查看。按键 {1}、{2}，或 {3} + 鼠标滚轮。Alt + 拖动可移动。</PZ_FloorHudTip>
+  <PZ_HideFloorHud>隐藏楼层面板</PZ_HideFloorHud>
+  <PZ_ResetFloorHud>重置楼层面板位置</PZ_ResetFloorHud>
+  <PZ_GroundOnly>必须建在地面上</PZ_GroundOnly>
+  <PZ_ThickRoof>不能建在厚岩顶下</PZ_ThickRoof>
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>

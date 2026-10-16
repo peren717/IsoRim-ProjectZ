@@ -5,7 +5,11 @@
   <PZ_Debug>Debug mode</PZ_Debug>
   <PZ_DebugTip>Extra log lines and dev tools.</PZ_DebugTip>
   <PZ_FloorLabel>Floor {0}</PZ_FloorLabel>
-  <PZ_FloorButtonTip>Working on {0}. Floors above it are hidden.\n\nClick for the next floor, or use {1} and {2}.</PZ_FloorButtonTip>
+  <PZ_FloorHudTip>{0}\n\nClick to view. Keys {1} and {2}, or {3} + mouse wheel. Alt + drag to move.</PZ_FloorHudTip>
+  <PZ_HideFloorHud>Hide floor HUD</PZ_HideFloorHud>
+  <PZ_ResetFloorHud>Reset floor HUD position</PZ_ResetFloorHud>
+  <PZ_GroundOnly>Must be built on the ground</PZ_GroundOnly>
+  <PZ_ThickRoof>Can't build under a thick rock roof</PZ_ThickRoof>
   <PZ_StairsLeadTo>Leads up to floor {0}</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>Place stairs on the lower floor, they lead up to the next one</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>Needs a roof here</PZ_NeedsRoofHere>

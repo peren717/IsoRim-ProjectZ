@@ -14,6 +14,12 @@ namespace ProjectZ
         public bool debug = false;
         // Decision D7: shooting down at a lower floor adds this to the shooter's accuracy factor (hit report "shooter").
         public float heightAccuracy = 0.2f;
+        // Floor HUD (FloorHud.cs): hidden, and where it was moved with Alt + drag (distances of its right and bottom edges
+        // from the screen's, in UI px); not moved = its own slot in the bottom-right controls.
+        public bool hideFloorHud = false;
+        public bool floorHudMoved = false;
+        public float floorHudRight;
+        public float floorHudBottom;
 
         public override void ExposeData()
         {
@@ -21,6 +27,10 @@ namespace ProjectZ
             Scribe_Values.Look(ref floors, "floors", 2);
             Scribe_Values.Look(ref debug, "debug", false);
             Scribe_Values.Look(ref heightAccuracy, "heightAccuracy", 0.2f);
+            Scribe_Values.Look(ref hideFloorHud, "hideFloorHud", false);
+            Scribe_Values.Look(ref floorHudMoved, "floorHudMoved", false);
+            Scribe_Values.Look(ref floorHudRight, "floorHudRight", 0f);
+            Scribe_Values.Look(ref floorHudBottom, "floorHudBottom", 0f);
             floors = Mathf.Clamp(floors, 1, MaxFloors);
         }
     }
@@ -50,6 +60,12 @@ namespace ProjectZ
             list.Gap();
             list.Label("PZ_HeightAccuracy".Translate(Settings.heightAccuracy.ToStringPercent()), tooltip: "PZ_HeightAccuracyTip".Translate());
             Settings.heightAccuracy = UnityEngine.Mathf.Round(list.Slider(Settings.heightAccuracy, 0f, 0.5f) * 20f) / 20f;
+            list.Gap();
+            list.CheckboxLabeled("PZ_HideFloorHud".Translate(), ref Settings.hideFloorHud);
+            if (list.ButtonText("PZ_ResetFloorHud".Translate(), widthPct: 0.4f))
+            {
+                Settings.floorHudMoved = false;
+            }
             list.Gap();
             list.CheckboxLabeled("PZ_Debug".Translate(), ref Settings.debug, "PZ_DebugTip".Translate());
             list.End();

@@ -12,6 +12,7 @@ namespace ProjectZ
     {
         public static KeyBindingDef PZ_FloorUp;
         public static KeyBindingDef PZ_FloorDown;
+        public static KeyBindingDef PZ_FloorScrollHold;
 
         static PZKeyDefOf()
         {
@@ -20,7 +21,8 @@ namespace ProjectZ
     }
 
     // The floor the player works on: the pointer picks its cells (build, zone, order, select there) and the floors
-    // above it are hidden. 0 = the ground. Not saved (starts on the ground).
+    // above it are hidden. 0 = the ground. Not saved (starts on the ground). Shown and switched by the floor HUD
+    // (FloorHud.cs), the floor keys and the floor scroll (FloorKeys_Patch).
     public static class FloorView
     {
         private static int current;
@@ -62,46 +64,49 @@ namespace ProjectZ
                 case KeyCode.Minus: return "-";
                 case KeyCode.KeypadPlus: return "Num +";
                 case KeyCode.KeypadMinus: return "Num -";
+                case KeyCode.LeftShift:
+                case KeyCode.RightShift: return "Shift";
+                case KeyCode.LeftAlt:
+                case KeyCode.RightAlt: return "Alt";
+                case KeyCode.LeftControl:
+                case KeyCode.RightControl: return "Ctrl";
                 default: return k.MainKeyLabel;
             }
         }
     }
 
-    // Keys (= and - by default) and a button in the bottom-right row.
-    [HarmonyPatch(typeof(PlaySettings), nameof(PlaySettings.DoPlaySettingsGlobalControls))]
-    public static class PlaySettings_FloorButton_Patch
-    {
-        public static void Postfix(WidgetRow row, bool worldView)
-        {
-            if (worldView || row == null || Current.ProgramState != ProgramState.Playing)
-            {
-                return;
-            }
-            AnnexMapComponent a = ProjectZ.Annex(Find.CurrentMap);
-            if (a == null)
-            {
-                return;
-            }
-            int k = FloorView.Current;
-            string tip = "PZ_FloorButtonTip".Translate(FloorView.Label(k), FloorView.KeyName(PZKeyDefOf.PZ_FloorUp), FloorView.KeyName(PZKeyDefOf.PZ_FloorDown));
-            if (row.ButtonText(FloorView.Label(k), tip))
-            {
-                FloorView.Set(k + 1 >= a.floors ? 0 : k + 1);
-            }
-        }
-    }
-
+    // Floor keys (= and - by default) and the floor scroll: the mouse wheel while the hold key (Shift by default) is down
+    // changes the floor, wheel up = floor up. Runs after the windows had the event (a scrolled list keeps it) and before
+    // the camera (Root.OnGUI calls CameraDriverOnGUI after UIRootOnGUI): the used event no longer zooms.
     [HarmonyPatch(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI))]
     public static class FloorKeys_Patch
     {
+        // Wheel notches give whole steps; touchpads send small deltas, added up to a step.
+        private static float scrollSum;
+        private static float scrollAt;
+
         public static void Postfix()
         {
-            if (Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || WorldRendererUtility.WorldSelected || Event.current.type != EventType.KeyDown)
+            if (Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || WorldRendererUtility.WorldSelected)
+            {
+                return;
+            }
+            EventType type = Event.current.type;
+            if (type != EventType.KeyDown && type != EventType.ScrollWheel)
             {
                 return;
             }
             if (!ProjectZ.HasAnnex(Find.CurrentMap))
             {
+                return;
+            }
+            if (type == EventType.ScrollWheel)
+            {
+                if (PZKeyDefOf.PZ_FloorScrollHold != null && PZKeyDefOf.PZ_FloorScrollHold.IsDown)
+                {
+                    Scroll(Event.current.delta);
+                    Event.current.Use();
+                }
                 return;
             }
             if (PZKeyDefOf.PZ_FloorUp != null && PZKeyDefOf.PZ_FloorUp.KeyDownEvent)
@@ -114,6 +119,30 @@ namespace ProjectZ
                 FloorView.Set(FloorView.Current - 1);
                 Event.current.Use();
             }
+        }
+
+        private static void Scroll(Vector2 delta)
+        {
+            // (with Shift held some systems turn the wheel sideways)
+            float d = delta.y != 0f ? delta.y : delta.x;
+            if (d == 0f)
+            {
+                return;
+            }
+            float now = Time.realtimeSinceStartup;
+            if (now - scrollAt > 0.5f || Mathf.Sign(d) != Mathf.Sign(scrollSum))
+            {
+                scrollSum = 0f;
+            }
+            scrollAt = now;
+            scrollSum += d;
+            if (Mathf.Abs(scrollSum) < 1f)
+            {
+                return;
+            }
+            // wheel up (negative delta) = floor up
+            FloorView.Set(FloorView.Current + (scrollSum < 0f ? 1 : -1));
+            scrollSum = 0f;
         }
     }
 }

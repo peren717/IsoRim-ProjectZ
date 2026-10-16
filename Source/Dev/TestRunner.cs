@@ -43,6 +43,13 @@ namespace ProjectZ.Dev
     //                                   slabstuff: slabs of any stuff (defs, dropdown, colonists building wood, steel,
     //                                   granite and marble slabs, a carpet on them, a stone slab taken up, steel stairs' landing,
     //                                   a collapse) with shots; slabold: a save from before it (-projectzsave=<name>) (TestSlabStuff)
+    //                                   qol1: ground-only buildings, the floor scroll, the floor HUD (dots, clicks, UI scale
+    //                                   1 and 1.5, Alt + drag, reset, hide); run with -projectzfloors=3 (TestQoL1)
+    //                                   drops: drop pods and skyfallers with upper floors (finders, centre drops into a
+    //                                   thin-roofed floor-2 room, never under a slab, a scattered raid onto a platform and
+    //                                   its retreat); run with -projectzmapsize=120 (TestDrops)
+    //                                   thick: thick rock roofs (no slab over, no stairs under them, the roof guard, stairs at
+    //                                   a mountain edge, infestations) (TestThick)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -132,7 +139,7 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick")
             {
                 PatchMouse(h);
             }
@@ -387,6 +394,21 @@ namespace ProjectZ.Dev
                 StepSlabStuff(map);
                 return;
             }
+            if (stage.StartsWith("t_"))
+            {
+                StepThick(map);
+                return;
+            }
+            if (stage.StartsWith("a_"))
+            {
+                StepDrops(map);
+                return;
+            }
+            if (stage.StartsWith("o_"))
+            {
+                StepQoL1(map);
+                return;
+            }
             if (stage.StartsWith("y_"))
             {
                 StepBugs4(map);
@@ -450,6 +472,18 @@ namespace ProjectZ.Dev
                     else if (mode == "slabstuff")
                     {
                         stage = "p_setup";
+                    }
+                    else if (mode == "thick")
+                    {
+                        stage = "t_setup";
+                    }
+                    else if (mode == "drops")
+                    {
+                        stage = "a_setup";
+                    }
+                    else if (mode == "qol1")
+                    {
+                        stage = "o_setup";
                     }
                     else if (mode == "bugs4")
                     {

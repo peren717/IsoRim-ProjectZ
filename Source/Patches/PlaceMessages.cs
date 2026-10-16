@@ -9,12 +9,19 @@ namespace ProjectZ.Patches
     //   - an upper floor on the ground (working on the ground) or on a cell that already has a floor: say what to do;
     //     elsewhere the upper floor's own rules (PlaceWorker_UpperFloor.Check: roof below, stairwell, tall building);
     //   - anything else on open air upstairs: lay a floor first.
+    // Ground-only buildings (GroundOnly, an XML list) anywhere above the ground are refused first, whatever else the game
+    // says about them.
     // Every placement goes through GenConstruct.CanPlaceBlueprintAt_NewTemp (designators, copies, rebuilds, installs).
     [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanPlaceBlueprintAt_NewTemp))]
     public static class CanPlaceBlueprintAt_Messages_Patch
     {
         public static void Postfix(BuildableDef entDef, IntVec3 center, Rot4 rot, Map map, Thing thing, ThingDef stuffDef, ref AcceptanceReport __result)
         {
+            if (entDef != null && map != null && GroundOnly.Is(entDef) && GroundOnly.Upstairs(entDef, center, rot, map))
+            {
+                __result = "PZ_GroundOnly".Translate();
+                return;
+            }
             if (__result.Accepted || entDef == null || map == null || ProjectZ.Annex(map) == null || !IsTerrainRefusal(entDef, stuffDef ?? thing?.Stuff, __result.Reason))
             {
                 return;

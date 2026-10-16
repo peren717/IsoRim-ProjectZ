@@ -176,6 +176,10 @@ namespace ProjectZ
             {
                 return "PZ_NoExitCell".Translate();
             }
+            if (ThickRoof(below, map))
+            {
+                return "PZ_ThickRoof".Translate();
+            }
             if (Stairwell.StairThingAt(below, map))
             {
                 return "PZ_StairwellBelow".Translate();
@@ -187,6 +191,10 @@ namespace ProjectZ
             }
             return AcceptanceReport.WasAccepted;
         }
+
+        // A thick (rock) roof is never replaced by a floor's or a stairwell's roof: no slab over it, no stairs under it
+        // (user decision 2026-10-16; otherwise a mountain roof could be swapped for a thin, collapsible one).
+        public static bool ThickRoof(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false);
 
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();
         private static readonly HashSet<IntVec3> seen = new HashSet<IntVec3>();
@@ -817,7 +825,19 @@ namespace ProjectZ
     {
         public static bool Prefix(Thing t, ref bool __result)
         {
-            if (t == null || !t.Spawned || !SlabDefs.Is(t.def.entityDefToBuild) || ProjectZ.Annex(t.Map) == null)
+            if (t == null || !t.Spawned || ProjectZ.Annex(t.Map) == null)
+            {
+                return true;
+            }
+            // (no slab over, no stairs under a thick roof, also when the rock roof came after the blueprint)
+            if (t.def.entityDefToBuild == PZDefOf.PZ_Stairs && !PlaceWorker_Stairs.ThickRoofCheck(t.Position, t.Rotation, t.Map).Accepted
+                || SlabDefs.Is(t.def.entityDefToBuild) && SlabSupport.ThickRoof(FloorRoof.Below(t.Position, t.Map), t.Map))
+            {
+                JobFailReason.Is("PZ_ThickRoof".Translate());
+                __result = false;
+                return false;
+            }
+            if (!SlabDefs.Is(t.def.entityDefToBuild))
             {
                 return true;
             }

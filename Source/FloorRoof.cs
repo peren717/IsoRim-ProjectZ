@@ -144,12 +144,14 @@ namespace ProjectZ
 
         public static void Prefix(RoofGrid __instance, IntVec3 c, ref RoofDef def)
         {
+            Map map = mapRef(__instance);
+            RoofDef asked = def;
             if (def == PZDefOf.PZ_FloorRoof)
             {
                 FloorHeat.Dirty();
+                KeepThick(__instance, c, asked, ref def);
                 return;
             }
-            Map map = mapRef(__instance);
             if (map == null || ProjectZ.Annex(map) == null)
             {
                 return;
@@ -167,7 +169,27 @@ namespace ProjectZ
             {
                 def = Stairwell.RoofFor(c, map, def);
             }
+            KeepThick(__instance, c, asked, ref def);
         }
+
+        // The one guard for every path that writes a floor's or a stairwell's roof (slab built, stairs built, landing,
+        // load-time Normalize, the rules above): a thick (rock) roof is never replaced by one, nor by what the stairwell
+        // rule makes of one (placement refuses those spots, SlabSupport.ThickRoof; this keeps anything that slips through
+        // from swapping the rock roof).
+        private static void KeepThick(RoofGrid grid, IntVec3 c, RoofDef asked, ref RoofDef def)
+        {
+            if (!IsOurs(asked) && !IsOurs(def))
+            {
+                return;
+            }
+            RoofDef cur = grid.RoofAt(c);
+            if (cur != null && cur.isThickRoof)
+            {
+                def = cur;
+            }
+        }
+
+        private static bool IsOurs(RoofDef d) => d != null && (d == PZDefOf.PZ_FloorRoof || d == PZDefOf.PZ_StairwellRoof);
 
         // A roof changed under open air: where pawns can land from above changed (JumpGrid, reachability).
         public static void Postfix(RoofGrid __instance, IntVec3 c)

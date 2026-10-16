@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Buildings that can only be built on the ground, never on an upper floor ("Must be built on the ground").
+       Other mods: add your own ProjectZ.GroundOnlyDef (any defName) with <things> and/or <terrains>, or patch this one.
+       Things that need gravship substructure follow by themselves: there is no substructure upstairs. -->
+  <ProjectZ.GroundOnlyDef>
+    <defName>PZ_GroundOnly</defName>
+    <things>
+      <li>DeepDrill</li>
+      <li>GroundPenetratingScanner</li>
+      <li>MoisturePump</li>
+      <li>Grave</li>
+    </things>
+    <terrains>
+      <li>Bridge</li>
+      <li MayRequire="Ludeon.RimWorld.Odyssey">HeavyBridge</li>
+      <li MayRequire="Ludeon.RimWorld.Odyssey">Substructure</li>
+    </terrains>
+  </ProjectZ.GroundOnlyDef>
+
+</Defs>

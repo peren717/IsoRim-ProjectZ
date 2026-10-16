@@ -2,4 +2,5 @@
 <LanguageData>
   <PZ_FloorUp.label>上一层</PZ_FloorUp.label>
   <PZ_FloorDown.label>下一层</PZ_FloorDown.label>
+  <PZ_FloorScrollHold.label>滚轮切换楼层：按住键</PZ_FloorScrollHold.label>
 </LanguageData>

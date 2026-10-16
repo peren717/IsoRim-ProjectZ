@@ -5,19 +5,30 @@ using Verse;
 
 namespace ProjectZ.Patches
 {
-    // D9: drop pods, skyfallers and raids never land in the annex. (Hostiles may later walk up stairs; that is M1b.)
+    // D9 (what is left of it): exit cells, the map edge and regions touching it, and the 2D camera stay on the ground.
 
-    [HarmonyPatch(typeof(DropCellFinder), nameof(DropCellFinder.IsGoodDropSpot))]
-    public static class DropCellFinder_IsGoodDropSpot_Patch
+    // Drop pods and skyfallers (user decision 2026-10-16, replaces D9's "never in the annex"): upper floors count like
+    // the ground. A pod may come down on a walkable floor cell and punch a normal thin roof over an upper room, as on the
+    // ground; it never comes down off the floors (void rows, open air) and never through a roof that never drops (a
+    // floor's PZ_FloorRoof or the stairwell's, FloorRoof.Kept): no pod lands under a slab or falls from floor 2 into
+    // floor 1. Those roofs stay thin otherwise (they collapse with their support). One rule, DropRules.Blocked, at the
+    // game's own drop checks: CanPhysicallyDropInto (every drop finder and IsGoodDropSpot go through it) and
+    // SkyfallerCanLandAt (shuttles and other big skyfallers). The roof-punch itself already skips kept roofs
+    // (FloorRoof.cs, DropRoofCells_Patch).
+    public static class DropRules
     {
-        public static bool Prefix(IntVec3 c, Map map, ref bool __result)
+        public static bool Blocked(IntVec3 c, Map map)
         {
-            if (ProjectZ.IsAnnex(c, map))
+            if (ProjectZ.Annex(map) == null || !c.InBounds(map))
             {
-                __result = false;
                 return false;
             }
-            return true;
+            int k = ProjectZ.FloorOf(c, map);
+            if (k < 0 || k >= 1 && !ProjectZ.HasFloor(c, map))
+            {
+                return true;
+            }
+            return FloorRoof.Kept(c, map);
         }
     }
 
@@ -26,7 +37,7 @@ namespace ProjectZ.Patches
     {
         public static bool Prefix(IntVec3 c, Map map, ref bool __result)
         {
-            if (ProjectZ.IsAnnex(c, map))
+            if (DropRules.Blocked(c, map))
             {
                 __result = false;
                 return false;
@@ -40,25 +51,64 @@ namespace ProjectZ.Patches
     {
         public static bool Prefix(IntVec3 c, Map map, IntVec2 size, ref bool __result)
         {
-            AnnexMapComponent a = ProjectZ.Annex(map);
-            if (a != null && GenAdj.OccupiedRect(c, Rot4.North, size).maxZ >= a.groundZ)
+            if (ProjectZ.Annex(map) == null)
             {
-                __result = false;
-                return false;
+                return true;
+            }
+            foreach (IntVec3 x in GenAdj.OccupiedRect(c, Rot4.North, size))
+            {
+                if (DropRules.Blocked(x, map))
+                {
+                    __result = false;
+                    return false;
+                }
             }
             return true;
         }
     }
 
-    // Its last resort is map.AllCells.RandomElement().
+    // Scattered drops (RandomDrop raids, random drop spots) pick any cell of the map like the ground does: the game's
+    // random-cell finder is kept on the ground (M1a), so on maps with floors the spot is drawn over every floor's cells
+    // (uniform, so a floor gets pods by its walkable open area) with the game's own conditions.
+    [HarmonyPatch(typeof(DropCellFinder), nameof(DropCellFinder.RandomDropSpot))]
+    public static class DropCellFinder_RandomDropSpot_Patch
+    {
+        public static bool Prefix(Map map, bool standableOnly, ref IntVec3 __result)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (a == null)
+            {
+                return true;
+            }
+            foreach (bool roofOk in new[] { false, true })
+            {
+                for (int i = 0; i < 3000; i++)
+                {
+                    IntVec3 g = new IntVec3(Rand.Range(0, map.Size.x), 0, Rand.Range(0, a.groundZ));
+                    IntVec3 c = ProjectZ.CellOnFloor(g, Rand.Range(0, a.floors), map);
+                    if (c.IsValid && !DropRules.Blocked(c, map) && (!standableOnly || c.Standable(map)) && !c.GetTerrain(map).IsWater && (roofOk || !c.Roofed(map)) && !c.Fogged(map))
+                    {
+                        __result = c;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+    // Its last resort is map.AllCells.RandomElement(), which can be off the floors.
     [HarmonyPatch(typeof(DropCellFinder), nameof(DropCellFinder.FindRaidDropCenterDistant))]
     public static class DropCellFinder_FindRaidDropCenterDistant_Patch
     {
         public static void Postfix(Map map, ref IntVec3 __result)
         {
-            if (ProjectZ.IsAnnex(__result, map))
+            if (DropRules.Blocked(__result, map))
             {
-                __result = CellFinder.RandomCell(map);
+                for (int i = 0; i < 100 && DropRules.Blocked(__result, map); i++)
+                {
+                    __result = CellFinder.RandomCell(map);
+                }
             }
         }
     }

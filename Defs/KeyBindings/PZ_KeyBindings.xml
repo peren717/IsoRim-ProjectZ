@@ -21,4 +21,11 @@
     <defaultKeyCodeA>Minus</defaultKeyCodeA>
   </KeyBindingDef>
 
+  <KeyBindingDef>
+    <defName>PZ_FloorScrollHold</defName>
+    <label>floor scroll: hold key</label>
+    <category>ProjectZ</category>
+    <defaultKeyCodeA>LeftShift</defaultKeyCodeA>
+  </KeyBindingDef>
+
 </Defs>
