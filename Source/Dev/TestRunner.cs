@@ -50,6 +50,9 @@ namespace ProjectZ.Dev
     //                                   its retreat); run with -projectzmapsize=120 (TestDrops)
     //                                   thick: thick rock roofs (no slab over, no stairs under them, the roof guard, stairs at
     //                                   a mountain edge, infestations) (TestThick)
+    //                                   space: the orbital relay map of the gravship start (Odyssey): stairs, landing, upper
+    //                                   floors, walking up, taking a slab up, vacuum under the floors; -projectzspacefloors
+    //                                   applies IsoRim's proposed space-map fix at run time (TestSpace)
     //   -projectzfloors=N   floors for maps generated in this run (overrides the setting)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -139,9 +142,13 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space")
             {
                 PatchMouse(h);
+            }
+            if (GenCommandLine.CommandLineArgPassed("projectzspacefloors"))
+            {
+                PatchIsoRimSpaceFloors(h);
             }
             h.Patch(AccessTools.Method(typeof(Frame), nameof(Frame.FailConstruction)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(BotchPrefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))
@@ -414,6 +421,11 @@ namespace ProjectZ.Dev
                 StepBugs4(map);
                 return;
             }
+            if (stage.StartsWith("e_"))
+            {
+                StepSpace(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -488,6 +500,10 @@ namespace ProjectZ.Dev
                     else if (mode == "bugs4")
                     {
                         stage = "y_setup";
+                    }
+                    else if (mode == "space")
+                    {
+                        stage = "e_setup";
                     }
                     else if (mode == "light")
                     {
