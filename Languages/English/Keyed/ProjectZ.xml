@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
-  <PZ_Floors>Floors: {0}</PZ_Floors>
-  <PZ_FloorsTip>Storeys including the ground. Applies to new maps only.</PZ_FloorsTip>
+  <PZ_Floors>Default floors for new worlds: {0}</PZ_Floors>
+  <PZ_FloorsTip>Storeys including the ground. The starting value on the Create World page. Doesn't change games already started.</PZ_FloorsTip>
+  <PZ_WorldFloors>Floors</PZ_WorldFloors>
+  <PZ_WorldFloorsTip>Storeys including the ground, for every map in this game. Can't be changed later.</PZ_WorldFloorsTip>
   <PZ_FloorsWarn3>Untested heights. Bring a parachute.</PZ_FloorsWarn3>
   <PZ_FloorsWarn6>Your colonists are drafting a petition for elevators.</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>Your PC is now a space heater.</PZ_FloorsWarn10>

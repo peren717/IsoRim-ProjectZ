@@ -15,16 +15,18 @@
     <Optimize>true</Optimize>
     <!-- IsoRim with the floor API (branch projectz-api until merged): override with -p:IsoRimDll=... -->
     <IsoRimDll Condition="'$(IsoRimDll)' == ''">..\..\IsoRimModelsWT\1.7\Assemblies\IsoRim.dll</IsoRimDll>
+    <!-- The game folder (default: this repo sits in its Mods folder); override with -p:RimDir=... for a worktree elsewhere. -->
+    <RimDir Condition="'$(RimDir)' == ''">..\..\..</RimDir>
     <DefineConstants>$(DefineConstants);RW17</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="obj\**;bin\**" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="Assembly-CSharp"><HintPath>..\..\..\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="UnityStubs"><HintPath>..\..\..\UnityStubs.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(RimDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityStubs"><HintPath>$(RimDir)\UnityStubs.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="IsoRim"><HintPath>$(IsoRimDll)</HintPath><Private>false</Private></Reference>
-    <Reference Include="Waylith"><HintPath>..\..\..\Waylith.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>..\..\..\..\..\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Waylith"><HintPath>$(RimDir)\Waylith.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(RimDir)\..\..\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

@@ -26,11 +26,20 @@ namespace ProjectZ
     // stride = H = groundZ + 1 rounded up to a multiple of 17 (Section.Size), so annex sections line up 1:1 with
     // ground sections and there is always at least one void row between bands. Rows [k*stride + groundZ, (k+1)*stride)
     // are the gap ("void") and never hold a floor. Width is unchanged, so ground cell indices are unchanged.
+    //
+    // Layout invariant (layoutVersion 1), kept for a possible grow-on-load (isorim-pz-floors-on-demand.md):
+    //  - bands are only ever appended at the top (floor N = rows [N*stride, N*stride + groundZ)); nothing is ever
+    //    inserted below or between, so no existing cell index ever moves;
+    //  - groundZ and stride are fixed per map once generated (StrideFor is only called at generation).
+    // Bump layoutVersion if a future change breaks either rule, and migrate older saves explicitly.
     public class AnnexMapComponent : MapComponent
     {
+        public const int CurrentLayoutVersion = 1;
+
         public int groundZ;   // ground rows
         public int stride;    // H
         public int floors = 1; // total storeys including the ground
+        public int layoutVersion = CurrentLayoutVersion; // saves without it are version 1
 
         public AnnexMapComponent(Map map) : base(map)
         {
@@ -52,6 +61,7 @@ namespace ProjectZ
             Scribe_Values.Look(ref groundZ, "groundZ", 0);
             Scribe_Values.Look(ref stride, "stride", 0);
             Scribe_Values.Look(ref floors, "floors", 1);
+            Scribe_Values.Look(ref layoutVersion, "layoutVersion", 1, forceSave: true);
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
                 ProjectZ.Invalidate();
@@ -92,17 +102,8 @@ namespace ProjectZ
             cache = null;
         }
 
-        public static int FloorsForNewMaps
-        {
-            get
-            {
-                if (Dev.TestRunner.FloorsOverride > 0)
-                {
-                    return Dev.TestRunner.FloorsOverride;
-                }
-                return ProjectZMod.Settings == null ? 1 : UnityEngine.Mathf.Clamp(ProjectZMod.Settings.floors, 1, ProjectZSettings.MaxFloors);
-            }
-        }
+        // Floors for a map generated now: the current game's, fixed when its world was created (WorldFloors.cs).
+        public static int FloorsForNewMaps => WorldFloors.ForThisGame;
 
         public static bool DebugOn => ProjectZMod.Settings != null && ProjectZMod.Settings.debug || Dev.TestRunner.Active;
 

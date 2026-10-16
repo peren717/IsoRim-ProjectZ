@@ -60,7 +60,10 @@ namespace ProjectZ.Dev
     //                                   range: weapon range across floors (3D distance + 1 per floor down): shotguns vs
     //                                   floors 13, 2 and 5, a sniper on floor 5, a turret on floor 2, a raider walking in,
     //                                   a mortar, and the range preview shots; run with -projectzfloors=13 (TestRange)
-    //   -projectzfloors=N  floors for maps generated in this run (overrides the setting)
+    //                                   worldfloors: floors fixed per game (Create World page row, a second settled map,
+    //                                   setting changed mid-game, save/reload, old-save migrations); run mode plain
+    //                                   first; no -projectzfloors (TestWorldFloors)
+    //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
@@ -144,6 +147,11 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
+            if (mode == "worldfloors")
+            {
+                FloorsOverride = 0;
+                h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WorldFloorsSetupPrefix)));
+            }
             // Driven from the game loop without a GameComponent (nothing test-only goes into saves).
             h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)));
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
@@ -448,11 +456,16 @@ namespace ProjectZ.Dev
                 StepRange(map);
                 return;
             }
+            if (stage.StartsWith("f_"))
+            {
+                StepWorldFloors(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "slabold" ? "p_oldload" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -461,6 +474,8 @@ namespace ProjectZ.Dev
                     AnnexMapComponent comp = map.GetComponent<AnnexMapComponent>();
                     Result("plain map has no annex", !ProjectZ.HasAnnex(map) && comp != null && comp.floors <= 1, $"size {map.Size}");
                     map.components.Remove(comp);
+                    // and no per-game floors either (WorldFloorsComponent): migrated to 1 when loaded
+                    Find.World.components.Remove(WorldFloors.Comp);
                     ProjectZ.Invalidate();
                     StartTicks(600, "plain_save2");
                     break;

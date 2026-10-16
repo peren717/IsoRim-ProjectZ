@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
-  <PZ_Floors>楼层数：{0}</PZ_Floors>
-  <PZ_FloorsTip>包括地面在内的层数。只对新地图生效。</PZ_FloorsTip>
+  <PZ_Floors>新世界默认楼层数：{0}</PZ_Floors>
+  <PZ_FloorsTip>包括地面在内的层数。创建世界页面上的初始值，不影响已开始的游戏。</PZ_FloorsTip>
+  <PZ_WorldFloors>楼层数</PZ_WorldFloors>
+  <PZ_WorldFloorsTip>包括地面在内的层数，用于本局所有地图。之后无法更改。</PZ_WorldFloorsTip>
   <PZ_FloorsWarn3>未经测试的高度，记得带降落伞。</PZ_FloorsWarn3>
   <PZ_FloorsWarn6>小人们正在联名请愿要电梯。</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>你的电脑现在是一台取暖器。</PZ_FloorsWarn10>
