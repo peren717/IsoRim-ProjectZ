@@ -6,7 +6,7 @@ namespace ProjectZ
 {
     public class ProjectZSettings : ModSettings
     {
-        public const int MaxFloors = 5;
+        public const int MaxFloors = 13;
 
         // Total storeys including the ground (user decision D1: default 2, at most 5). Read when a map is generated.
         public int floors = 2;
@@ -51,12 +51,48 @@ namespace ProjectZ
 
         public override string SettingsCategory() => "IsoRim ProjectZ";
 
+        // Above two storeys a warning under the slider, yellow then red: every storey is another whole map of cells, and
+        // more than 5 are untested.
+        private static void FloorsWarning(Listing_Standard list, int floors)
+        {
+            string key;
+            Color color;
+            if (floors >= 13)
+            {
+                key = "PZ_FloorsWarn13";
+                color = ColorLibrary.RedReadable;
+            }
+            else if (floors >= 10)
+            {
+                key = "PZ_FloorsWarn10";
+                color = ColorLibrary.RedReadable;
+            }
+            else if (floors >= 6)
+            {
+                key = "PZ_FloorsWarn6";
+                color = new Color(1f, 0.75f, 0.2f);
+            }
+            else if (floors >= 3)
+            {
+                key = "PZ_FloorsWarn3";
+                color = new Color(1f, 0.92f, 0.45f);
+            }
+            else
+            {
+                return;
+            }
+            GUI.color = color;
+            list.Label(key.Translate());
+            GUI.color = Color.white;
+        }
+
         public override void DoSettingsWindowContents(Rect inRect)
         {
             Listing_Standard list = new Listing_Standard();
             list.Begin(inRect);
             list.Label("PZ_Floors".Translate(Settings.floors), tooltip: "PZ_FloorsTip".Translate());
             Settings.floors = Mathf.RoundToInt(list.Slider(Settings.floors, 1f, ProjectZSettings.MaxFloors));
+            FloorsWarning(list, Settings.floors);
             list.Gap();
             list.Label("PZ_HeightAccuracy".Translate(Settings.heightAccuracy.ToStringPercent()), tooltip: "PZ_HeightAccuracyTip".Translate());
             Settings.heightAccuracy = UnityEngine.Mathf.Round(list.Slider(Settings.heightAccuracy, 0f, 0.5f) * 20f) / 20f;
