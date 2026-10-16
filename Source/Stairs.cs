@@ -209,8 +209,9 @@ namespace ProjectZ
         }
 
         // The stairs go: so does the landing they laid (nothing comes back for it, it came with them), unless something
-        // has been built on it since (then it stays a floor like any other, held up or not by what is left). The roof
-        // they brought under it goes too unless something else holds it now.
+        // has been built on it since (then it stays a floor like any other, held up or not by what is left). A floor laid
+        // on it (carpet, wood) comes back as from the game's floor removal (on this floor, else the floor below: the
+        // landing's own move-off). The roof they brought under it goes too unless something else holds it now.
         private void TakeLanding(Map map)
         {
             IntVec3 top = TopCell;
@@ -227,6 +228,11 @@ namespace ProjectZ
                 }
             }
             landingLaid = false;
+            TerrainDef covering = map.terrainGrid.TopTerrainAt(top);
+            if (covering != PZDefOf.PZ_UpperFloor)
+            {
+                GenLeaving.DoLeavingsFor(covering, top, map);
+            }
             Slab.Remove(top, map, doLeavings: false, cause: this);
             IntVec3 below = FloorRoof.Below(top, map);
             if (landingRoofLaid && below.IsValid && map.roofGrid.Roofed(below) && !SlabSupport.Supported(below, map, ignore: this))

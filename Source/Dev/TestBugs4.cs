@@ -187,6 +187,11 @@ namespace ProjectZ.Dev
                     IntVec3 below = FloorRoof.Below(yL1, map);
                     int cloth = map.listerThings.ThingsOfDef(ThingDefOf.Cloth).Sum(t => t.stackCount);
                     Info($"REPORT stairs with a carpeted landing deconstructed after {ticksTotal} ticks: landing {yL1} now {yL1.GetTerrain(map).defName} (under {map.terrainGrid.UnderTerrainAt(yL1)?.defName ?? "-"}), roof under it {map.roofGrid.RoofAt(below)?.defName ?? "none"}; cloth on the map {yClothBefore2} -> {cloth} (ground {yClothBefore0} -> {CountOn(map, ThingDefOf.Cloth, 0)}, floor 2 {yClothBefore1} -> {CountOn(map, ThingDefOf.Cloth, 1)})");
+                    int refund = cloth - yClothBefore2;
+                    int down = CountOn(map, ThingDefOf.Cloth, 0) - yClothBefore0;
+                    Result("deconstructed: the landing goes, the carpet's cloth comes back (nearest floor cell on this floor, else the floor below)",
+                        yL1.GetTerrain(map) == PZDefOf.PZ_OpenAir && refund > 0 && !OnOpenAir(map),
+                        $"landing {yL1.GetTerrain(map).defName}; cloth +{refund} (ground +{down}, floor 2 {CountOn(map, ThingDefOf.Cloth, 1) - yClothBefore1}); carpet cost {yCarpet.CostList?.FirstOrDefault()?.count}; at {string.Join(",", map.listerThings.ThingsOfDef(ThingDefOf.Cloth).Where(t => ProjectZ.FloorOf(t.Position, map) == 1).Select(t => t.Position + " " + t.Position.GetTerrain(map).defName))}");
                     Result("deconstructed: the stairs are gone, nobody and nothing left on open air", !yS1.Spawned && !OnOpenAir(map), $"spawned {yS1.Spawned}");
                     ShotAt(map, 1, yT1, 6f);
                     Wait(40, "y_gone_shot");
