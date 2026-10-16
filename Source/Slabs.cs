@@ -176,9 +176,10 @@ namespace ProjectZ
             {
                 return "PZ_NoExitCell".Translate();
             }
-            if (ThickRoof(below, map))
+            string blocked = ColumnBlocked(below, map);
+            if (blocked != null)
             {
-                return "PZ_ThickRoof".Translate();
+                return blocked.Translate();
             }
             if (Stairwell.StairThingAt(below, map))
             {
@@ -195,6 +196,20 @@ namespace ProjectZ
         // A thick (rock) roof is never replaced by a floor's or a stairwell's roof: no slab over it, no stairs under it
         // (user decision 2026-10-16; otherwise a mountain roof could be swapped for a thin, collapsible one).
         public static bool ThickRoof(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false);
+
+        // No upper floor over a gravship, no stairs on one (user decision 2026-10-16): a launch takes only the ground floor
+        // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.)
+        public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.terrainGrid.FoundationAt(c)?.IsSubstructure ?? false);
+
+        // Thick roof or gravship under a cell: the reason no floor or stairs may use it, or null.
+        public static string ColumnBlocked(IntVec3 c, Map map)
+        {
+            if (ThickRoof(c, map))
+            {
+                return "PZ_ThickRoof";
+            }
+            return Gravship(c, map) ? "PZ_OverGravship" : null;
+        }
 
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();
         private static readonly HashSet<IntVec3> seen = new HashSet<IntVec3>();
@@ -829,11 +844,21 @@ namespace ProjectZ
             {
                 return true;
             }
-            // (no slab over, no stairs under a thick roof, also when the rock roof came after the blueprint)
-            if (t.def.entityDefToBuild == PZDefOf.PZ_Stairs && !PlaceWorker_Stairs.ThickRoofCheck(t.Position, t.Rotation, t.Map).Accepted
-                || SlabDefs.Is(t.def.entityDefToBuild) && SlabSupport.ThickRoof(FloorRoof.Below(t.Position, t.Map), t.Map))
+            // (no slab over, no stairs under a thick roof or on a gravship, also when that came after the blueprint)
+            string column = null;
+            if (t.def.entityDefToBuild == PZDefOf.PZ_Stairs)
             {
-                JobFailReason.Is("PZ_ThickRoof".Translate());
+                AcceptanceReport r = PlaceWorker_Stairs.ThickRoofCheck(t.Position, t.Rotation, t.Map);
+                column = r.Accepted ? null : r.Reason;
+            }
+            else if (SlabDefs.Is(t.def.entityDefToBuild))
+            {
+                string key = SlabSupport.ColumnBlocked(FloorRoof.Below(t.Position, t.Map), t.Map);
+                column = key?.Translate();
+            }
+            if (column != null)
+            {
+                JobFailReason.Is(column);
                 __result = false;
                 return false;
             }

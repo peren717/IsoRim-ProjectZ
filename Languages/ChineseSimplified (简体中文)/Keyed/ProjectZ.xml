@@ -10,6 +10,7 @@
   <PZ_ResetFloorHud>重置楼层面板位置</PZ_ResetFloorHud>
   <PZ_GroundOnly>必须建在地面上</PZ_GroundOnly>
   <PZ_ThickRoof>不能建在厚岩顶下</PZ_ThickRoof>
+  <PZ_OverGravship>飞船上方不能建楼层</PZ_OverGravship>
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>

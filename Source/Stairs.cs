@@ -450,20 +450,26 @@ namespace ProjectZ
         }
 
         // No stairs where the stairwell (the footprint, whose roof becomes the stairwell's), the landing or the cell under
-        // the landing has a thick roof (SlabSupport.ThickRoof). Placement and construction both ask.
+        // the landing has a thick roof (SlabSupport.ThickRoof), and none on a gravship or with its landing over one
+        // (SlabSupport.Gravship). Placement and construction both ask.
         public static AcceptanceReport ThickRoofCheck(IntVec3 loc, Rot4 rot, Map map)
         {
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
-                if (SlabSupport.ThickRoof(c, map))
+                string blocked = SlabSupport.ColumnBlocked(c, map);
+                if (blocked != null)
                 {
-                    return "PZ_ThickRoof".Translate();
+                    return blocked.Translate();
                 }
             }
             IntVec3 top = StairShape.Exit(loc, rot, map);
-            if (top.IsValid && (SlabSupport.ThickRoof(top, map) || SlabSupport.ThickRoof(FloorRoof.Below(top, map), map)))
+            if (top.IsValid)
             {
-                return "PZ_ThickRoof".Translate();
+                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.ColumnBlocked(FloorRoof.Below(top, map), map);
+                if (blocked != null)
+                {
+                    return blocked.Translate();
+                }
             }
             return AcceptanceReport.WasAccepted;
         }
