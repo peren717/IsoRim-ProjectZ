@@ -93,14 +93,18 @@ namespace ProjectZ.Dev
     //                                   north edge); -projectzfloors=3 (TestStrikes)
     //                                   shipdeck: the ship upper deck (multi-level gravships P1: refusals, colonists building
     //                                   decks on floors 2 and 3, ship parts and a carpet on them, removal top-down, support,
-    //                                   save/reload, the launch refused with decks, a real launch without them); -projectzfloors=3,
+    //                                   save/reload, the launch allowed with decks (P4), a real launch without them); -projectzfloors=3,
     //                                   Odyssey (TestShipDeck)
     //                                   void, voidfire, voidsave, voidload, voidperf, crush: the void barrier and slabs broken
     //                                   by heavy hits crushing what is below (TestVoid; -projectznovoidrule: without the rule)
     //                                   shipset: the 3D ship set (multi-level gravships P2: ground + decks counted, the limit
     //                                   cutting the top floor first, the 3D footprint sphere, an extender built on a deck,
-    //                                   thrusters on decks, the engine installed on a deck, the launch refused until P4);
+    //                                   thrusters on decks, the engine installed on a deck, the launch allowed since P4);
     //                                   -projectzfloors=3, Odyssey (TestShipSet; -projectznoshipset: the flat P1 set)
+    //                                   shipfly: a 3-storey gravship flies (multi-level gravships P4: launched for real with
+    //                                   colonists, a sleeper, items, a lamp on a riser and rooms upstairs, saved and reloaded
+    //                                   in flight, landed turned on a new map and back home with the grav anchor; landing
+    //                                   refusals for the column); -projectzfloors=4, Odyssey (TestShipFly)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -527,6 +531,11 @@ namespace ProjectZ.Dev
                 StepShipSet(map);
                 return;
             }
+            if (stage.StartsWith("sf_"))
+            {
+                StepShipFly(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -686,6 +695,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipset")
                     {
                         stage = "ss_setup";
+                    }
+                    else if (mode == "shipfly")
+                    {
+                        stage = "sf_setup";
                     }
                     else if (mode == "skydrop")
                     {

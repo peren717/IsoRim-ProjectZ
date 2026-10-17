@@ -46,5 +46,7 @@
   <PZ_DeckAboveFirst>Remove the deck above first</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>Waiting for the deck below</PZ_DeckBelowFirst>
   <PZ_OverGravshipUseDeck>Can't build an upper floor over a gravship: use the ship upper deck</PZ_OverGravshipUseDeck>
-  <PZ_ShipUpperCantFly>Upper ship decks can't fly yet: remove them first</PZ_ShipUpperCantFly>
+  <PZ_ShipUpperCantFly>Upper ship decks can't fly: a gravship patch failed (see the log)</PZ_ShipUpperCantFly>
+  <PZ_ShipNotEnoughFloors>Not enough floors here for the ship's decks</PZ_ShipNotEnoughFloors>
+  <PZ_ShipFloorAbove>Blocked by an upper floor above</PZ_ShipFloorAbove>
 </LanguageData>

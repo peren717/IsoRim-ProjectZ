@@ -28,9 +28,9 @@ namespace ProjectZ.Dev
     //      that wall; a second pad with its wall stays, and the ship's decks (held by its hull) stay; then 20000 ticks;
     //   D6 removal top-down: a floor-3 deck, then the floor-2 deck under it with a drafted colonist and steel on it (moved
     //      off), the roof below an ordinary roof again;
-    //   D7 launch: since P2 the decks are ship cells (the colonist on one is aboard) and the launch is refused until upper
-    //      floors fly (P4); with the ship's decks taken away a real launch: the pad's decks stay (their substructure
-    //      stays); the ship lands on the ground elsewhere.
+    //   D7 launch: since P2 the decks are ship cells (the colonist on one is aboard) and since P4 the console allows
+    //      the launch (shipfly flies decks); with the ship's decks taken away a real launch: the pad's decks stay (their
+    //      substructure stays); the ship lands on the ground elsewhere.
     public static partial class TestRunner
     {
         private static IntVec3 sdO, sdStairsA, sdStairsB, sdPadWall, sdPadBWall, sdControl, sdRm, sdOnDeck;
@@ -381,11 +381,11 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn walker = ById(map, sdLauncher);
                     Result("D7 a colonist walked up the ordinary stairs onto a deck", walker?.Position == sdOnDeck, $"{walker?.Position}");
-                    // P2: the decks are ship cells now; until upper floors fly (P4) the launch is refused
+                    // P2: the decks are ship cells now; since P4 the launch is allowed (shipfly flies them)
                     Building_GravEngine e = GlEngine(map);
                     Result("D7 (P2) the decks are part of the ship", e.ValidSubstructure.Count == sdGround + DecksOnMap(map) - sdPadB.Area, $"valid {e.ValidSubstructure.Count}, ground {sdGround}, decks {DecksOnMap(map)} (pad B {sdPadB.Area})");
                     Result("D7 (P2) the colonist on a deck is aboard", walker != null && e.ValidSubstructureAt(walker.Position), "");
-                    SsLaunchRefused(map, e, "D7 (P2)");
+                    SsLaunchAllowed(map, e, "D7 (P4)");
                     GlShot(1, SD(1, 5), 12f, "sd_3_before_launch_f2");
                     GlRun("sd_launch_go");
                     return;

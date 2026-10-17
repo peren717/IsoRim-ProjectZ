@@ -16,15 +16,15 @@ namespace ProjectZ.Dev
     //      first (ground and floor 2 complete); the footprint is a sphere (the strip's end column: ground and floor 2 in
     //      range, floor 3 not); the ground-projection sites (capture bounds, engineToCenter, indoor masks) are patched;
     //   S2 aboard: a colonist on a floor-2 deck counts as aboard, one on a floor-3 deck past the limit as left behind
-    //      (the launch dialog's lists); the launch is refused with decks until P4 (the console says why, the take-off
-    //      never starts);
+    //      (the launch dialog's lists); since P4 the console allows the launch with decks (the picker opens, closed
+    //      again; shipfly flies such a ship);
     //   S3 colonists build a grav field extender on a floor-2 deck: it links (3D distance), the limit is 750, every deck
     //      is in, the strip's floor-3 end is inside the extender's sphere; a thruster and the pilot console on decks link and
     //      are active; a floor-3 thruster exhausting over open air is free (its zone stays on its floor), a floor-2
     //      thruster exhausting over a deck is blocked;
     //   S4 a colonist deconstructs the extender: the limit is 500 again and the same top-floor cells drop out;
     //   S5 colonists uninstall the engine and install it on a floor-2 deck (real jobs, carried up the stairs): the ship is
-    //      found from the deck (ground + decks), its own columns aboard, the console links to it; the launch is refused.
+    //      found from the deck (ground + decks), its own columns aboard, the console links to it; the launch is allowed.
     public static partial class TestRunner
     {
         private static IntVec3 ssO, ssEngineUp;
@@ -49,18 +49,18 @@ namespace ProjectZ.Dev
         private static string SsFloors(IEnumerable<IntVec3> cells, Map map) =>
             $"ground {SsOnFloor(cells, 0, map)}, f2 {SsOnFloor(cells, 1, map)}, f3 {SsOnFloor(cells, 2, map)}";
 
-        // The launch with upper cells in the ship: refused by the console (with the reason) and by the take-off.
-        private static void SsLaunchRefused(Map map, Building_GravEngine e, string label)
+        // The launch with upper cells in the ship (P4: they fly): the console allows it and the destination picker opens
+        // (closed again here, no take-off; shipfly flies such a ship).
+        private static void SsLaunchAllowed(Map map, Building_GravEngine e, string label)
         {
             CompPilotConsole console = SsConsole(map, e);
             if (console == null)
             {
-                Result(label + " launch refused", false, "no console");
+                Result(label + " launch allowed", false, "no console");
                 return;
             }
             AcceptanceReport r = console.CanUseNow();
-            string want = "PZ_ShipUpperCantFly".Translate();
-            Result(label + " the console refuses the launch", !r.Accepted && r.Reason == want, r.Accepted ? "accepted" : r.Reason);
+            Result(label + " the console allows the launch (P4)", r.Accepted && ShipLocal.Ready, r.Accepted ? "accepted" : r.Reason);
             if (e.cooldownCompleteTick > Find.TickManager.TicksGame)
             {
                 e.cooldownCompleteTick = Find.TickManager.TicksGame;
@@ -71,9 +71,7 @@ namespace ProjectZ.Dev
             {
                 HarmonyLib.AccessTools.Method(typeof(TilePicker), "StopTargetingInt").Invoke(Find.TilePicker, null);
             }
-            Find.GravshipController.InitiateTakeoff(e, map.Tile);
-            bool cut = WorldComponent_GravshipController.CutsceneInProgress;
-            Result(label + " no destination picking, no take-off", !picker && !cut && e.Spawned, $"picker {picker}, cutscene {cut}");
+            Result(label + " the destination picker opens", picker && !WorldComponent_GravshipController.CutsceneInProgress && e.Spawned, $"picker {picker}");
         }
 
         // The launch dialog's text (the game's PreLaunchConfirmation), closed without launching.
@@ -143,7 +141,7 @@ namespace ProjectZ.Dev
                     Result("S2 the colonist on a floor-2 deck is aboard", up != null && e.ValidSubstructureAt(up.Position) && !list.Contains(up.LabelShort), "");
                     Result("S2 the colonist on a floor-3 deck past the limit is left behind", left != null && !e.ValidSubstructureAt(left.Position) && list.Contains(left.LabelShort), list.Replace("\n", " | "));
                     Result("S2 the launch dialog warns of disconnected substructure", text.Contains("DisconnectedSubstructure".Translate().Resolve()), "");
-                    SsLaunchRefused(map, e, "S2");
+                    SsLaunchAllowed(map, e, "S2");
                     foreach (Pawn p in new[] { up, left })
                     {
                         if (p != null)
@@ -322,7 +320,7 @@ namespace ProjectZ.Dev
                     Result("S5 the engine's own columns are aboard; ground and floor 2 complete under the limit", own && valid.Count == 500 && SsOnFloor(valid, 0, map) == ssGround && SsOnFloor(valid, 1, map) == ssF2.Count, $"own {own}, valid {valid.Count}: {SsFloors(valid, map)}");
                     CompPilotConsole c = SsConsole(map, e);
                     Result("S5 the ground console links to the engine upstairs and is active", c != null && c.engine == e && c.CanBeActive, $"engine {c?.engine?.Position}, active {c?.CanBeActive}");
-                    SsLaunchRefused(map, e, "S5");
+                    SsLaunchAllowed(map, e, "S5");
                     GlShot(1, SS(10, 4), 10f, "ss_2_engine_f2");
                     GlRun("ss_end");
                     return;

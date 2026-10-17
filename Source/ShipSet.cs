@@ -25,7 +25,7 @@ namespace ProjectZ
     //     (GravshipCapturer.BeginGravshipRender), Gravship.engineToCenter and the two indoor-mask bakes of the take-off and
     //     landing cutscenes (WorldComponent_GravshipController).
     //   - A thruster's exhaust zone stays on the thruster's floor (map-cell callers only: IsBlocked and the placing ghost).
-    //   - Until upper floors can fly (P4), a ship with upper cells in its set can't launch (the console says why).
+    //   - Upper floors fly with the ship since P4 (ShipLocal.cs, ShipLanding.cs).
     // Maps without floors, and ships without decks, behave exactly as vanilla.
     public static class ShipSet
     {
@@ -182,12 +182,6 @@ namespace ProjectZ
         {
             AnnexMapComponent an = ProjectZ.Annex(engine.MapHeld);
             return an == null || !engine.Spawned ? 0 : engine.ValidSubstructure.Count(c => c.z >= an.groundZ);
-        }
-
-        // Why this ship can't launch yet (P4 will fly upper floors), or null.
-        public static string LaunchBlocker(Building_GravEngine engine)
-        {
-            return engine != null && engine.Spawned && Upper(engine) > 0 ? "PZ_ShipUpperCantFly".Translate().ToString() : null;
         }
     }
 
@@ -366,56 +360,6 @@ namespace ProjectZ
         public static void Finalizer(Map __state)
         {
             ThrusterZone.clipMap = __state;
-        }
-    }
-
-    // ---- no launch with upper floors until they can fly (P4)
-
-    [HarmonyPatch(typeof(Building_GravEngine), nameof(Building_GravEngine.CanLaunch))]
-    public static class CanLaunch_ShipSet_Patch
-    {
-        public static void Postfix(Building_GravEngine __instance, ref AcceptanceReport __result)
-        {
-            if (__result.Accepted)
-            {
-                string why = ShipSet.LaunchBlocker(__instance);
-                if (why != null)
-                {
-                    __result = new AcceptanceReport(why);
-                }
-            }
-        }
-    }
-
-    // The console's launch (the ritual's outcome, a dev skip) and the take-off itself: refused for such a ship.
-    [HarmonyPatch(typeof(CompPilotConsole), nameof(CompPilotConsole.StartChoosingDestination_NewTemp))]
-    public static class StartChoosingDestination_ShipSet_Patch
-    {
-        public static bool Prefix(CompPilotConsole __instance, bool launching)
-        {
-            string why = launching ? ShipSet.LaunchBlocker(__instance.engine) : null;
-            if (why != null)
-            {
-                Messages.Message(why, MessageTypeDefOf.RejectInput, historical: false);
-                return false;
-            }
-            return true;
-        }
-    }
-
-    [HarmonyPatch(typeof(WorldComponent_GravshipController), nameof(WorldComponent_GravshipController.InitiateTakeoff))]
-    public static class InitiateTakeoff_ShipSet_Patch
-    {
-        public static bool Prefix(Building_GravEngine engine)
-        {
-            string why = ShipSet.LaunchBlocker(engine);
-            if (why != null)
-            {
-                Log.Warning("[ProjectZ] take-off refused: " + why);
-                Messages.Message(why, MessageTypeDefOf.RejectInput, historical: false);
-                return false;
-            }
-            return true;
         }
     }
 }

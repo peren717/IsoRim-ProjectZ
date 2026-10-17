@@ -321,8 +321,13 @@ namespace ProjectZ.Dev
                         t.Destroy();
                     }
                 }
+                if (map.terrainGrid.FoundationAt(c) != null)
+                {
+                    map.terrainGrid.RemoveFoundation(c, false);
+                }
                 TerrainDef td = c.GetTerrain(map);
-                if (td.IsWater || td.passability == Traversability.Impassable || !td.affordances.Contains(TerrainAffordanceDefOf.Heavy))
+                // (a laid floor, e.g. an old road, has an under terrain: the ship's substructure can't go on it)
+                if (map.terrainGrid.UnderTerrainAt(c) != null || td.IsWater || td.passability == Traversability.Impassable || !td.affordances.Contains(TerrainAffordanceDefOf.Heavy))
                 {
                     map.terrainGrid.SetTerrain(c, TerrainDefOf.Soil);
                 }

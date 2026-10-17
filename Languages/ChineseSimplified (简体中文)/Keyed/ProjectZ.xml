@@ -46,5 +46,7 @@
   <PZ_DeckAboveFirst>先拆上方的甲板</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>等待下方的甲板建好</PZ_DeckBelowFirst>
   <PZ_OverGravshipUseDeck>飞船上方不能建普通楼层：请用飞船上层甲板</PZ_OverGravshipUseDeck>
-  <PZ_ShipUpperCantFly>上层甲板暂时还不能随飞船起飞：请先拆除</PZ_ShipUpperCantFly>
+  <PZ_ShipUpperCantFly>上层甲板无法随飞船起飞：飞船补丁失败（见日志）</PZ_ShipUpperCantFly>
+  <PZ_ShipNotEnoughFloors>这里的楼层不够放下飞船的上层甲板</PZ_ShipNotEnoughFloors>
+  <PZ_ShipFloorAbove>上方有楼层挡住</PZ_ShipFloorAbove>
 </LanguageData>
