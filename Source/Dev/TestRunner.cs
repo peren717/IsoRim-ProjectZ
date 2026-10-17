@@ -124,6 +124,8 @@ namespace ProjectZ.Dev
     {
         public static bool Active;
         public static int FloorsOverride;
+        // -projectztallmountains: worlds created in this run have tall mountains (the Create World page's default).
+        public static bool TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // Test only (-projectzmintbreak=<member>): that Dubs Mint Minimap member counts as missing (Compat/MintMinimap).
@@ -177,6 +179,7 @@ namespace ProjectZ.Dev
                 days = dd;
             }
             FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
+            TallMountainsOverride = GenCommandLine.CommandLineArgPassed("projectztallmountains");
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
             TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");

@@ -13,6 +13,9 @@ namespace ProjectZ
         // Total storeys including the ground. 0 = not decided: a save from before this component, decided by
         // WorldFloors.Migrate once its maps are loaded.
         public int floors;
+        // Tall mountains (isorim-pz-mountains-design.md, phase 1): mountains of maps generated in this game rise into the
+        // upper floors (Mountains.cs). Picked on the same page, off by default; missing (older saves) = off.
+        public bool tallMountains;
         internal bool needsMigration;
 
         public WorldFloorsComponent(World world) : base(world)
@@ -23,6 +26,7 @@ namespace ProjectZ
         {
             base.ExposeData();
             Scribe_Values.Look(ref floors, "floors", 0);
+            Scribe_Values.Look(ref tallMountains, "tallMountains", false);
         }
 
         public override void FinalizeInit(bool fromLoad)
@@ -40,8 +44,9 @@ namespace ProjectZ
             else
             {
                 // A new world: WorldGenerator.GenerateWorld calls this while the Create World page is still open.
+                tallMountains = WorldFloors.TakeChosenMountains();
                 floors = WorldFloors.TakeChosen();
-                ProjectZ.DebugLog($"new world: {floors} floor(s)");
+                ProjectZ.DebugLog($"new world: {floors} floor(s), tall mountains {tallMountains}");
             }
         }
     }
@@ -66,14 +71,41 @@ namespace ProjectZ
             }
         }
 
-        internal static void SetChosen(int floors)
+        // Tall mountains: the page starts off (a test run's -projectztallmountains turns it on).
+        public static bool DefaultMountains => Dev.TestRunner.TallMountainsOverride;
+
+        private static bool chosenMountains;
+        private static bool mountainsChosen;
+
+        internal static void SetChosen(int floors, bool tallMountains = false)
         {
             chosen = Mathf.Clamp(floors, 1, ProjectZSettings.MaxFloors);
+            chosenMountains = tallMountains;
+            mountainsChosen = true;
         }
 
         internal static void ClearChosen()
         {
             chosen = 0;
+            mountainsChosen = false;
+        }
+
+        // (taken before TakeChosen, which clears the floors)
+        internal static bool TakeChosenMountains()
+        {
+            bool m = mountainsChosen ? chosenMountains : DefaultMountains;
+            mountainsChosen = false;
+            return m;
+        }
+
+        // Tall mountains in the current game (off without a world, and with one floor: nothing to rise into).
+        public static bool TallMountainsThisGame
+        {
+            get
+            {
+                WorldFloorsComponent c = Comp;
+                return c != null && c.tallMountains && ForThisGame > 1;
+            }
         }
 
         // A world made without the page (dev quick test, mods that skip it) gets the default.

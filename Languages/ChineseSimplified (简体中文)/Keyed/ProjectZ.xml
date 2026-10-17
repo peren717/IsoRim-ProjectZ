@@ -4,6 +4,8 @@
   <PZ_FloorsTip>包括地面在内的层数。创建世界页面上的初始值，不影响已开始的游戏。</PZ_FloorsTip>
   <PZ_WorldFloors>楼层数</PZ_WorldFloors>
   <PZ_WorldFloorsTip>包括地面在内的层数，用于本局所有地图。之后无法更改。</PZ_WorldFloorsTip>
+  <PZ_TallMountains>高山</PZ_TallMountains>
+  <PZ_TallMountainsTip>山体向上延伸进楼上各层。</PZ_TallMountainsTip>
   <PZ_FloorsWarn3>未经测试的高度，记得带降落伞。</PZ_FloorsWarn3>
   <PZ_FloorsWarn6>小人们正在联名请愿要电梯。</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>你的电脑现在是一台取暖器。</PZ_FloorsWarn10>
