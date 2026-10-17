@@ -134,7 +134,7 @@ namespace ProjectZ.Dev
                     SdExpect("D1 ordinary slab over the ship refused", slab, SDF(5, 2, 1, map), "PZ_OverGravshipUseDeck".Translate());
                     Designator_Build stairs = new Designator_Build(PZDefOf.PZ_Stairs);
                     stairs.SetStuffDef(ThingDefOf.WoodLog);
-                    SdExpect("D1 ordinary stairs on the ship's substructure refused", stairs, SD(2, 3), "PZ_OverGravship".Translate());
+                    SdExpect("D1 ordinary stairs on the ship's substructure refused", stairs, SD(2, 3), "PZ_OverGravshipUseStairs".Translate());
                     SdPlan(deck, sdF2, "D2 floor-2 decks");
                     SdExpect("D2 floor-3 deck over a planned deck accepted", deck, sdF3[0], null);
                     SdPlan(deck, sdF3, "D2 floor-3 decks");
@@ -218,7 +218,7 @@ namespace ProjectZ.Dev
                     SdPlan(new Designator_Build(sdCarpetDef), sdCarpet, "D3 a carpet on floor-2 decks");
                     Designator_Build stairs = new Designator_Build(PZDefOf.PZ_Stairs);
                     stairs.SetStuffDef(ThingDefOf.WoodLog);
-                    SdExpect("D3 ordinary stairs on a deck refused", stairs, SDF(1, 6, 1, map), "PZ_OverGravship".Translate());
+                    SdExpect("D3 ordinary stairs on a deck refused", stairs, SDF(1, 6, 1, map), "PZ_OverGravshipUseStairs".Translate());
                     Designator_RemoveFoundation rf = AllDesignators().OfType<Designator_RemoveFoundation>().FirstOrDefault();
                     FloorView.Set(0);
                     SdExpect("D3 removing the substructure under a deck refused", rf, SD(1, 5), "PZ_DeckAboveFirst".Translate());

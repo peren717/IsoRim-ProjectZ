@@ -218,6 +218,13 @@ namespace ProjectZ
             return key == "PZ_OverGravship" && PZDefOf.PZ_ShipDeck != null ? "PZ_OverGravshipUseDeck" : key;
         }
 
+        // The same for ordinary stairs: on (or landing over) a gravship it points to the ship stairs (Odyssey).
+        public static string StairsColumnBlocked(IntVec3 c, Map map)
+        {
+            string key = ColumnBlocked(c, map);
+            return key == "PZ_OverGravship" && PZDefOf.PZ_ShipStairs != null ? "PZ_OverGravshipUseStairs" : key;
+        }
+
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();
         private static readonly HashSet<IntVec3> seen = new HashSet<IntVec3>();
 

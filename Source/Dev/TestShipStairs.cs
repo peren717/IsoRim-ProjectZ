@@ -323,6 +323,18 @@ namespace ProjectZ.Dev
         private static void SpRefuse(Map map)
         {
             ThingDef ss = PZDefOf.PZ_ShipStairs;
+            // T0 the texts (P7): both build-menu entries, and every multi-level gravship key in the active language
+            foreach (BuildableDef bd in new BuildableDef[] { PZDefOf.PZ_ShipDeck, ss })
+            {
+                Designator_Build menu = BuildCopyCommandUtility.FindAllowedDesignator(bd);
+                Result($"T0 {bd.defName} in the build menu", menu != null && !menu.Label.NullOrEmpty() && !menu.Desc.NullOrEmpty(),
+                    $"[{LanguageDatabase.activeLanguage?.folderName}] {menu?.Label} / {menu?.Desc}");
+            }
+            foreach (string key in new[] { "PZ_DeckNeedsShipBelow", "PZ_DeckAboveFirst", "PZ_DeckBelowFirst", "PZ_OverGravship", "PZ_OverGravshipUseDeck",
+                "PZ_OverGravshipUseStairs", "PZ_ShipUpperCantFly", "PZ_ShipNotEnoughFloors", "PZ_ShipFloorAbove", "PZ_ShipStairsOnDeck", "PZ_GravshipGroundOnly" })
+            {
+                Result($"T0 key {key} translated", key.CanTranslate(), key.Translate());
+            }
             string onDeck = "PZ_ShipStairsOnDeck".Translate();
             SpExpect("T1 ship stairs on plain ground refused", ss, null, SP(-8, 6), Rot4.North, map, onDeck);
             SpExpect("T1 ship stairs overhanging the floor-2 deck edge refused", ss, null, SPF(12, 10, 1, map), Rot4.North, map, onDeck);
@@ -330,7 +342,7 @@ namespace ProjectZ.Dev
             Thing wall = Place(ThingDefOf.Wall, ThingDefOf.WoodLog, SPF(2, 3, 2, map), map);
             SpExpect("T1 ship stairs under a wall on the deck above refused (stairwell)", ss, null, SPF(2, 3, 1, map), Rot4.North, map, "PZ_WellNotOpen".Translate());
             wall.Destroy();
-            SpExpect("T1 ordinary stairs on the ship refused", PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, SP(2, 2), Rot4.North, map, "PZ_OverGravship".Translate());
+            SpExpect("T1 ordinary stairs on the ship refused", PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, SP(2, 2), Rot4.North, map, "PZ_OverGravshipUseStairs".Translate());
             SpExpect("T1 ship stairs 1 (ground deck up to the floor-2 deck) accepted", ss, null, SP(10, 2), Rot4.North, map, null);
             SpExpect("T1 ship stairs 2 (floor-2 deck up to the floor-3 deck) accepted", ss, null, SPF(3, 3, 1, map), Rot4.North, map, null);
             Blueprint b1 = GenConstruct.PlaceBlueprintForBuild(ss, SP(10, 2), map, Rot4.North, Faction.OfPlayer, null) as Blueprint;

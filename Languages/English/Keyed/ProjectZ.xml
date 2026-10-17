@@ -20,7 +20,6 @@
   <PZ_GravshipGroundOnly>Must land on the ground</PZ_GravshipGroundOnly>
   <PZ_StairsLeadTo>Leads up to floor {0}</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>Place stairs on the lower floor, they lead up to the next one</PZ_NoFloorAbove>
-  <PZ_NeedsRoofHere>Needs a roof here</PZ_NeedsRoofHere>
   <PZ_LandingBlocked>The exit cell past the top of the stairs is blocked</PZ_LandingBlocked>
   <PZ_ViewFloorAbove>Switch to the floor above first ({0})</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>Already has a floor</PZ_AlreadyFloor>
@@ -42,12 +41,13 @@
   <PZ_DamagedSlab>damaged {0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Take it up with the remove tool and lay a new one.</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>Damaged upper floor: take it up and lay it again</PZ_DamagedSlabNoFloor>
-  <PZ_DeckNeedsShipBelow>Must be built right above gravship substructure</PZ_DeckNeedsShipBelow>
-  <PZ_DeckAboveFirst>Remove the deck above first</PZ_DeckAboveFirst>
-  <PZ_DeckBelowFirst>Waiting for the deck below</PZ_DeckBelowFirst>
-  <PZ_OverGravshipUseDeck>Can't build an upper floor over a gravship: use the ship upper deck</PZ_OverGravshipUseDeck>
-  <PZ_ShipUpperCantFly>Upper ship decks can't fly: a gravship patch failed (see the log)</PZ_ShipUpperCantFly>
-  <PZ_ShipNotEnoughFloors>Not enough floors here for the ship's decks</PZ_ShipNotEnoughFloors>
-  <PZ_ShipFloorAbove>Blocked by an upper floor above</PZ_ShipFloorAbove>
-  <PZ_ShipStairsOnDeck>Ship stairs and their exit must be on the ship's deck</PZ_ShipStairsOnDeck>
+  <PZ_DeckNeedsShipBelow>Must be built directly above gravship substructure or a ship upper deck</PZ_DeckNeedsShipBelow>
+  <PZ_DeckAboveFirst>Remove the ship upper deck above first</PZ_DeckAboveFirst>
+  <PZ_DeckBelowFirst>Waiting for the deck below to be built</PZ_DeckBelowFirst>
+  <PZ_OverGravshipUseDeck>No upper floor over a gravship: use a ship upper deck</PZ_OverGravshipUseDeck>
+  <PZ_OverGravshipUseStairs>No ordinary stairs on a gravship: use ship stairs</PZ_OverGravshipUseStairs>
+  <PZ_ShipUpperCantFly>Ship upper decks can't fly: a ProjectZ patch failed (see the log)</PZ_ShipUpperCantFly>
+  <PZ_ShipNotEnoughFloors>Not enough floors here for the ship upper decks</PZ_ShipNotEnoughFloors>
+  <PZ_ShipFloorAbove>Blocked by a floor above</PZ_ShipFloorAbove>
+  <PZ_ShipStairsOnDeck>Ship stairs and their exit must be on the gravship's deck</PZ_ShipStairsOnDeck>
 </LanguageData>

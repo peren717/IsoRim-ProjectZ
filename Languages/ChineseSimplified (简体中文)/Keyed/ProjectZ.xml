@@ -16,11 +16,10 @@
   <PZ_ResetFloorHud>重置楼层面板位置</PZ_ResetFloorHud>
   <PZ_GroundOnly>必须建在地面上</PZ_GroundOnly>
   <PZ_ThickRoof>不能建在厚岩顶下</PZ_ThickRoof>
-  <PZ_OverGravship>飞船上方不能建楼层</PZ_OverGravship>
+  <PZ_OverGravship>逆重飞船上方不能铺楼板</PZ_OverGravship>
   <PZ_GravshipGroundOnly>只能降落在地面上</PZ_GravshipGroundOnly>
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
-  <PZ_NeedsRoofHere>这里需要屋顶</PZ_NeedsRoofHere>
   <PZ_LandingBlocked>楼梯顶端出口那格被挡住了</PZ_LandingBlocked>
   <PZ_ViewFloorAbove>先切换到上一层（{0}）</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>这里已有楼板</PZ_AlreadyFloor>
@@ -42,12 +41,13 @@
   <PZ_DamagedSlab>受损的{0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>开裂的楼板，不能在上面铺地板。用拆除工具拆掉后重铺。</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>楼板已受损：拆掉重铺</PZ_DamagedSlabNoFloor>
-  <PZ_DeckNeedsShipBelow>只能建在逆重飞船基架的正上方</PZ_DeckNeedsShipBelow>
-  <PZ_DeckAboveFirst>先拆上方的甲板</PZ_DeckAboveFirst>
+  <PZ_DeckNeedsShipBelow>必须建在逆重飞船基架或飞船上层甲板的正上方</PZ_DeckNeedsShipBelow>
+  <PZ_DeckAboveFirst>先拆除上方的飞船上层甲板</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>等待下方的甲板建好</PZ_DeckBelowFirst>
-  <PZ_OverGravshipUseDeck>飞船上方不能建普通楼层：请用飞船上层甲板</PZ_OverGravshipUseDeck>
-  <PZ_ShipUpperCantFly>上层甲板无法随飞船起飞：飞船补丁失败（见日志）</PZ_ShipUpperCantFly>
-  <PZ_ShipNotEnoughFloors>这里的楼层不够放下飞船的上层甲板</PZ_ShipNotEnoughFloors>
-  <PZ_ShipFloorAbove>上方有楼层挡住</PZ_ShipFloorAbove>
-  <PZ_ShipStairsOnDeck>飞船楼梯和顶端出口都必须在飞船甲板上</PZ_ShipStairsOnDeck>
+  <PZ_OverGravshipUseDeck>逆重飞船上方不能铺楼板：请用飞船上层甲板</PZ_OverGravshipUseDeck>
+  <PZ_OverGravshipUseStairs>逆重飞船上不能建普通楼梯：请用飞船楼梯</PZ_OverGravshipUseStairs>
+  <PZ_ShipUpperCantFly>飞船上层甲板无法起飞：ProjectZ 补丁失败（见日志）</PZ_ShipUpperCantFly>
+  <PZ_ShipNotEnoughFloors>这里的楼层不够放下飞船上层甲板</PZ_ShipNotEnoughFloors>
+  <PZ_ShipFloorAbove>被上方的楼层阻挡</PZ_ShipFloorAbove>
+  <PZ_ShipStairsOnDeck>飞船楼梯和顶端出口都必须在逆重飞船甲板上</PZ_ShipStairsOnDeck>
 </LanguageData>

@@ -10,7 +10,7 @@
   <ThingDef ParentName="BuildingBase" MayRequire="Ludeon.RimWorld.Odyssey">
     <defName>PZ_ShipStairs</defName>
     <label>ship stairs</label>
-    <description>Gravship stairs up to the ship upper deck above. The whole ramp stands on the ship's deck and the cell past the top must be a ship upper deck. The deck over the ramp is taken up for the stairwell. Like a wall, they hold up roofs and floors nearby, and they fly with the ship.</description>
+    <description>Gravship stairs up to the ship upper deck above. The whole ramp must stand on the gravship's deck, and the cell past the top must be a ship upper deck. The deck over the ramp is removed to leave a stairwell. Like a wall, ship stairs hold up roofs and floors nearby. They fly with the ship.</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/ShipStairs</texPath>

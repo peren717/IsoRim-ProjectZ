@@ -485,7 +485,7 @@ namespace ProjectZ
         {
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
-                string blocked = SlabSupport.ColumnBlocked(c, map);
+                string blocked = SlabSupport.StairsColumnBlocked(c, map);
                 if (blocked != null)
                 {
                     return blocked.Translate();
@@ -494,7 +494,7 @@ namespace ProjectZ
             IntVec3 top = StairShape.Exit(loc, rot, map);
             if (top.IsValid)
             {
-                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.ColumnBlocked(FloorRoof.Below(top, map), map);
+                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.StairsColumnBlocked(FloorRoof.Below(top, map), map);
                 if (blocked != null)
                 {
                     return blocked.Translate();
