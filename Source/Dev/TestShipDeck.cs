@@ -23,17 +23,18 @@ namespace ProjectZ.Dev
     //      on a deck (open air stays its under layer), ordinary stairs on a deck refused; remove-foundation refused under a
     //      deck (ground and floor 2);
     //   D4 save and reload: decks, carpet and roofs intact (FloorRoof.Normalize fixes nothing, no collapse);
-    //   D5 support: a wall next to an open 3 x 3 deck pad (no walls under it) deconstructed: an ordinary roof held only
-    //      by that wall falls, the roof under the decks stays; then 20000 ticks;
+    //   D5 support (the game's roof rules, as for slabs; user decision 2026-10-17): the only wall in range of an open
+    //      3 x 3 deck pad deconstructed by a colonist: the pad falls with its roof, as does an ordinary roof held only by
+    //      that wall; a second pad with its wall stays, and the ship's decks (held by its hull) stay; then 20000 ticks;
     //   D6 removal top-down: a floor-3 deck, then the floor-2 deck under it with a drafted colonist and steel on it (moved
     //      off), the roof below an ordinary roof again;
-    //   D7 a real launch: the decks are not ship cells yet (P2), so they stay behind and fall, with the colonist standing
-    //      on one, the hull pieces and the carpet; the pad's decks stay (their substructure stays); the ship lands on the
-    //      ground elsewhere.
+    //   D7 launch: since P2 the decks are ship cells (the colonist on one is aboard) and the launch is refused until upper
+    //      floors fly (P4); with the ship's decks taken away a real launch: the pad's decks stay (their substructure
+    //      stays); the ship lands on the ground elsewhere.
     public static partial class TestRunner
     {
-        private static IntVec3 sdO, sdStairsA, sdStairsB, sdPadWall, sdControl, sdRm, sdOnDeck;
-        private static CellRect sdField, sdPad, sdStrip;
+        private static IntVec3 sdO, sdStairsA, sdStairsB, sdPadWall, sdPadBWall, sdControl, sdRm, sdOnDeck;
+        private static CellRect sdField, sdPad, sdPadB, sdStrip;
         private static readonly List<IntVec3> sdF2 = new List<IntVec3>();
         private static readonly List<IntVec3> sdF3 = new List<IntVec3>();
         private static readonly List<IntVec3> sdHull = new List<IntVec3>();
@@ -49,6 +50,10 @@ namespace ProjectZ.Dev
         private static IntVec3 SDF(int dx, int dz, int k, Map map) => ProjectZ.CellOnFloor(SD(dx, dz), k, map);
 
         private static int Decks(Map map, IEnumerable<IntVec3> cells) => cells.Count(c => ShipDeck.At(c, map));
+
+        // Pad B: its decks and the floor roofs under them all there.
+        private static bool PadBOk(Map map) => Decks(map, sdPadB.Cells.Select(g => ProjectZ.CellOnFloor(g, 1, map))) == sdPadB.Area
+            && sdPadB.Cells.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof);
 
         private static int DecksOnMap(Map map)
         {
@@ -126,7 +131,7 @@ namespace ProjectZ.Dev
                     SdExpect("D1 deck over a slab refused", deck, SDF(-1, 3, 2, map), onShip);
                     SdExpect("D1 deck over substructure outside the footprint refused", deck, ProjectZ.CellOnFloor(new IntVec3(sdStrip.minX, 0, sdStrip.minZ), 1, map), "MessageMustBePlacedInRangeOfGravEngineOrExtender".Translate());
                     Designator_Build slab = new Designator_Build(PZDefOf.PZ_UpperFloor);
-                    SdExpect("D1 ordinary slab over the ship refused", slab, SDF(5, 2, 1, map), "PZ_OverGravship".Translate());
+                    SdExpect("D1 ordinary slab over the ship refused", slab, SDF(5, 2, 1, map), "PZ_OverGravshipUseDeck".Translate());
                     Designator_Build stairs = new Designator_Build(PZDefOf.PZ_Stairs);
                     stairs.SetStuffDef(ThingDefOf.WoodLog);
                     SdExpect("D1 ordinary stairs on the ship's substructure refused", stairs, SD(2, 3), "PZ_OverGravship".Translate());
@@ -271,7 +276,7 @@ namespace ProjectZ.Dev
                     Result("D4 the carpet on the deck intact", carpetOk, SdTerrain(sdCarpet[0], map));
                     // D5 support: the wall next to the pad deconstructed by a colonist
                     Building w = sdPadWall.GetEdifice(map);
-                    Info($"D5 pad {sdPad}: roofs {sdPad.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof)} floor roofs, held {sdPad.Cells.Count(c => ShipDeck.Held(c, map))}; control roof {map.roofGrid.RoofAt(sdControl)?.defName ?? "-"}; wall {w?.def.defName}");
+                    Info($"D5 pad {sdPad}: roofs {sdPad.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof)} floor roofs; pad B {sdPadB}: {sdPadB.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof)}; control roof {map.roofGrid.RoofAt(sdControl)?.defName ?? "-"}; wall {w?.def.defName}");
                     if (w == null)
                     {
                         Result("D5 pad wall", false, "missing");
@@ -290,18 +295,20 @@ namespace ProjectZ.Dev
                     return;
                 case "sd_padwall2":
                 {
+                    // (support since 2026-10-17: the game's roof rules, as for slabs)
                     int held = sdPad.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof);
+                    int decksA = Decks(map, sdPad.Cells.Select(g => ProjectZ.CellOnFloor(g, 1, map)));
                     Result("D5 a roof held only by that wall fell (the game's collapse ran)", !map.roofGrid.Roofed(sdControl), $"control roof {map.roofGrid.RoofAt(sdControl)?.defName ?? "none"}");
-                    Result("D5 the roof under the open deck pad stays", held == sdPad.Area && Decks(map, sdPad.Cells.Select(g => ProjectZ.CellOnFloor(g, 1, map))) == sdPad.Area, $"{held} of {sdPad.Area} floor roofs");
+                    Result("D5 the open deck pad with no wall in range collapsed with its roof", held == 0 && decksA == 0, $"{held} of {sdPad.Area} floor roofs, {decksA} decks left, collapses {PZStats.slabCollapses - sdCollapsesAt}");
+                    Result("D5 the deck pad with a wall in range stays", PadBOk(map), "");
                     SetWork(map, false);
                     StartTicks(20000, "sd_idle");
                     return;
                 }
                 case "sd_idle":
                 {
-                    int held = sdPad.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof);
                     int under = sdF2.Count(c => map.roofGrid.RoofAt(FloorRoof.Below(c, map)) == PZDefOf.PZ_FloorRoof);
-                    Result("D5 after 20000 ticks: pad and ship decks and their roofs intact", held == sdPad.Area && under == sdF2.Count && DecksOnMap(map) == sdDecksSaved, $"pad {held}, ship floor 2 {under}, decks {DecksOnMap(map)}");
+                    Result("D5 after 20000 ticks: pad B and the ship's decks (held by its hull) and their roofs intact", PadBOk(map) && under == sdF2.Count && DecksOnMap(map) == sdDecksSaved - sdPad.Area, $"ship floor 2 {under}, decks {DecksOnMap(map)} (saved {sdDecksSaved} less pad A)");
                     // D6 removal from the top down
                     Designator_RemoveFoundation rf = AllDesignators().OfType<Designator_RemoveFoundation>().FirstOrDefault();
                     sdRm = SDF(1, 5, 2, map);
@@ -374,12 +381,37 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn walker = ById(map, sdLauncher);
                     Result("D7 a colonist walked up the ordinary stairs onto a deck", walker?.Position == sdOnDeck, $"{walker?.Position}");
+                    // P2: the decks are ship cells now; until upper floors fly (P4) the launch is refused
+                    Building_GravEngine e = GlEngine(map);
+                    Result("D7 (P2) the decks are part of the ship", e.ValidSubstructure.Count == sdGround + DecksOnMap(map) - sdPadB.Area, $"valid {e.ValidSubstructure.Count}, ground {sdGround}, decks {DecksOnMap(map)} (pad B {sdPadB.Area})");
+                    Result("D7 (P2) the colonist on a deck is aboard", walker != null && e.ValidSubstructureAt(walker.Position), "");
+                    SsLaunchRefused(map, e, "D7 (P2)");
                     GlShot(1, SD(1, 5), 12f, "sd_3_before_launch_f2");
                     GlRun("sd_launch_go");
                     return;
                 }
                 case "sd_launch_go":
                 {
+                    // (fixture: the ship's decks taken away at once, top floor first, so the one-storey ship can fly; the
+                    // pad's decks stay on their left-behind substructure)
+                    foreach (IntVec3 c in sdHull)
+                    {
+                        c.GetEdifice(map)?.Destroy();
+                    }
+                    Pawn walker = ById(map, sdLauncher);
+                    if (walker != null)
+                    {
+                        Teleport(walker, SD(-6, -2));
+                    }
+                    foreach (IntVec3 c in sdF3.Concat(sdF2))
+                    {
+                        if (ShipDeck.At(c, map))
+                        {
+                            map.terrainGrid.RemoveFoundation(c, false);
+                        }
+                    }
+                    Building_GravEngine e = GlEngine(map);
+                    Result("D7 without its decks the ship may launch", e.ValidSubstructure.Count == sdGround && (bool)SsConsole(map, e).CanUseNow(), $"valid {e.ValidSubstructure.Count}, console {SdWhy(SsConsole(map, e).CanUseNow())}");
                     sdCollapsesAt = PZStats.slabCollapses;
                     GlLaunch(map, GlEngine(map));
                     if (stage == "gl_fly")
@@ -401,7 +433,7 @@ namespace ProjectZ.Dev
                     Building_GravEngine e = GlEngine(map);
                     Result("D7 the ship landed on the ground", e != null && e.Position == sdLandRoot && ProjectZ.FloorOf(e.Position, map) == 0, e == null ? "no engine" : GlCell(e.Position, map));
                     Result("D7 the landed ship has its ground deck", e != null && e.ValidSubstructure.Count == sdGround, $"{e?.ValidSubstructure.Count} (built {sdGround})");
-                    Result("D7 the pad decks still stand", Decks(map, sdPad.Cells.Select(g => ProjectZ.CellOnFloor(g, 1, map))) == sdPad.Area, "");
+                    Result("D7 pad B's decks still stand", PadBOk(map), "");
                     GlShot(1, sdLandRoot, 14f, "sd_5_landed");
                     GlRun("sd_end");
                     return;
@@ -461,15 +493,9 @@ namespace ProjectZ.Dev
         // The ship is in the air, the marker up on the old map: what stayed behind.
         private static void SdAfterTakeoff(Map map)
         {
-            ThingDef hull = DefDatabase<ThingDef>.GetNamed("GravshipHull");
-            int left = Decks(map, sdF2) + Decks(map, sdF3);
             int open = sdF2.Concat(sdF3).Count(c => map.terrainGrid.TerrainAt(c) == PZDefOf.PZ_OpenAir);
-            Result("D7 the decks left behind fell", left == 0 && open == sdF2.Count + sdF3.Count, $"{left} decks left, {open} of {sdF2.Count + sdF3.Count} cells open air, collapses {PZStats.slabCollapses - sdCollapsesAt}");
-            Result("D7 the hull pieces on them went too", sdHull.All(c => c.GetEdifice(map)?.def != hull), string.Join(", ", sdHull.Select(c => c.GetEdifice(map)?.def.defName ?? "-")));
-            Result("D7 no floor left floating (carpet)", sdCarpet.All(c => map.terrainGrid.TerrainAt(c) == PZDefOf.PZ_OpenAir), SdTerrain(sdCarpet[0], map));
-            Pawn walker = ById(map, sdLauncher);
-            Result("D7 the colonist on a deck fell to the ground", walker != null && !walker.Dead && ProjectZ.FloorOf(walker.Position, map) == 0, $"{walker?.Position} f{(walker == null ? 0 : ProjectZ.FloorOf(walker.Position, map) + 1)}, injuries {(walker == null ? 0 : Injuries(walker))}");
-            Result("D7 the pad decks (their substructure stays) still stand", Decks(map, sdPad.Cells.Select(g => ProjectZ.CellOnFloor(g, 1, map))) == sdPad.Area, "");
+            Result("D7 no floor left floating over the ship's old place", open == sdF2.Count + sdF3.Count, $"{open} of {sdF2.Count + sdF3.Count} cells open air, collapses {PZStats.slabCollapses - sdCollapsesAt}");
+            Result("D7 pad B's decks (their substructure stays) still stand", PadBOk(map), "");
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
         }
 
@@ -627,6 +653,13 @@ namespace ProjectZ.Dev
                     sdF3.Add(SDF(dx, dz, 2, map));
                 }
             }
+            // (the floor-3 decks are held by a wood wall on the floor-2 walkway, the roof rules as for slabs: plan them
+            // from there outwards)
+            Place(ThingDefOf.Wall, ThingDefOf.WoodLog, SDF(-1, 8, 1, map), map);
+            IntVec3 holder3 = SD(-1, 8);
+            List<IntVec3> f3 = sdF3.OrderBy(c => (ProjectZ.GroundCellOf(c, map) - holder3).LengthHorizontalSquared).ToList();
+            sdF3.Clear();
+            sdF3.AddRange(f3);
             sdHull.Clear();
             sdHull.Add(SDF(2, 2, 1, map));
             sdHull.Add(SDF(2, 3, 1, map));
@@ -641,16 +674,20 @@ namespace ProjectZ.Dev
             {
                 map.terrainGrid.SetTerrain(g, sub);
             }
-            // the open pad: 3 x 3 substructure with decks over it (placed), no walls under them; one wood wall south of
-            // it holds an ordinary roof cell south of the wall (the control)
+            // the open pads: 3 x 3 substructure with decks over it (placed), no walls under them. One wood wall south of
+            // pad A is its only roof holder (it also holds an ordinary roof cell south of it, the control); pad B's wall
+            // stays. Since 2026-10-17 decks follow the game's roof rules like slabs: pad A falls when its wall goes.
             sdPad = new CellRect(sdO.x + 44, sdO.z + 2, 3, 3);
-            foreach (IntVec3 g in sdPad)
+            sdPadB = new CellRect(sdO.x + 50, sdO.z + 2, 3, 3);
+            sdPadWall = new IntVec3(sdPad.minX + 1, 0, sdPad.minZ - 1);
+            Place(ThingDefOf.Wall, ThingDefOf.WoodLog, sdPadWall, map);
+            sdPadBWall = new IntVec3(sdPadB.minX + 1, 0, sdPadB.minZ - 1);
+            Place(ThingDefOf.Wall, ThingDefOf.WoodLog, sdPadBWall, map);
+            foreach (IntVec3 g in sdPad.Cells.Concat(sdPadB.Cells))
             {
                 map.terrainGrid.SetTerrain(g, sub);
                 map.terrainGrid.SetTerrain(ProjectZ.CellOnFloor(g, 1, map), PZDefOf.PZ_ShipDeck);
             }
-            sdPadWall = new IntVec3(sdPad.minX + 1, 0, sdPad.minZ - 1);
-            Place(ThingDefOf.Wall, ThingDefOf.WoodLog, sdPadWall, map);
             sdControl = sdPadWall + IntVec3.South;
             map.roofGrid.SetRoof(sdControl, RoofDefOf.RoofConstructed);
             // stocks for the decks, hull pieces and carpet

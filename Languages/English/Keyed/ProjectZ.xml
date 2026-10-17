@@ -45,4 +45,6 @@
   <PZ_DeckNeedsShipBelow>Must be built right above gravship substructure</PZ_DeckNeedsShipBelow>
   <PZ_DeckAboveFirst>Remove the deck above first</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>Waiting for the deck below</PZ_DeckBelowFirst>
+  <PZ_OverGravshipUseDeck>Can't build an upper floor over a gravship: use the ship upper deck</PZ_OverGravshipUseDeck>
+  <PZ_ShipUpperCantFly>Upper ship decks can't fly yet: remove them first</PZ_ShipUpperCantFly>
 </LanguageData>

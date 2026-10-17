@@ -176,7 +176,7 @@ namespace ProjectZ
             {
                 return "PZ_NoExitCell".Translate();
             }
-            string blocked = ColumnBlocked(below, map);
+            string blocked = SlabColumnBlocked(below, map);
             if (blocked != null)
             {
                 return blocked.Translate();
@@ -209,6 +209,13 @@ namespace ProjectZ
                 return "PZ_ThickRoof";
             }
             return Gravship(c, map) ? "PZ_OverGravship" : null;
+        }
+
+        // The same for a slab (or a stairs landing): over a gravship it points to the ship upper deck (Odyssey).
+        public static string SlabColumnBlocked(IntVec3 c, Map map)
+        {
+            string key = ColumnBlocked(c, map);
+            return key == "PZ_OverGravship" && PZDefOf.PZ_ShipDeck != null ? "PZ_OverGravshipUseDeck" : key;
         }
 
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();
@@ -249,7 +256,7 @@ namespace ProjectZ
                 {
                     IntVec3 n = x + GenAdj.CardinalDirections[i];
                     if (n.InBounds(map) && !seen.Contains(n) && n.InHorDistOf(root, RoofCollapseUtility.RoofMaxSupportDistance)
-                        && (map.roofGrid.Roofed(n) || countPlanned && PlaceWorker_Stairs.FloorPlanned(StairShape.Above(n, map), map)))
+                        && (map.roofGrid.Roofed(n) || countPlanned && (PlaceWorker_Stairs.FloorPlanned(StairShape.Above(n, map), map) || ShipDeck.Planned(StairShape.Above(n, map), map))))
                     {
                         seen.Add(n);
                         open.Enqueue(n);
@@ -860,7 +867,7 @@ namespace ProjectZ
             }
             else if (SlabDefs.Is(t.def.entityDefToBuild))
             {
-                string key = SlabSupport.ColumnBlocked(FloorRoof.Below(t.Position, t.Map), t.Map);
+                string key = SlabSupport.SlabColumnBlocked(FloorRoof.Below(t.Position, t.Map), t.Map);
                 column = key?.Translate();
             }
             if (column != null)

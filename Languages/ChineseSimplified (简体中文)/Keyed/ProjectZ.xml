@@ -45,4 +45,6 @@
   <PZ_DeckNeedsShipBelow>只能建在逆重飞船基架的正上方</PZ_DeckNeedsShipBelow>
   <PZ_DeckAboveFirst>先拆上方的甲板</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>等待下方的甲板建好</PZ_DeckBelowFirst>
+  <PZ_OverGravshipUseDeck>飞船上方不能建普通楼层：请用飞船上层甲板</PZ_OverGravshipUseDeck>
+  <PZ_ShipUpperCantFly>上层甲板暂时还不能随飞船起飞：请先拆除</PZ_ShipUpperCantFly>
 </LanguageData>

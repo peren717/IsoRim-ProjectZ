@@ -12,16 +12,18 @@ namespace ProjectZ
     // Because of the tag, vanilla treats deck cells as substructure by itself (ship parts placed on them, the
     // substructure overlay, "remove foundation"); ordinary slabs and stairs over it are refused by SlabSupport.ColumnBlocked.
     //   - Placement: PlaceWorker_ShipDeck (Check); a planned deck waits for the deck or substructure below (CanConstruct).
-    //   - Support: only the substructure or deck below holds it, never walls. The roof under a deck (PZ_FloorRoof) counts
-    //     as held while that cell has a substructure foundation (the game's support checks, postfixed here).
+    //   - Support (user decision 2026-10-17): the game's roof rules, as for any upper floor: the roof under a deck
+    //     (PZ_FloorRoof) needs a wall, column or stairs within range below, at placement (planned decks next to it count)
+    //     and when built; without one it collapses with the deck. Separately, a deck needs substructure or a deck right
+    //     below it (placement, and the fall below).
     //   - Removal: the vanilla remove-foundation tool; refused under a deck ("remove the deck above first"). What stands on
     //     a removed deck moves off (Slab.MoveOff), what was laid on it goes.
     //   - Falling: a deck whose cell below lost its substructure falls through the slab collapse (SlabCollapse): its roof
     //     cell is marked to collapse, the game's collapse buffer drops it with the deck (one hook there, S1). Decks above it
-    //     follow. This runs on any foundation removal, after a gravship takes off (its ground cells go, P1 decks stay
-    //     behind) and once when a map loads.
-    // Footprint: until the 3D ship set (P2), the engine and extender footprint is tested on the ground projection
-    // (GroundCellOf of both ends), so a deck over the ship's substructure is inside it like the cell below.
+    //     follow. This runs on any foundation removal, after a gravship takes off (decks left out of the ship set stay
+    //     behind and fall) and once when a map loads.
+    // Ship set, footprint and launch (P2): ShipSet.cs. Decks over the ship are ship cells; the engine and extender
+    // footprint is a 3D sphere.
     // Without Odyssey the def is not loaded (MayRequire) and nothing here does anything.
     public static class ShipDeck
     {
@@ -76,6 +78,11 @@ namespace ProjectZ
             {
                 return "PZ_TallBelow".Translate(tall.LabelShort);
             }
+            // roof support as for any upper floor (the game's roof rules; decks planned next to it count)
+            if (!SlabSupport.Supported(below, map, countPlanned: true))
+            {
+                return "PZ_NoSupportBelow".Translate();
+            }
             return AcceptanceReport.WasAccepted;
         }
 
@@ -92,13 +99,6 @@ namespace ProjectZ
                 return "PZ_DeckAboveFirst".Translate();
             }
             return null;
-        }
-
-        // The roof at c is the underside of a deck that stands on substructure: held (decks hold themselves up by what is
-        // below them, not by walls).
-        public static bool Held(IntVec3 c, Map map)
-        {
-            return ProjectZ.Annex(map) != null && SlabSupport.Gravship(c, map) && At(StairShape.Above(c, map), map);
         }
 
         // The cell 'below' lost its substructure: a deck right above it falls (the slab collapse, through the game's
@@ -241,60 +241,6 @@ namespace ProjectZ
         }
     }
 
-    // ---- support: the roof under a deck is held by the substructure below it
-
-    [HarmonyPatch(typeof(RoofCollapseUtility), nameof(RoofCollapseUtility.WithinRangeOfRoofHolder))]
-    public static class WithinRangeOfRoofHolder_ShipDeck_Patch
-    {
-        public static void Postfix(IntVec3 c, Map map, ref bool __result)
-        {
-            if (!__result && ShipDeck.Held(c, map))
-            {
-                __result = true;
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(RoofCollapseUtility), nameof(RoofCollapseUtility.ConnectedToRoofHolder))]
-    public static class ConnectedToRoofHolder_ShipDeck_Patch
-    {
-        public static void Postfix(IntVec3 c, Map map, ref bool __result)
-        {
-            if (!__result && ShipDeck.Held(c, map))
-            {
-                __result = true;
-            }
-        }
-    }
-
-    // The game's "flying roof" test: a roofed area with no holder in it all falls. A held deck underside counts as one,
-    // so the roofs joined to it stay unless they are too far from a real holder (WithinRangeOfRoofHolder).
-    [HarmonyPatch(typeof(RoofCollapseCellsFinder), nameof(RoofCollapseCellsFinder.ConnectsToRoofHolder))]
-    public static class ConnectsToRoofHolder_ShipDeck_Patch
-    {
-        public static void Postfix(IntVec3 c, Map map, ref bool __result)
-        {
-            if (__result || PZDefOf.PZ_ShipDeck == null || ProjectZ.Annex(map) == null)
-            {
-                return;
-            }
-            bool held = false;
-            map.floodFiller.FloodFill(c, x => x.Roofed(map), x =>
-            {
-                if (ShipDeck.Held(x, map))
-                {
-                    held = true;
-                    return true;
-                }
-                return false;
-            });
-            if (held)
-            {
-                __result = true;
-            }
-        }
-    }
-
     // ---- removal: not under a deck
 
     // Under a deck: blocked. On an upper floor deck itself, as for slabs: only built things block (vanilla would also count
@@ -358,44 +304,13 @@ namespace ProjectZ
                 __result = false;
                 return false;
             }
-            return true;
-        }
-    }
-
-    // The engine and extender footprint on the ground projection (P1; P2 makes it a 3D sphere): a cell on any floor is in
-    // range when its ground cell is in range of the maker's ground cell. Identical to vanilla for ground cells.
-    [HarmonyPatch(typeof(GravshipUtility), nameof(GravshipUtility.InsideFootprint))]
-    public static class InsideFootprint_ShipDeck_Patch
-    {
-        public static bool Prefix(IntVec3 loc, Map map, List<Thing> footprintMakers, Thing thingToExclude, ref bool __result)
-        {
-            if (!ModsConfig.OdysseyActive || ProjectZ.Annex(map) == null)
+            if (!SlabSupport.Supported(FloorRoof.Below(t.Position, t.Map), t.Map))
             {
-                return true;
-            }
-            __result = false;
-            IntVec3 g = ProjectZ.GroundCellOf(loc, map);
-            if (!g.IsValid)
-            {
+                JobFailReason.Is("PZ_NoSupportBelow".Translate());
+                __result = false;
                 return false;
             }
-            if (footprintMakers == null)
-            {
-                footprintMakers = map.listerThings.ThingsInGroup(ThingRequestGroup.SubstructureFootprint);
-            }
-            foreach (Thing maker in footprintMakers)
-            {
-                if (maker.Spawned && maker.TryGetComp(out CompSubstructureFootprint comp) && comp.Valid && (thingToExclude == null || maker != thingToExclude))
-                {
-                    IntVec3 mg = ProjectZ.GroundCellOf(maker.Position, map);
-                    if (mg.IsValid && g.InHorDistOf(mg, comp.Props.radius))
-                    {
-                        __result = true;
-                        return false;
-                    }
-                }
-            }
-            return false;
+            return true;
         }
     }
 

@@ -93,10 +93,14 @@ namespace ProjectZ.Dev
     //                                   north edge); -projectzfloors=3 (TestStrikes)
     //                                   shipdeck: the ship upper deck (multi-level gravships P1: refusals, colonists building
     //                                   decks on floors 2 and 3, ship parts and a carpet on them, removal top-down, support,
-    //                                   save/reload, a real launch leaving the decks behind to fall); -projectzfloors=3,
+    //                                   save/reload, the launch refused with decks, a real launch without them); -projectzfloors=3,
     //                                   Odyssey (TestShipDeck)
     //                                   void, voidfire, voidsave, voidload, voidperf, crush: the void barrier and slabs broken
     //                                   by heavy hits crushing what is below (TestVoid; -projectznovoidrule: without the rule)
+    //                                   shipset: the 3D ship set (multi-level gravships P2: ground + decks counted, the limit
+    //                                   cutting the top floor first, the 3D footprint sphere, an extender built on a deck,
+    //                                   thrusters on decks, the engine installed on a deck, the launch refused until P4);
+    //                                   -projectzfloors=3, Odyssey (TestShipSet; -projectznoshipset: the flat P1 set)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -160,6 +164,7 @@ namespace ProjectZ.Dev
             Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
             VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
+            ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -517,6 +522,11 @@ namespace ProjectZ.Dev
                 StepShipDeck(map);
                 return;
             }
+            if (stage.StartsWith("ss_"))
+            {
+                StepShipSet(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -672,6 +682,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipdeck")
                     {
                         stage = "sd_setup";
+                    }
+                    else if (mode == "shipset")
+                    {
+                        stage = "ss_setup";
                     }
                     else if (mode == "skydrop")
                     {
