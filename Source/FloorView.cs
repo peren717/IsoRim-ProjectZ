@@ -53,6 +53,16 @@ namespace ProjectZ
             current = k;
         }
 
+        // IsoRim's gravship cutscene (IFloorLayout.ViewFloor): views floor k on a map without the click, returns the floor
+        // viewed before. Without an annex the floor is kept as given (the map of a ship that took off may be gone).
+        public static int Swap(Map map, int floor)
+        {
+            int was = current;
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            current = a == null ? Mathf.Max(0, floor) : Mathf.Clamp(floor, 0, a.floors - 1);
+            return a == null ? was : Mathf.Clamp(was, 0, a.floors - 1);
+        }
+
         public static string Label(int floor) => "PZ_FloorLabel".Translate(floor + 1);
 
         // A key as players read it: = and - rather than the game's "Equals" and "Minus".

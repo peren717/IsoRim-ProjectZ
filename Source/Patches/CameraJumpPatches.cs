@@ -25,10 +25,14 @@ namespace ProjectZ.Patches
         // Tests: off (-projectznojumpfix) to see the game's own jump.
         public static bool Disabled;
 
+        // Set while the landing marker starts the landing: its jump to the marker keeps the floor the player views (the
+        // landing is on the ground anyway; the cutscene shows a ship's upper decks and puts that view back after).
+        public static bool Landing;
+
         // Show the floor of `cell` and move the camera to it: a cut, or a pan when `pan` and the game is panning.
         public static void Apply(IntVec3 cell, Map map, bool pan)
         {
-            if (Disabled || Current.ProgramState != ProgramState.Playing || map == null || map != Find.CurrentMap || !cell.IsValid || !cell.InBounds(map) || WorldRendererUtility.WorldSelected)
+            if (Disabled || Landing || Current.ProgramState != ProgramState.Playing || map == null || map != Find.CurrentMap || !cell.IsValid || !cell.InBounds(map) || WorldRendererUtility.WorldSelected)
             {
                 return;
             }
@@ -65,6 +69,20 @@ namespace ProjectZ.Patches
         {
             Vector3 r = RootPos(Find.CameraDriver);
             return Mathf.Abs(r.x - (cell.x + 0.5f)) > 0.01f || Mathf.Abs(r.z - (cell.z + 0.5f)) > 0.01f;
+        }
+    }
+
+    [HarmonyPatch(typeof(GravshipLandingMarker), nameof(GravshipLandingMarker.BeginLanding))]
+    public static class LandingMarker_BeginLanding_FloorJump_Patch
+    {
+        public static bool Prepare() => ModsConfig.OdysseyActive;
+
+        public static void Prefix() => FloorJump.Landing = true;
+
+        public static System.Exception Finalizer(System.Exception __exception)
+        {
+            FloorJump.Landing = false;
+            return __exception;
         }
     }
 

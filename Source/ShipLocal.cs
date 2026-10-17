@@ -443,45 +443,4 @@ namespace ProjectZ
             }
         }
     }
-
-    // ---- IsoRim's 3D cutscene (until P6 draws upper floors): it reads the ship set as a flat area, so it gets the
-    // ground cells (its bounds, pivot, cell classes and snapshot sections stay the one-storey ship's).
-
-    [HarmonyPatch]
-    public static class IsoRimShipGround_Patch
-    {
-        private static readonly MethodInfo getValid = AccessTools.PropertyGetter(typeof(Building_GravEngine), nameof(Building_GravEngine.ValidSubstructure));
-        private static readonly MethodInfo ground = AccessTools.Method(typeof(ShipSet), nameof(ShipSet.Ground));
-        public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
-
-        private static IEnumerable<MethodBase> Targets()
-        {
-            MethodInfo of = AccessTools.Method(AccessTools.TypeByName("IsoRim.ShipCells"), "Of");
-            MethodInfo build = AccessTools.Method(AccessTools.TypeByName("IsoRim.ShipSnapshot"), "Build");
-            return new[] { of, build }.Where(m => m != null);
-        }
-
-        public static bool Prepare() => ModsConfig.OdysseyActive && Targets().Any();
-
-        public static IEnumerable<MethodBase> TargetMethods() => Targets();
-
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
-        {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
-            int n = 0;
-            foreach (CodeInstruction ci in code)
-            {
-                if (ci.Calls(getValid))
-                {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = ground;
-                    n++;
-                }
-            }
-            string key = original.DeclaringType.Name + "." + original.Name;
-            PerMethod[key] = n;
-            ProjectZ.DebugLog($"multi-level gravships: IsoRim {key}: {n} ship-set read(s) on the ground");
-            return code;
-        }
-    }
 }

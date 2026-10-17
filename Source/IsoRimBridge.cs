@@ -274,6 +274,9 @@ namespace ProjectZ
 
         public int PointerFloor(Map map) => FloorView.Current;
 
+        // The gravship cutscene shows all floors of a ship with upper decks, then puts the player's view back.
+        public int ViewFloor(Map map, int k) => FloorView.Swap(map, k);
+
         // A pawn on the ramp, on the step to or from its top, or in the middle of a jump (Links.Rise).
         public Vector3 ThingOffset(Thing t)
         {

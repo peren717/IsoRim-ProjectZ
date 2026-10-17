@@ -63,6 +63,13 @@ namespace ProjectZ.Dev
         private static readonly Func<Designator_MoveGravship, IntVec3, IntVec3> sfAdjusted =
             AccessTools.MethodDelegate<Func<Designator_MoveGravship, IntVec3, IntVec3>>(AccessTools.Method(typeof(Designator_MoveGravship), "GetSizeRotAdjustedCell"));
 
+        private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, float> sfTimeLeft =
+            AccessTools.FieldRefAccess<WorldComponent_GravshipController, float>("timeLeft");
+
+        // Cutscene frames (progress 0-1 over vanilla's 10 s): take-off at rest, rising, leaving; landing coming in, low, at the swap.
+        private static readonly float[] SfTakeoffAt = { 0.02f, 0.45f, 0.62f };
+        private static readonly float[] SfLandingAt = { 0.55f, 0.82f, 0.935f };
+
         private static IntVec3 SF(int dx, int dz) => new IntVec3(sfO.x + dx, 0, sfO.z + dz);
 
         private static IntVec3 SFF(int dx, int dz, int k, Map map) => ProjectZ.CellOnFloor(SF(dx, dz), k, map);
@@ -128,11 +135,6 @@ namespace ProjectZ.Dev
             }
             Result("P4 sites found (capture and placement)", ShipLocal.Ready,
                 string.Join(", ", CapturePatch.PerMethod.Concat(PlacePatch.PerMethod).Select(kv => kv.Key + " " + kv.Value)));
-            Info("IsoRim ground-scope sites: " + string.Join(", ", IsoRimShipGround_Patch.PerMethod.Select(kv => kv.Key + " " + kv.Value)));
-            if (IsoRimBridge.Present)
-            {
-                Result("IsoRim's cutscene reads the ship's ground cells (2 sites)", IsoRimShipGround_Patch.PerMethod.Count == 2 && IsoRimShipGround_Patch.PerMethod.Values.All(n => n >= 1), "");
-            }
             const int W = 58, H = 28;
             CellRect found = CellRect.Empty;
             int bestBad = int.MaxValue;
@@ -482,6 +484,13 @@ namespace ProjectZ.Dev
                     break;
                 }
             }
+            if (GenCommandLine.CommandLineArgPassed("projectzshiporbit") && Find.WorldGrid.Orbit != null)
+            {
+                // (-projectzshiporbit: the first flight goes to orbit instead, the closest free orbit tile; a space map)
+                PlanetTile up = Find.WorldGrid.Orbit.GetClosestTile_NewTemp(map.Tile);
+                dest = up.Valid && Find.WorldObjects.MapParentAt(up) == null ? up : PlanetTile.Invalid;
+                Info($"F2 to orbit: tile {up} ({(dest.Valid ? "free" : "taken")})");
+            }
             if (!dest.Valid)
             {
                 Result("F2 a neighbouring tile to fly to", false, "none");
@@ -550,6 +559,13 @@ namespace ProjectZ.Dev
                 : (glIsTakeoff(ctl) ? "takeoff" : "landing");
             if (st != sfLastStage)
             {
+                if (sfLastStage == "takeoff" || sfLastStage == "landing")
+                {
+                    // IsoRim (3D) shows every floor during the cutscene and puts the player's view back after it
+                    int want = sfLeg == 2 ? 2 : 0;
+                    Result($"leg {sfLeg}: floor view back to the player's after the {sfLastStage}", FloorView.Current == want || Find.CurrentMap == null,
+                        $"view {FloorView.Current}, want {want}");
+                }
                 Info($"leg {sfLeg}: stage {st} at frame {sfFrames}, tick {Find.TickManager.TicksGame}");
                 sfLastStage = st;
                 sfStageAt = Time.realtimeSinceStartup;
@@ -560,9 +576,18 @@ namespace ProjectZ.Dev
                     return;
                 }
             }
-            // the cutscene as the player sees it (IsoRim 3D): two frames of each
-            if (cut && sfShotsTaken < 2 && Time.realtimeSinceStartup - sfStageAt > (sfShotsTaken == 0 ? 3f : 7f))
+            // the cutscene as the player sees it (IsoRim 3D): frames at set points of its progress
+            float[] at = st == "takeoff" ? SfTakeoffAt : SfLandingAt;
+            float left = sfTimeLeft(ctl);
+            float progress = Mathf.Clamp01(1f - left / 10f);
+            if (cut && sfShotsTaken < at.Length && left > 0f && left <= 10f && progress >= at[sfShotsTaken])
             {
+                Info($"leg {sfLeg}: {st} frame {sfShotsTaken + 1} at progress {progress:0.00}, floor view {FloorView.Current}");
+                if (sfShotsTaken == 0 && IsoRimBridge.Present && IsoRimBridge.View3DOn)
+                {
+                    AnnexMapComponent an = ProjectZ.Annex(Find.CurrentMap);
+                    Result($"leg {sfLeg}: all floors shown during the {st} (IsoRim 3D)", an != null && FloorView.Current == an.floors - 1, $"view {FloorView.Current}, floors {an?.floors}");
+                }
                 sfShotsTaken++;
                 ZCapture($"sf_leg{sfLeg}_{st}_{sfShotsTaken}");
                 return;
