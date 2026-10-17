@@ -195,4 +195,21 @@ namespace ProjectZ.Patches
             }
         }
     }
+
+    // A facility that needs line of sight (tool cabinets, ...) links across floors on the 3D distance alone. The game's
+    // sight test runs on the raw rows, and between two bands it is always refused now (VoidRule: no flat line of sight
+    // between bands); before, it only passed by luck along the raw rows through the void. On one floor: the game's test.
+    [HarmonyPatch(typeof(CompAffectedByFacilities), "IsPotentiallyValidFacilityForMe_Static", new[] { typeof(ThingDef), typeof(IntVec3), typeof(Rot4), typeof(ThingDef), typeof(IntVec3), typeof(Rot4), typeof(Map) })]
+    public static class FacilitySight_Patch
+    {
+        public static bool Prefix(IntVec3 facilityPos, IntVec3 myPos, Map map, ref bool __result)
+        {
+            if (Facilities3D.Off || map == null || !Heights.CrossFloor(facilityPos, myPos, map))
+            {
+                return true;
+            }
+            __result = true;
+            return false;
+        }
+    }
 }

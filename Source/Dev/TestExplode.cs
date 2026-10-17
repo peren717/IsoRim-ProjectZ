@@ -106,7 +106,7 @@ namespace ProjectZ.Dev
         {
             Pawn p = exPawns[name];
             IntVec3 at = p.Dead ? p.Corpse?.Position ?? IntVec3.Invalid : p.Position;
-            return $"{name} at {at} (floor {ProjectZ.FloorOf(at, map) + 1}): {(p.Dead ? "dead" : $"{Injuries(p) - exInj[name]} new injuries")}";
+            return $"{name} at {at} (floor {ProjectZ.FloorOf(at, map) + 1}): {(p.Dead ? "dead" : $"{Injuries(p) - exInj[name]} new injuries")} ({string.Join(", ", p.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName + (h.sourceDef != null ? " by " + h.sourceDef.defName : "")))})";
         }
 
         private static void ExSnapshot(Map map, string name)
@@ -191,6 +191,17 @@ namespace ProjectZ.Dev
                 }
             }
             Result($"{exCase}: new fire and filth only within the blasts' 3D reach", wrong == 0, $"{newOnes} new, {wrong} out of reach: {string.Join(", ", wrongs.Take(8))}");
+        }
+
+        // Under a slab: unhurt, or (the slab over it broken by a heavy hit) hit by the falling roof (SlabDamage.Break).
+        private static void ExCrushOrNot(string name, bool broken, Map map)
+        {
+            if (!broken)
+            {
+                ExExpect(name, false, "the slab is between", map);
+                return;
+            }
+            Result($"{exCase}: {name}: the slab over it broke, the roof under it falls on it", Ceilinged(exPawns[name]), ExDesc(name, map));
         }
 
         private static void ExExpect(string name, bool hit, string why, Map map)
@@ -320,7 +331,9 @@ namespace ProjectZ.Dev
                     ExRec r = exRecs.Skip(exFrom).FirstOrDefault();
                     bool onSlab = r != null && ProjectZ.HasFloor(r.centre, map);
                     Info($"grenade landed at {r?.centre} (on a slab: {onSlab}), {(r == null ? -1 : r.centre.DistanceTo(EU(30, exGz - 25, map))):0.0} from the aim");
-                    ExExpect("under the slab", false, "the slab is between", map);
+                    // (a heavy hit that breaks the slab over it crushes it with the roof under the slab: SlabDamage.Break)
+                    bool brokenOver = !ProjectZ.HasFloor(EU(30, exGz - 24, map), map);
+                    ExCrushOrNot("under the slab", brokenOver, map);
                     if (r != null && r.centre.DistanceTo(exPawns["on the slab next to the blast"].Position) <= 1.5f)
                     {
                         ExExpect("on the slab next to the blast", true, "same floor, next cell", map);
@@ -336,6 +349,7 @@ namespace ProjectZ.Dev
                 case "ex_shell":
                 {
                     ExAway(map);
+                    ExSlab(map, new CellRect(exO + 26, exGz - 25, 9, 9));   // (laid again where the grenade broke it)
                     ExSnapshot(map, "shell");
                     ExPawn(map, "under the slab", EG(28, exGz - 24));
                     ExPawn(map, "on the ground past the edge", EG(28, exGz - 26));
@@ -355,7 +369,8 @@ namespace ProjectZ.Dev
                     ExCheck(map);
                     ExRec r = exRecs.Skip(exFrom).FirstOrDefault();
                     Result("shell: lands on the slab over its aim", r != null && r.centre == EU(28, exGz - 25, map), $"exploded at {r?.centre}");
-                    ExExpect("under the slab", false, "the slab is between", map);
+                    bool shellBroke = !ProjectZ.HasFloor(EU(28, exGz - 24, map), map);
+                    ExCrushOrNot("under the slab", shellBroke, map);
                     ExExpect("on the ground past the edge", true, $"3D {Range3D.Distance(EG(28, exGz - 26), EU(28, exGz - 25, map), map):0.00} of 2.9, past the edge", map);
                     ExExpect("on the ground 3 rows out", false, $"3D {Range3D.Distance(EG(28, exGz - 28), EU(28, exGz - 25, map), map):0.00} of 2.9", map);
                     ExExpect("on the slab 2 cells off", true, "same floor", map);

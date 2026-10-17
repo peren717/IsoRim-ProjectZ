@@ -339,7 +339,8 @@ namespace ProjectZ.Combat
         }
     }
 
-    // A flashstorm may strike a roof with floors under it (on the top floor), never the floors' rows by raw position.
+    // A flashstorm strikes only its centre's band (void barrier: never another band's raw rows nor a void row; a storm
+    // cast on an upper floor stays there), and may strike a roof with floors under it (on the top floor).
     [HarmonyPatch(typeof(GameCondition_Flashstorm), "IsGoodLocationForStrike")]
     public static class Flashstorm_GoodLocation_Patch
     {
@@ -350,7 +351,8 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            if (ProjectZ.IsAnnex(loc, map))
+            IntVec3 centre = __instance.centerLocation.IsInvalid ? IntVec3.Invalid : __instance.centerLocation.ToIntVec3;
+            if (VoidRule.Off ? ProjectZ.IsAnnex(loc, map) : !centre.IsValid || !ProjectZ.SameBand(loc, centre, map))
             {
                 __result = false;
                 return;

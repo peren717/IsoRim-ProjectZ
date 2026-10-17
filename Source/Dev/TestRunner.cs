@@ -95,6 +95,8 @@ namespace ProjectZ.Dev
     //                                   decks on floors 2 and 3, ship parts and a carpet on them, removal top-down, support,
     //                                   save/reload, a real launch leaving the decks behind to fall); -projectzfloors=3,
     //                                   Odyssey (TestShipDeck)
+    //                                   void, voidfire, voidsave, voidload, voidperf, crush: the void barrier and slabs broken
+    //                                   by heavy hits crushing what is below (TestVoid; -projectznovoidrule: without the rule)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -157,6 +159,7 @@ namespace ProjectZ.Dev
             DropRules.ShuttleFixOff = GenCommandLine.CommandLineArgPassed("projectznoshuttlefix");
             Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
+            VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -200,6 +203,10 @@ namespace ProjectZ.Dev
             {
                 PatchStrikesProbe(h);
                 PatchExplodeProbe(h);
+            }
+            if (mode.StartsWith("void") || mode == "crush")
+            {
+                PatchVoidProbe(h);
             }
             if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser")
             {
@@ -530,6 +537,11 @@ namespace ProjectZ.Dev
                 StepFacility(map);
                 return;
             }
+            if (stage.StartsWith("vo_") || stage.StartsWith("vf_") || stage.StartsWith("vs_") || stage.StartsWith("vl_") || stage.StartsWith("vp_") || stage.StartsWith("cr_"))
+            {
+                StepVoid(map);
+                return;
+            }
             if (stage.StartsWith("jp_"))
             {
                 StepJump(map);
@@ -564,7 +576,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -684,6 +696,10 @@ namespace ProjectZ.Dev
                     else if (mode == "facility")
                     {
                         stage = "fa_setup";
+                    }
+                    else if (mode == "void" || mode == "voidfire" || mode == "voidsave" || mode == "voidperf" || mode == "crush")
+                    {
+                        stage = mode == "void" ? "vo_setup" : mode == "voidfire" ? "vf_setup" : mode == "voidsave" ? "vs_setup" : mode == "voidperf" ? "vp_setup" : "cr_setup";
                     }
                     else if (mode == "bulletpitch")
                     {
@@ -1007,9 +1023,16 @@ namespace ProjectZ.Dev
                 }
             }
             Result("top-row region touches the edge " + when, topReg == null || topReg.touchesMapEdge, topReg == null ? "no standable top-row cell" : $"{topReg} outdoors={topReg.Room?.PsychologicallyOutdoors}");
-            IntVec3 voidCell = new IntVec3(sx / 2, 0, gz + 1);
+            IntVec3 voidCell = new IntVec3(sx / 2, 0, gz);
             Region voidReg = voidCell.GetRegion(map, RegionType.Set_All);
-            Info($"void region at {voidCell}: {voidReg?.type} touchesMapEdge={voidReg?.touchesMapEdge}");
+            if (VoidRule.Off)
+            {
+                Info($"void region at {voidCell}: {voidReg?.type} touchesMapEdge={voidReg?.touchesMapEdge} (void rule off)");
+            }
+            else
+            {
+                Result("void cell has no region (void rule) " + when, voidReg == null, $"{voidCell}: {voidReg?.type.ToString() ?? "none"}");
+            }
         }
 
         private static void FinderStats(Map map)

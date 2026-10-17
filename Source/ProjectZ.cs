@@ -86,6 +86,8 @@ namespace ProjectZ
                 FloorRoof.Normalize(map);
                 // ship decks over cells that lost their substructure fall (ShipDeck)
                 ShipDeck.CheckAllLater(map);
+                // The void rows are a virtual wall (VoidRule): light blocked, no gas left there (older saves).
+                VoidRule.Apply(map);
             }
         }
     }
@@ -165,6 +167,28 @@ namespace ProjectZ
                 return 0;
             }
             return c.z % a.stride < a.groundZ ? c.z / a.stride : -1;
+        }
+
+        // A void gap row cell (between two bands, or above the top band). Never on a map without floors.
+        public static bool IsVoid(IntVec3 c, Map map)
+        {
+            AnnexMapComponent a = Annex(map);
+            return a != null && c.z >= a.groundZ && c.z % a.stride >= a.groundZ;
+        }
+
+        // The band a cell is in: its floor, -1 for void rows (FloorOf).
+        public static int Band(IntVec3 c, Map map) => FloorOf(c, map);
+
+        // Two cells in the same band (always true on a map without floors); a void cell is in no band.
+        public static bool SameBand(IntVec3 a, IntVec3 b, Map map)
+        {
+            AnnexMapComponent an = Annex(map);
+            if (an == null || a.z < an.groundZ && b.z < an.groundZ)
+            {
+                return true;
+            }
+            int ka = FloorOf(a, map);
+            return ka >= 0 && ka == FloorOf(b, map);
         }
 
         // The ground cell under (or at) c; Invalid for a void gap cell.

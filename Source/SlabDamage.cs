@@ -13,8 +13,9 @@ namespace ProjectZ
     //     (SkyStrikes: the power beam);
     //   - a wood slab breaks; a stone or metal slab becomes its damaged slab (SlabDefs), and a floor laid on it (carpet,
     //     tiles) is destroyed with no refund; a damaged slab breaks;
-    //   - breaking is the slab collapse (SlabCollapse.Collapse: built things on it destroyed, pawns and items fall), and the
-    //     roof under it goes too (it was the slab), so the floor below is open to whatever is above;
+    //   - breaking is the support-loss collapse (Break: the game's collapse buffer): built things on the slab destroyed,
+    //     pawns and items fall, the roof under it drops and crushes what is below, the game's letter; the floor below is
+    //     then open to whatever is above;
     //   - nothing is laid on a damaged slab (its def is not changeable: the game's own refusal; PlaceMessages says why) and
     //     it is never repaired: it is taken up with the remove tool (Slab.At counts it) and laid again;
     //   - the landing of stairs is part of the stairs: hits leave it alone.
@@ -59,7 +60,11 @@ namespace ProjectZ
             Break(c, map);
         }
 
-        // The slab at u is gone: the collapse path, then the roof under it.
+        // The slab at u is gone: the same path as a slab losing its support (user 2026-10-17). The roof under it (the
+        // floor's own) is marked on the game's collapse buffer, which resolves it at the end of this tick
+        // (RoofCollapseBufferResolver): the slab falls with everything on it (SlabCollapse.BufferCollapse), the roof
+        // under it drops and crushes what is below, and the game sends its "roof collapsed" letter (one per tick, with
+        // every slab broken in it). Without that roof under it (nothing should be): the slab falls on its own.
         public static void Break(IntVec3 u, Map map)
         {
             IntVec3 below = FloorRoof.Below(u, map);
@@ -68,6 +73,13 @@ namespace ProjectZ
                 return;
             }
             TerrainDef was = SlabAt(u, map);
+            if (map.roofGrid.RoofAt(below) == PZDefOf.PZ_FloorRoof)
+            {
+                map.roofCollapseBuffer.MarkToCollapse(below);
+                Broken++;
+                ProjectZ.DebugLog($"slab at {u} broken ({was?.defName}): the roof under it is marked to collapse");
+                return;
+            }
             SlabCollapse.Collapse(below, map, null);
             RoofDef roof = map.roofGrid.RoofAt(below);
             if (roof != null && !roof.isThickRoof && !FloorRoof.FloorAbove(below, map))
