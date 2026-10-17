@@ -98,8 +98,9 @@ namespace ProjectZ.Patches
         }
     }
 
-    // A shell falling from the sky (flyOverhead) on a cell under an upper floor lands on the top of that column: the
-    // highest floor built there (the floor's roof below cannot drop, it is the floor itself).
+    // A shell falling from the sky (flyOverhead) lands on the top of its column (ProjectZ.ColumnTop): the highest floor
+    // built there (the floor's roof below cannot drop, it is the floor itself); one falling onto open air upstairs
+    // drops to what is below it.
     [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
     public static class Projectile_ImpactOnTop_Patch
     {
@@ -111,22 +112,12 @@ namespace ProjectZ.Patches
             }
             Map map = __instance.Map;
             IntVec3 pos = __instance.Position;
-            if (!ProjectZ.HasAnnex(map) || map.roofGrid.RoofAt(pos) != PZDefOf.PZ_FloorRoof)
+            if (!ProjectZ.HasAnnex(map))
             {
                 return;
             }
-            IntVec3 top = pos;
-            IntVec3 g = ProjectZ.GroundCellOf(pos, map);
-            for (int k = ProjectZ.FloorOf(pos, map) + 1; g.IsValid; k++)
-            {
-                IntVec3 up = ProjectZ.CellOnFloor(g, k, map);
-                if (!ProjectZ.HasFloor(up, map))
-                {
-                    break;
-                }
-                top = up;
-            }
-            if (top == pos)
+            IntVec3 top = ProjectZ.ColumnTop(pos, map);
+            if (!top.IsValid || top == pos)
             {
                 return;
             }

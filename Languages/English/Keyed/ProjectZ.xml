@@ -39,4 +39,7 @@
   <PZ_StairsLandHere>Stairs land here</PZ_StairsLandHere>
   <PZ_FloorAboveFirst>Remove the floor above first</PZ_FloorAboveFirst>
   <PZ_FartherFirst>Cells farther from the stairs go first</PZ_FartherFirst>
+  <PZ_DamagedSlab>damaged {0}</PZ_DamagedSlab>
+  <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Take it up with the remove tool and lay a new one.</PZ_DamagedSlabDesc>
+  <PZ_DamagedSlabNoFloor>Damaged upper floor: take it up and lay it again</PZ_DamagedSlabNoFloor>
 </LanguageData>

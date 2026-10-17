@@ -87,6 +87,10 @@ namespace ProjectZ.Dev
     //                                   explode: explosions across floors (a grenade thrown on a slab edge, a shell on a slab
     //                                   edge, a doomsday rocket near the ground's north edge; probes of every cell hit, fire
     //                                   and filth); -projectzfloors=2 (TestExplode; -projectznoexplfix: the game's flat explosions)
+    //                                   strikes: slab damage and strikes from the sky (grenades on wood and stone slabs, a
+    //                                   damaged slab refusing a carpet and taken up, an orbital bombardment and a power beam
+    //                                   burning down a 3-storey pavilion, lightning on a slab, mortar misses near the ground's
+    //                                   north edge); -projectzfloors=3 (TestStrikes)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -185,6 +189,11 @@ namespace ProjectZ.Dev
             DrawLog.Patch(h);
             if (mode == "explode")
             {
+                PatchExplodeProbe(h);
+            }
+            if (mode == "strikes")
+            {
+                PatchStrikesProbe(h);
                 PatchExplodeProbe(h);
             }
             if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser")
@@ -496,6 +505,11 @@ namespace ProjectZ.Dev
                 StepSkyDrop(map);
                 return;
             }
+            if (stage.StartsWith("sx_"))
+            {
+                StepStrikes(map);
+                return;
+            }
             if (stage.StartsWith("ex_"))
             {
                 StepExplode(map);
@@ -643,6 +657,10 @@ namespace ProjectZ.Dev
                     else if (mode == "explode")
                     {
                         stage = "ex_setup";
+                    }
+                    else if (mode == "strikes")
+                    {
+                        stage = "sx_setup";
                     }
                     else if (mode == "bulletpitch")
                     {

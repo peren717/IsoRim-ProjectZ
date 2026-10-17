@@ -10,28 +10,57 @@ namespace ProjectZ
     // the defName older saves have; the others are made from it at load for every Woody, Metallic and Stony stuff,
     // modded ones too (as the game makes its carpets: DefGenerator, before blueprints and frames are made for them).
     // Each slab: label "<stuff> upper floor", colour and icon colour the stuff's, 4 of the stuff, work 300 scaled by the
-    // stuff like a wall's. THE test for "is this a slab" is Is(): no code compares against PZ_UpperFloor itself.
+    // stuff like a wall's. THE test for "is this a slab" is Is(): no code compares against PZ_UpperFloor itself. Every stone
+    // and metal slab also has a damaged slab (SlabDamage: after a heavy hit; cracked texture, not buildable, nothing laid on
+    // it), which Is() counts as a slab too.
     public static class SlabDefs
     {
         public const int Cost = 4;
         public const float BaseWork = 300f;
 
         private static readonly HashSet<TerrainDef> slabs = new HashSet<TerrainDef>();
+        private static readonly HashSet<TerrainDef> damaged = new HashSet<TerrainDef>();
+        private static readonly Dictionary<TerrainDef, TerrainDef> damagedOf = new Dictionary<TerrainDef, TerrainDef>();
         private static readonly Dictionary<ThingDef, TerrainDef> byStuff = new Dictionary<ThingDef, TerrainDef>();
         private static readonly Dictionary<TerrainDef, ThingDef> stuffOf = new Dictionary<TerrainDef, ThingDef>();
 
+        // The buildable slabs (one per stuff; damaged slabs are not built).
         public static IEnumerable<TerrainDef> All => slabs;
 
-        // Any slab def (bare slab terrain, of any stuff).
-        public static bool Is(TerrainDef t) => t != null && slabs.Contains(t);
+        // Any slab def (bare slab terrain, of any stuff, damaged or not).
+        public static bool Is(TerrainDef t) => t != null && (slabs.Contains(t) || damaged.Contains(t));
 
         // A slab def as a buildable (blueprints', frames' entityDefToBuild, placements).
-        public static bool Is(BuildableDef d) => d is TerrainDef t && slabs.Contains(t);
+        public static bool Is(BuildableDef d) => d is TerrainDef t && Is(t);
+
+        // A damaged slab (SlabDamage: a stone or metal slab after one heavy hit).
+        public static bool IsDamaged(TerrainDef t) => t != null && damaged.Contains(t);
+
+        // What a slab becomes after a heavy hit: its damaged def; null for wood slabs (they break) and damaged ones.
+        public static TerrainDef DamagedOf(TerrainDef t) => t != null && damagedOf.TryGetValue(t, out TerrainDef d) ? d : null;
+
+        public static IEnumerable<TerrainDef> AllDamaged => damaged;
 
         // The slab of a stuff (the wood slab when the stuff has none).
         public static TerrainDef For(ThingDef stuff) => stuff != null && byStuff.TryGetValue(stuff, out TerrainDef t) ? t : PZDefOf.PZ_UpperFloor;
 
         public static ThingDef StuffOf(TerrainDef t) => t != null && stuffOf.TryGetValue(t, out ThingDef s) ? s : null;
+
+        private static bool Woody(ThingDef d)
+        {
+            if (d?.stuffProps?.categories == null)
+            {
+                return false;
+            }
+            foreach (StuffCategoryDef c in d.stuffProps.categories)
+            {
+                if (c != null && c.defName == "Woody")
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         private static bool SlabStuff(ThingDef d)
         {
@@ -53,6 +82,8 @@ namespace ProjectZ
         public static void Generate(bool hotReload)
         {
             slabs.Clear();
+            damaged.Clear();
+            damagedOf.Clear();
             byStuff.Clear();
             stuffOf.Clear();
             TerrainDef wood = DefDatabase<TerrainDef>.GetNamedSilentFail("PZ_UpperFloor");
@@ -86,12 +117,54 @@ namespace ProjectZ
                 Fill(t, wood, stuff, baseLabel);
                 made.Add(t);
             }
+            // The damaged slab of every stone and metal slab (wood slabs break at once): not built, nothing laid on it
+            // (changeable false, the game's own "no floor here"), taken up with the remove tool like any slab.
+            List<TerrainDef> broken = new List<TerrainDef>();
+            foreach (TerrainDef s in new List<TerrainDef>(slabs))
+            {
+                ThingDef stuff = StuffOf(s);
+                if (stuff == null || Woody(stuff))
+                {
+                    continue;
+                }
+                string defName = "PZ_UpperFloorDamaged_" + stuff.defName;
+                TerrainDef d = hotReload ? DefDatabase<TerrainDef>.GetNamedSilentFail(defName) ?? new TerrainDef() : new TerrainDef();
+                d.defName = defName;
+                d.ResolveDefNameHash();
+                CopyFrom(d, wood);
+                d.texturePath = DamagedTexture;
+                d.designatorDropdown = null;
+                d.designationCategory = null;
+                d.placeWorkers = null;
+                d.changeable = false;
+                d.label = "PZ_DamagedSlab".Translate(s.label);
+                d.description = "PZ_DamagedSlabDesc".Translate();
+                d.color = s.color;
+                d.uiIconColor = s.uiIconColor;
+                d.costList = s.costList == null ? null : new List<ThingDefCountClass>(s.costList);
+                d.constructEffect = s.constructEffect;
+                d.statBases = new List<StatModifier>();
+                foreach (StatModifier m in s.statBases)
+                {
+                    d.statBases.Add(new StatModifier { stat = m.stat, value = m.value });
+                }
+                damaged.Add(d);
+                damagedOf[s] = d;
+                stuffOf[d] = stuff;
+                broken.Add(d);
+            }
             foreach (TerrainDef t in made)
             {
                 DefGenerator.AddImpliedDef(t, hotReload);
             }
-            ProjectZ.DebugLog($"slab defs: {slabs.Count} ({made.Count} made from {wood.defName})");
+            foreach (TerrainDef t in broken)
+            {
+                DefGenerator.AddImpliedDef(t, hotReload);
+            }
+            ProjectZ.DebugLog($"slab defs: {slabs.Count} ({made.Count} made from {wood.defName}), {broken.Count} damaged");
         }
+
+        public const string DamagedTexture = "ProjectZ/Terrain/SlabLatticeDamaged";
 
         // Everything a slab is, from the wood slab's XML.
         private static void CopyFrom(TerrainDef t, TerrainDef w)
@@ -117,6 +190,7 @@ namespace ProjectZ
             t.preventCraters = w.preventCraters;
             t.filthAcceptanceMask = w.filthAcceptanceMask;
             t.uiOrder = w.uiOrder;
+            t.destroyOnBombDamageThreshold = w.destroyOnBombDamageThreshold;
             t.modContentPack = w.modContentPack;
             t.fileName = w.fileName;
         }

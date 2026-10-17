@@ -22,6 +22,12 @@ namespace ProjectZ.Patches
                 __result = "PZ_GroundOnly".Translate();
                 return;
             }
+            // (a damaged slab is not changeable: no floor goes on it, SlabDamage)
+            if (!__result.Accepted && entDef is TerrainDef && !SlabDefs.Is(entDef) && map != null && center.InBounds(map) && SlabDefs.IsDamaged(center.GetTerrain(map)))
+            {
+                __result = "PZ_DamagedSlabNoFloor".Translate();
+                return;
+            }
             if (__result.Accepted || entDef == null || map == null || ProjectZ.Annex(map) == null || !IsTerrainRefusal(entDef, stuffDef ?? thing?.Stuff, __result.Reason))
             {
                 return;

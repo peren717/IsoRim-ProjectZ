@@ -447,7 +447,8 @@ namespace ProjectZ
     //     holds them: fall bruises as from a jump (JumpGrid.Landed), and, landing in the collapse, the game's own
     //     crush damage like everyone under it (the roof under the slab is a plain roof by then and drops as one);
     //   - walls on the slab that held roofs above go too, so floors above lose their support in turn (the game's cascade).
-    // Shells, drop pods, tornadoes and mortars still never break a slab (Q11: FloorRoof.Kept outside the buffer).
+    // Drop pods and tornadoes never break a slab, nor does a shell drop the roof under one (Q11: FloorRoof.Kept outside the
+    // buffer); explosions break slabs only through heavy hits (SlabDamage), which end here too.
     // Inside the game's collapse finder (removal mode, or the buffer resolved from there) nothing may be destroyed (its
     // flood fills share static lists): the slab is queued and falls when the finder returns.
     public static class SlabCollapse

@@ -71,6 +71,9 @@
     <constructEffect>ConstructWood</constructEffect>
     <canEverTerraform>false</canEverTerraform>
     <supportsRock>false</supportsRock>
+    <!-- A heavy hit (SlabDamage): an explosion doing at least this much damage at the cell. Wood slabs break, stone and
+         metal ones become damaged slabs, damaged ones break. The vanilla bridge value: frag grenades and mortar shells reach it. -->
+    <destroyOnBombDamageThreshold>35</destroyOnBombDamageThreshold>
     <preventCraters>true</preventCraters>
     <statBases>
       <WorkToBuild>300</WorkToBuild>

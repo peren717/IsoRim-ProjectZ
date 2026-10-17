@@ -47,12 +47,23 @@ namespace ProjectZ.Dev
         internal static void PatchExplodeProbe(Harmony h)
         {
             h.Patch(AccessTools.Method(typeof(Explosion), nameof(Explosion.StartExplosion)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(ExStartPrefix)));
-            h.Patch(AccessTools.Method(typeof(Explosion), "AffectCell"), postfix: new HarmonyMethod(typeof(TestRunner), nameof(ExAffectPostfix)));
+            h.Patch(AccessTools.Method(typeof(Explosion), "AffectCell"), prefix: new HarmonyMethod(typeof(TestRunner), nameof(ExAffectPrefix)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(ExAffectPostfix)));
         }
 
         private static void ExStartPrefix(Explosion __instance)
         {
             exRecs.Add(new ExRec { e = __instance, centre = __instance.Position, radius = __instance.radius, dam = __instance.damType?.defName, start = Find.TickManager.TicksGame, speed = __instance.propagationSpeed });
+        }
+
+        // Cells that had a floor when the blast reached them (a heavy hit may break the slab right after: SlabDamage).
+        internal static readonly HashSet<IntVec3> exHadFloor = new HashSet<IntVec3>();
+
+        private static void ExAffectPrefix(Explosion __instance, IntVec3 c)
+        {
+            if (__instance.Map != null && ProjectZ.HasFloor(c, __instance.Map))
+            {
+                exHadFloor.Add(c);
+            }
         }
 
         private static void ExAffectPostfix(Explosion __instance, IntVec3 c, bool __runOriginal)
@@ -138,7 +149,7 @@ namespace ProjectZ.Dev
                             beyond++;
                             bad.Add($"{c} floor {k + 1}: 3D {d:0.0} > {r.radius}");
                         }
-                        if (k >= 1 && !ProjectZ.HasFloor(c, map))
+                        if (k >= 1 && !ProjectZ.HasFloor(c, map) && !exHadFloor.Contains(c))
                         {
                             overAir++;
                         }
