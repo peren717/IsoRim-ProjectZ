@@ -43,6 +43,11 @@ namespace ProjectZ.Dev
                 {
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     Info($"loaded {saveName}: map {map} size {map.Size}, tick {Find.TickManager.TicksGame}, annex {ProjectZ.Annex(map)?.floors} floors");
+                    if (GenCommandLine.CommandLineArgPassed("projectzsaveroof"))
+                    {
+                        SrSave(map);
+                        return true;
+                    }
                     new Harmony("Peren.IsoRimProjectZ.test.save").Patch(AccessTools.Method(typeof(Pawn_JobTracker), nameof(Pawn_JobTracker.EndCurrentJob)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(EndJobPrefix)));
                     DescribeStairs(map);
                     DescribeColonists(map, "on load");

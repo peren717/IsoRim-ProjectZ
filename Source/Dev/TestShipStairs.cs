@@ -171,6 +171,9 @@ namespace ProjectZ.Dev
                     Result("no floor-tagged cell reached a map (safety net)", ShipLocal.Nets == 0, $"{ShipLocal.Nets}");
                     Finish();
                     return;
+                default:
+                    StepShipRoof(map);
+                    return;
             }
         }
 
@@ -280,6 +283,11 @@ namespace ProjectZ.Dev
             e.nameHidden = false;
             spFresh = GenCommandLine.CommandLineArgPassed("projectzshipfresh");
             spDeckRec.Clear();
+            if (GenCommandLine.CommandLineArgPassed("projectzshiproof"))
+            {
+                SrSetup(map, e, cols);
+                return;
+            }
             if (spFresh)
             {
                 SpFreshSetup(map, e, cols);

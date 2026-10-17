@@ -111,6 +111,8 @@ namespace ProjectZ.Dev
     //                                   building two on a 3-storey ship with their stairwell decks taken up, the square icon
     //                                   in the copy gizmo, walking and hauling over them, the ship flown and landed turned
     //                                   with them working); -projectzfloors=4, Odyssey (TestShipStairs)
+    //                                   (-projectzshipfresh: a fresh ship, the landing deck; -projectzshiproof: stairs in
+    //                                   roofed rooms, the roof over a ship stairwell, TestShipRoof)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)

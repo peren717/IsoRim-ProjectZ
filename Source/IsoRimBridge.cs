@@ -324,6 +324,9 @@ namespace ProjectZ
         // The gravship cutscene shows all floors of a ship with upper decks, then puts the player's view back.
         public int ViewFloor(Map map, int k) => FloorView.Swap(map, k);
 
+        // The stairwell of ship stairs is part of the ship: a roof over it is drawn as the ship's roof (ShipStairs.Opening).
+        public bool ShipCell(Map map, IntVec3 c) => ShipStairs.Opening(c, map);
+
         // A pawn on the ramp, on the step to or from its top, or in the middle of a jump (Links.Rise).
         public Vector3 ThingOffset(Thing t)
         {

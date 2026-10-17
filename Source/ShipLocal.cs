@@ -202,6 +202,10 @@ namespace ProjectZ
         public static void Postfix(Gravship __instance, Building_GravEngine engine)
         {
             Map map = engine?.Map;
+            if (map != null && ProjectZ.Annex(map) != null && ModsConfig.OdysseyActive)
+            {
+                ShipStairs.TakeOpeningRoofs(__instance, engine, map);
+            }
             if (map != null && ProjectZ.FloorOf(engine.Position, map) > 0 && ModsConfig.OdysseyActive)
             {
                 IntVec3 g = ProjectZ.GroundCellOf(engine.Position, map);

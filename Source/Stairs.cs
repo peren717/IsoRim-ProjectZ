@@ -370,6 +370,12 @@ namespace ProjectZ
                 {
                     map.roofGrid.SetRoof(c, cur);   // the SetRoof prefix makes it the right one
                 }
+                // the roof over the opening above is drawn again (on a ship it is the ship's roof: ShipStairs.Opening)
+                IntVec3 up = StairShape.Above(c, map);
+                if (up.IsValid && up.InBounds(map) && map.roofGrid.Roofed(up))
+                {
+                    map.mapDrawer.MapMeshDirty(up, MapMeshFlagDefOf.Roofs);
+                }
             }
         }
     }

@@ -23,6 +23,7 @@ namespace ProjectZ.Dev
         private static string glLastStage = "", glAfter, glAboard;
         private static bool glLandedSeen, glLandQueued;
         private static readonly List<(int, IntVec3, float, string)> glShots = new List<(int, IntVec3, float, string)>();
+        private static readonly HashSet<string> glRoofShots = new HashSet<string>();   // shots taken with the roof display on
 
         private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, bool> glIsTakeoff =
             AccessTools.FieldRefAccess<WorldComponent_GravshipController, bool>("isTakeoff");
@@ -71,9 +72,9 @@ namespace ProjectZ.Dev
                         Wait(3, glAfter);
                         return;
                     }
-                    ShotAt(map, glShots[0].Item1, glShots[0].Item2, glShots[0].Item3);
+                    ShotAt(map, glShots[0].Item1, glShots[0].Item2, glShots[0].Item3, glRoofShots.Contains(glShots[0].Item4));
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(25, "gl_shot_take");
+                    Wait(glRoofShots.Contains(glShots[0].Item4) ? 240 : 25, "gl_shot_take");   // (roofs switched on: IsoRim redraws them over many frames)
                     return;
                 case "gl_shot_take":
                     ZCapture(glShots[0].Item4);

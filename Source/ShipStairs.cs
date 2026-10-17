@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
+using HarmonyLib;
 using RimWorld;
+using RimWorld.Planet;
 using Verse;
 
 namespace ProjectZ
@@ -125,6 +127,49 @@ namespace ProjectZ
                 return "PZ_LandingBlocked".Translate();
             }
             return AcceptanceReport.WasAccepted;
+        }
+
+        // The stairwell of ship stairs on the floor above them: an upper-floor cell with no deck (open air) right over a
+        // ship stairs ramp (built or a building site) on the gravship's deck. It is an opening in the ship's deck, so it
+        // belongs to the ship as the deck round it does: a room's roof over it is the ship's roof (IsoRim draws it so,
+        // IFloorLayout.ShipCell), as a house roof spans a house's stairwell.
+        public static bool Opening(IntVec3 c, Map map)
+        {
+            if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || map.terrainGrid.FoundationAt(c) != null)
+            {
+                return false;
+            }
+            IntVec3 below = FloorRoof.Below(c, map);
+            return SlabSupport.Gravship(below, map) && Stairwell.StairThingAt(below, map);
+        }
+
+        private static readonly AccessTools.FieldRef<Gravship, Dictionary<IntVec3, RoofDef>> shipRoofs = AccessTools.FieldRefAccess<Gravship, Dictionary<IntVec3, RoofDef>>("roofs");
+
+        // Take-off (Gravship capture, GravshipCtor_ShipLocal_Patch): vanilla takes the roofs of the ship's deck cells; the
+        // roof over an opening goes with them (placed back by vanilla's SpawnRoofs at the landing, floor-tagged as the
+        // others), so a room round the stairwell lands closed and no roof is left hanging over the old site.
+        public static void TakeOpeningRoofs(Gravship ship, Building_GravEngine engine, Map map)
+        {
+            Dictionary<IntVec3, RoofDef> roofs = shipRoofs(ship);
+            if (roofs == null)
+            {
+                return;
+            }
+            foreach (IntVec3 c in engine.ValidSubstructure.ToList())
+            {
+                IntVec3 up = StairShape.Above(c, map);
+                if (!up.IsValid || !up.InBounds(map) || !Opening(up, map))
+                {
+                    continue;
+                }
+                RoofDef r = map.roofGrid.RoofAt(up);
+                if (r != null)
+                {
+                    roofs[ShipLocal.From(up, ship.originalPosition, map)] = r;
+                    map.roofGrid.SetRoof(up, null);
+                    ProjectZ.DebugLog($"ship stairs opening {up}: its roof {r.defName} flies with the ship");
+                }
+            }
         }
 
         // A stairwell cell with a ship deck that can be taken up: nothing built or planned on it, no deck over it, not the
