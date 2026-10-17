@@ -277,6 +277,10 @@ namespace ProjectZ
         // A pawn on the ramp, on the step to or from its top, or in the middle of a jump (Links.Rise).
         public Vector3 ThingOffset(Thing t)
         {
+            if (t is RimWorld.PawnFlyer f)
+            {
+                return Combat.JumpFlights.Offset(f);   // a jump between floors (JumpFlights)
+            }
             if (!(t is Pawn p))
             {
                 return Vector3.zero;

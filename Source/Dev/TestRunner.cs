@@ -78,6 +78,9 @@ namespace ProjectZ.Dev
     //                                   a landing pad, boarding and take-off, pods built and launched, the Odyssey passenger
     //                                   shuttle), filmed; -projectzfloors=2 (TestShuttles; -projectznoshuttlefix: without the
     //                                   shuttle landing rule)
+    //                                   jump: jumps between floors (jump pack and longjump: targeting refusals, ground
+    //                                   to floor 2 and back, across a gap, a plain jump-down for comparison, a paramedic
+    //                                   mech's own rescue jump), flights filmed; -projectzfloors=2 (TestJump)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -477,6 +480,11 @@ namespace ProjectZ.Dev
                 StepSkyDrop(map);
                 return;
             }
+            if (stage.StartsWith("jp_"))
+            {
+                StepJump(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -602,6 +610,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shuttles")
                     {
                         stage = "sh_setup";
+                    }
+                    else if (mode == "jump")
+                    {
+                        stage = "jp_setup";
                     }
                     else if (mode == "bulletpitch")
                     {
