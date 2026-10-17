@@ -48,13 +48,17 @@ namespace ProjectZ.Dev
 
         private static IntVec3 MtC(int dx, int dz) => new IntVec3(mtO.x + dx, 0, mtO.z + dz);
 
+        // -projectzhilliness=Impassable (modes mtn, tallmtn): the tile's hilliness (default Mountainous).
+        private static Hilliness MtHilliness => GenCommandLine.TryGetCommandLineArg("projectzhilliness", out string hs) && System.Enum.TryParse(hs, out Hilliness hv) ? hv : Hilliness.Mountainous;
+
         // SetupPostfix (mode mtn): the starting tile, mountainous (a temperate forest one if there is one).
         private static void MtnTile()
         {
             SurfaceTile best = null;
             foreach (SurfaceTile tile in Find.WorldGrid.Tiles.InRandomOrder())
             {
-                if (tile.hilliness != Hilliness.Mountainous || !TileFinder.IsValidTileForNewSettlement(tile.tile))
+                // (impassable tiles are never valid for a new settlement: any land tile of that hilliness, for the test)
+                if (tile.hilliness != MtHilliness || (MtHilliness == Hilliness.Impassable ? tile.WaterCovered : !TileFinder.IsValidTileForNewSettlement(tile.tile)))
                 {
                     continue;
                 }

@@ -180,6 +180,10 @@ namespace ProjectZ.Dev
             }
             FloorJump.Disabled = GenCommandLine.CommandLineArgPassed("projectznojumpfix");
             TallMountainsOverride = GenCommandLine.CommandLineArgPassed("projectztallmountains");
+            if (GenCommandLine.TryGetCommandLineArg("projectzmtnstep", out string mst) && float.TryParse(mst, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float mstv))
+            {
+                Mountains.Step = mstv;
+            }
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
             TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
@@ -217,7 +221,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (mode == "wallheight" || mode == "mtn")
+            if (mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -307,7 +311,7 @@ namespace ProjectZ.Dev
                         continue;
                     }
                     // mode mtn: a mountainous tile (MtnTile picks one if no temperate forest has it)
-                    if (mode == "mtn")
+                    if (mode == "mtn" || mode == "tallmtn")
                     {
                         continue;
                     }
@@ -327,11 +331,11 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "mtn")
+            if (mode == "mtn" || mode == "tallmtn")
             {
                 MtnTile();
             }
-            if (mode == "wallheight" || mode == "mtn")
+            if (mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -654,6 +658,11 @@ namespace ProjectZ.Dev
                 StepMinimap(map);
                 return;
             }
+            if (stage.StartsWith("tm_"))
+            {
+                StepTallMtn(map);
+                return;
+            }
             if (stage.StartsWith("mt_"))
             {
                 StepMtn(map);
@@ -663,7 +672,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
