@@ -11,7 +11,7 @@ using Verse.AI;
 namespace ProjectZ.Combat
 {
     // Strikes from the sky with floors (user decisions 2026-10-16, isorim-orbital-strike-3d.md). One rule: anything from
-    // the sky hits the CURRENT top of each column it falls on (ProjectZ.ColumnTop, read again for every hit), and its area
+    // the sky hits the CURRENT top of each column it falls on (Column.Top, read again for every hit), and its area
     // is measured over the ground (cells picked around the strike's ground cell, in the ground rows, each lifted to its
     // column top). So orbital strikes burn down layer by layer: each hit on a slab is a heavy hit (SlabDamage), a broken
     // slab opens the floor below, which is the top for the next hit.
@@ -49,7 +49,7 @@ namespace ProjectZ.Combat
             int gz = ProjectZ.GroundZ(map);
             IntVec3 g = GenRadial.RadialCellsAround(g0, r, true).Where(x => x.x >= 0 && x.z >= 0 && x.x < map.Size.x && x.z < gz)
                 .RandomElementByWeight(x => weight(x.DistanceTo(g0)));
-            return ProjectZ.ColumnTop(g, map);
+            return Column.Top(g, map);
         }
 
         // The strike stands on the top under its centre (beam, glow, sound; IsoRim reads the height from the row).
@@ -59,7 +59,7 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            IntVec3 top = ProjectZ.ColumnTop(strike.Position, strike.Map);
+            IntVec3 top = Column.Top(strike.Position, strike.Map);
             if (top.IsValid && top != strike.Position)
             {
                 strike.Position = top;
@@ -96,7 +96,7 @@ namespace ProjectZ.Combat
                 {
                     continue;
                 }
-                IntVec3 top = ProjectZ.ColumnTop(g, map);
+                IntVec3 top = Column.Top(g, map);
                 if (ProjectZ.FloorOf(top, map) >= 1 && Exposed(top, map))
                 {
                     SlabDamage.HeavyHit(top, map);
@@ -127,9 +127,9 @@ namespace ProjectZ.Combat
             {
                 return CellFinderLoose.TryGetRandomCellWith(sq =>
                 {
-                    IntVec3 t = ProjectZ.ColumnTop(sq, map);
+                    IntVec3 t = Column.Top(sq, map);
                     return t.IsValid && t.Standable(map) && !map.roofGrid.Roofed(t);
-                }, map, 1000, out IntVec3 g) ? ProjectZ.ColumnTop(g, map) : IntVec3.Invalid;
+                }, map, 1000, out IntVec3 g) ? Column.Top(g, map) : IntVec3.Invalid;
             }
             if (!loc.InBounds(map) || ProjectZ.FloorOf(loc, map) < 0)
             {
@@ -137,7 +137,7 @@ namespace ProjectZ.Combat
             }
             if (map.roofGrid.RoofAt(loc) == PZDefOf.PZ_FloorRoof || ProjectZ.FloorOf(loc, map) >= 1 && !ProjectZ.HasFloor(loc, map))
             {
-                IntVec3 top = ProjectZ.ColumnTop(loc, map);
+                IntVec3 top = Column.Top(loc, map);
                 return top.IsValid ? top : loc;
             }
             return loc;
@@ -182,7 +182,7 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            IntVec3 top = ProjectZ.ColumnTop(proj.targetCell, __instance.Map);
+            IntVec3 top = Column.Top(proj.targetCell, __instance.Map);
             if (top.IsValid && top != proj.targetCell)
             {
                 proj.targetCell = top;
@@ -359,7 +359,7 @@ namespace ProjectZ.Combat
             }
             if (!__result && map.roofGrid.RoofAt(loc) == PZDefOf.PZ_FloorRoof)
             {
-                IntVec3 top = ProjectZ.ColumnTop(loc, map);
+                IntVec3 top = Column.Top(loc, map);
                 __result = top.IsValid && top.Standable(map) && !map.roofGrid.Roofed(top);
             }
         }
@@ -430,7 +430,7 @@ namespace ProjectZ.Combat
             g.z = Mathf.Clamp(g.z, 0, an.groundZ - 1);
             bool overhead = (casting ?? __instance.Projectile)?.projectile?.flyOverhead ?? false;
             int k = ProjectZ.FloorOf(t, map);
-            IntVec3 res = overhead ? ProjectZ.ColumnTop(g, map) : ProjectZ.CellOnFloor(g, Mathf.Max(0, k), map);
+            IntVec3 res = overhead ? Column.Top(g, map) : ProjectZ.CellOnFloor(g, Mathf.Max(0, k), map);
             if (res.IsValid && res != __result)
             {
                 __result = res;

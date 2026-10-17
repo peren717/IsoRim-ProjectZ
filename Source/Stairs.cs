@@ -416,15 +416,7 @@ namespace ProjectZ
         }
     }
 
-    // The column above a cell is open (nothing stops a fall, a shot or a look): no roof, or the stairwell's.
-    public static class Column
-    {
-        public static bool OpenAbove(IntVec3 c, Map map)
-        {
-            RoofDef r = map.roofGrid.RoofAt(c);
-            return r == null || r == PZDefOf.PZ_StairwellRoof;
-        }
-    }
+    // (the column queries, Column.OpenAbove among them: Column.cs)
 
     // Stairs (§1 placement, §7): the ramp on one floor with a floor above it; the stairwell open; the exit a floor (or
     // open air anywhere a roof could cover the cell under it: the landing is made with the stairs) with nothing

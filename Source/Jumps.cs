@@ -111,7 +111,7 @@ namespace ProjectZ
                 {
                     return false;
                 }
-                if (j > 0 && !ProjectZ.HasFloor(cj, map))
+                if (!Column.FloorAt(g, j, map))
                 {
                     continue;   // open air on this floor too: falls on
                 }

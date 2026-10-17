@@ -77,7 +77,7 @@ namespace ProjectZ.Combat
                         continue;
                     }
                     IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
-                    if (!c.IsValid || !c.InBounds(map) || k >= 1 && !ProjectZ.HasFloor(c, map))
+                    if (!c.IsValid || !c.InBounds(map) || !Column.FloorAt(g, k, map))
                     {
                         continue;
                     }

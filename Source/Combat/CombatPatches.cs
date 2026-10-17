@@ -582,7 +582,7 @@ namespace ProjectZ.Combat
             // A shot that comes down on open air (a miss off the edge of an upper floor) falls to the floor below.
             int land = kd;
             IntVec3 g = ProjectZ.GroundCellOf(dc, map);
-            while (land > 0 && g.IsValid && !Heights.Slab(ProjectZ.CellOnFloor(g, land, map), map))
+            while (land > 0 && g.IsValid && !Column.FloorAt(g, land, map))
             {
                 land--;
             }
@@ -680,7 +680,7 @@ namespace ProjectZ.Combat
             for (int k = a.MinLevel + 1; k <= a.MaxLevel + 1; k++)
             {
                 float level = k * Heights.Storey;
-                if (level >= lo && level <= hi && Heights.Plane(g, k, map))
+                if (level >= lo && level <= hi && Column.PlaneSolid(g, k, map))
                 {
                     IntVec3 hitCell = ProjectZ.CellOnFloor(g, Mathf.Min(down ? k : k - 1, a.MaxLevel), map);
                     if (hitCell.IsValid)

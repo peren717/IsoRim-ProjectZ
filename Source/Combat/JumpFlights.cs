@@ -147,7 +147,7 @@ namespace ProjectZ.Combat
             for (int k = lowest + 1; k <= top + 1; k++)
             {
                 float level = k * storey;
-                if (level > lo + Eps && level < head && Heights.Plane(g, k, map))
+                if (level > lo + Eps && level < head && Column.PlaneSolid(g, k, map))
                 {
                     return false;
                 }
@@ -163,8 +163,7 @@ namespace ProjectZ.Combat
                 {
                     continue;
                 }
-                IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
-                if (c.IsValid && c.InBounds(map) && !c.CanBeSeenOverFast(map))
+                if (Column.BlockAt(g, k, map))
                 {
                     return false;
                 }
@@ -433,7 +432,7 @@ namespace ProjectZ.Combat
             int shadow = 0;
             for (int j = top; j >= 1; j--)
             {
-                if (ProjectZ.HasFloor(ProjectZ.CellOnFloor(gc, j, map), map))
+                if (Column.FloorAt(gc, j, map))
                 {
                     shadow = j;
                     break;

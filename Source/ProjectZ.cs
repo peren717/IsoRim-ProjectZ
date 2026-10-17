@@ -350,31 +350,8 @@ namespace ProjectZ
             return a != null && c.z >= a.groundZ && a.BandOfRow(c.z) >= 1 && map.terrainGrid.TerrainAt(c) != PZDefOf.PZ_OpenAir;
         }
 
-        // The top of the column over c: the highest floor cell with a floor over c's ground cell, else the ground cell
-        // (c itself on a map without floors; Invalid for a void row). Whatever falls from the sky lands here (mortar
-        // shells, orbital strikes, lightning: SkyStrikes); read it again for each hit, floors can be gone by then.
-        public static IntVec3 ColumnTop(IntVec3 c, Map map)
-        {
-            AnnexMapComponent a = Annex(map);
-            if (a == null)
-            {
-                return c;
-            }
-            IntVec3 g = GroundCellOf(c, map);
-            if (!g.IsValid)
-            {
-                return IntVec3.Invalid;
-            }
-            for (int k = a.MaxLevel; k >= 1; k--)
-            {
-                IntVec3 u = CellOnFloor(g, k, map);
-                if (HasFloor(u, map))
-                {
-                    return u;
-                }
-            }
-            return g;
-        }
+        // The top of the column over c (Column.Top).
+        public static IntVec3 ColumnTop(IntVec3 c, Map map) => Column.Top(c, map);
 
         // THE gameplay map (design "M1c-2 coordinates", section 2): a world position on any floor to its virtual 3D
         // position: x and z over the ground, y its height above the ground in cells (floor k at k * Storey). Every

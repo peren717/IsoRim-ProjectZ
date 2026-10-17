@@ -56,22 +56,7 @@ namespace ProjectZ.Combat
             return ProjectZ.VirtualFlatDistance(a.ToVector3Shifted(), b.ToVector3Shifted(), map);
         }
 
-        // An upper-floor cell with a floor on it (any terrain but open air).
-        public static bool Slab(IntVec3 c, Map map)
-        {
-            return ProjectZ.HasFloor(c, map);
-        }
-
-        // The plane between level k-1 and level k over ground cell g is solid (k = the top level + 1 is the top floor's roof).
-        public static bool Plane(IntVec3 g, int k, Map map)
-        {
-            IntVec3 below = ProjectZ.CellOnFloor(g, k - 1, map);
-            if (below.IsValid && !Column.OpenAbove(below, map))
-            {
-                return true;
-            }
-            return k <= Levels.Max(map) && Slab(ProjectZ.CellOnFloor(g, k, map), map);
-        }
+        // (the planes, floors and blocks of a column: Column.PlaneSolid, FloorAt, BlockAt)
 
         // Height of a building's top over its floor, for cover (walls Wall, others their fill).
         public static float CoverTop(Thing t)
@@ -192,7 +177,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            if (!Slab(c1, map))
+            if (!Column.FloorAt(l[1], k, map))
             {
                 return true;
             }
@@ -203,7 +188,7 @@ namespace ProjectZ.Combat
                 return false;
             }
             IntVec3 c2 = ProjectZ.CellOnFloor(l[2], k, map);
-            return c2.IsValid && !Slab(c2, map);
+            return c2.IsValid && !Column.FloorAt(l[2], k, map);
         }
 
         // Walks the line between two ground cells with its heights at each end: no solid plane crossed, no sight-blocking
@@ -228,7 +213,7 @@ namespace ProjectZ.Combat
                 for (int k = lowest + 1; k <= top + 1; k++)
                 {
                     float level = k * Storey;
-                    if (level >= lo && level <= hi && Plane(g, k, map))
+                    if (level >= lo && level <= hi && Column.PlaneSolid(g, k, map))
                     {
                         return false;
                     }
@@ -244,8 +229,7 @@ namespace ProjectZ.Combat
                     {
                         continue;
                     }
-                    IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
-                    if (c.IsValid && c.InBounds(map) && !c.CanBeSeenOverFast(map))
+                    if (Column.BlockAt(g, k, map))
                     {
                         // Blocked only where the line is below the top of what stands there.
                         if (lo <= bottom + Wall)

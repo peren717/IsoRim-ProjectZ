@@ -98,7 +98,7 @@ namespace ProjectZ.Patches
         }
     }
 
-    // A shell falling from the sky (flyOverhead) lands on the top of its column (ProjectZ.ColumnTop): the highest floor
+    // A shell falling from the sky (flyOverhead) lands on the top of its column (Column.Top): the highest floor
     // built there (the floor's roof below cannot drop, it is the floor itself); one falling onto open air upstairs
     // drops to what is below it.
     [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
@@ -116,7 +116,7 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            IntVec3 top = ProjectZ.ColumnTop(pos, map);
+            IntVec3 top = Column.Top(pos, map);
             if (!top.IsValid || top == pos)
             {
                 return;

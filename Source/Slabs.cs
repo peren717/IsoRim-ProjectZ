@@ -656,7 +656,7 @@ namespace ProjectZ
             for (int j = k - 1; j >= 0; j--)
             {
                 IntVec3 cj = ProjectZ.CellOnFloor(g, j, map);
-                if (!cj.IsValid || j > 0 && !ProjectZ.HasFloor(cj, map))
+                if (!cj.IsValid || !Column.FloorAt(g, j, map))
                 {
                     continue;
                 }
