@@ -167,6 +167,19 @@ namespace ProjectZ
             levelOfBand = lob;
         }
 
+        // Assigns the band level table (null = identity); false (and nothing changed) when it does not fit the bands.
+        public bool SetBandLevels(List<int> table)
+        {
+            if (table != null && !ValidTable(table, Mathf.Max(1, floors)))
+            {
+                return false;
+            }
+            bandLevel = table == null ? null : new List<int>(table);
+            levelOfBand = null;
+            ProjectZ.Invalidate();
+            return true;
+        }
+
         // A band level table for n bands: n entries, band 0 = level 0, distinct, one unbroken run of levels.
         public static bool ValidTable(List<int> t, int n)
         {

@@ -55,14 +55,14 @@ namespace ProjectZ
 
         // ---------------------------------------------------------------- capture (generation)
 
-        internal static void Capture(Map map, MapGenFloatGrid elev)
+        // Into the pending generation record (AnnexGen.Pending); the FinalizeInit prefix hands it to the component.
+        internal static void Capture(Map map, MapGenFloatGrid elev, Patches.AnnexGen.Pending p)
         {
-            AnnexMapComponent a = map.GetComponent<AnnexMapComponent>();
-            if (a == null || elev == null)
+            if (elev == null)
             {
                 return;
             }
-            int sx = map.Size.x, gz = a.groundZ;
+            int sx = p.groundSize.x, gz = p.groundSize.z;
             byte[] arr = new byte[sx * gz];
             for (int z = 0; z < gz; z++)
             {
@@ -71,7 +71,7 @@ namespace ProjectZ
                     arr[z * sx + x] = Quantise(elev[new IntVec3(x, 0, z)]);
                 }
             }
-            a.elevation = arr;
+            p.elevation = arr;
             ProjectZ.DebugLog($"map {map}: elevation captured ({arr.Length} cells)");
         }
 
@@ -153,7 +153,8 @@ namespace ProjectZ
     }
 
     // F5: the elevation grid is still alive when the rocks are placed (it and the cave grid are cleared only at the end of
-    // generation). Only maps generated with floors (AnnexGen.pending) keep a copy.
+    // generation). Only maps generated with floors (AnnexGen.pending) keep a copy. It waits in the pending record until
+    // the FinalizeInit prefix: GridFixer resizes every ground-sized array it finds on the map's components.
     [HarmonyPatch(typeof(GenStep_RocksFromGrid), nameof(GenStep_RocksFromGrid.Generate))]
     public static class RocksFromGrid_CaptureElevation_Patch
     {
@@ -164,7 +165,7 @@ namespace ProjectZ
             {
                 return;
             }
-            NaturalElevation.Capture(map, MapGenerator.Elevation);
+            NaturalElevation.Capture(map, MapGenerator.Elevation, p);
         }
     }
 }

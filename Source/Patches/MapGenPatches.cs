@@ -20,6 +20,7 @@ namespace ProjectZ.Patches
             public int stride;
             public int floors;
             public Map map;      // set once ConstructComponents ran
+            public byte[] elevation;   // F5, captured during the genSteps; given to the component after GridFixer
             public bool shrunk;
         }
 
@@ -230,6 +231,12 @@ namespace ProjectZ.Patches
             // can index an annex cell.
             map.cellsInRandomOrder = new MapCellsInRandomOrder(map);
             int fixedGrids = GridFixer.Fix(map, p.groundSize.x * groundZ);
+            // (after GridFixer, which would take a ground-sized array for one of its grids)
+            AnnexMapComponent comp = map.GetComponent<AnnexMapComponent>();
+            if (comp != null && p.elevation != null)
+            {
+                comp.elevation = p.elevation;
+            }
             RemapRiverFlow(map, groundZ);
             // Again after generation (nothing should have touched it): path costs, regions and section meshes are
             // all rebuilt right after this in FinalizeInit.

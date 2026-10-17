@@ -149,6 +149,9 @@ namespace ProjectZ.Dev
         private static string pendingLoad;
         private static Game loadFrom;
         private static readonly Stopwatch clock = new Stopwatch();
+        // the last LoadGame: from the call to the first update of the loaded game (mode mtn's load time)
+        private static readonly Stopwatch loadClock = new Stopwatch();
+        internal static double LastLoadSeconds;
 
         public static void Init()
         {
@@ -211,7 +214,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (mode == "wallheight")
+            if (mode == "wallheight" || mode == "mtn")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -238,7 +241,7 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange" || mode == "mtn")
             {
                 PatchMouse(h);
             }
@@ -300,6 +303,11 @@ namespace ProjectZ.Dev
                     {
                         continue;
                     }
+                    // mode mtn: a mountainous tile (MtnTile picks one if no temperate forest has it)
+                    if (mode == "mtn")
+                    {
+                        continue;
+                    }
                     // -projectzmutator=<TileMutatorDef>: a tile with that mutator (e.g. MixedBiome)
                     if (GenCommandLine.TryGetCommandLineArg("projectzmutator", out string mut) && !tile.Mutators.Any(m => m.defName == mut))
                     {
@@ -316,7 +324,11 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "wallheight")
+            if (mode == "mtn")
+            {
+                MtnTile();
+            }
+            if (mode == "wallheight" || mode == "mtn")
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -375,6 +387,7 @@ namespace ProjectZ.Dev
                     return;
                 }
                 loadFrom = null;
+                LastLoadSeconds = loadClock.Elapsed.TotalSeconds;
                 waitFrames = 60;
                 ticksAfterLoad = Find.TickManager.TicksGame;
                 Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
@@ -406,6 +419,7 @@ namespace ProjectZ.Dev
             string name = pendingLoad;
             loadFrom = Current.Game;
             pendingLoad = null;
+            loadClock.Restart();
             Out("loading " + name);
             GameDataSaveLoader.LoadGame(name);
         }
@@ -637,6 +651,11 @@ namespace ProjectZ.Dev
                 StepMinimap(map);
                 return;
             }
+            if (stage.StartsWith("mt_"))
+            {
+                StepMtn(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -801,6 +820,10 @@ namespace ProjectZ.Dev
                     else if (mode == "light")
                     {
                         stage = "l_setup";
+                    }
+                    else if (mode == "mtn")
+                    {
+                        stage = "mt_setup";
                     }
                     else if (mode == "raids")
                     {
