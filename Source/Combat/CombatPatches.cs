@@ -551,6 +551,9 @@ namespace ProjectZ.Combat
             }
             if (land != ko)
             {
+                // IsoRim draws the shot leaving from the real shooter's muzzle (a manned mortar's barrel), not from
+                // the moved launch point
+                IsoRimBridge.SetLaunchPoint(__instance, ___origin);
                 ___origin.z += (land - ko) * a.stride;
                 moved = true;
             }

@@ -161,6 +161,33 @@ namespace ProjectZ
 
         private static Vector2 ScreenOfInner(Vector3 p) => IsoRim.View3D.WorldToScreen(p);
 
+        // IsoRim knows SetLaunchPoint / DrawnStart (newer IsoRim; an older one draws shots between floors from the moved
+        // launch point, without the muzzle).
+        public static bool HasLaunchPoint => Present && (hasLaunchPoint ??= AccessTools.Method("IsoRim.Projectiles:SetLaunchPoint") != null && AccessTools.Method("IsoRim.Projectiles:DrawnStart") != null);
+
+        private static bool? hasLaunchPoint;
+
+        // Tells IsoRim where a shot really left from, when its launch point was moved onto another floor's rows.
+        public static void SetLaunchPoint(Projectile p, Vector3 from)
+        {
+            if (HasLaunchPoint)
+            {
+                SetLaunchPointInner(p, from);
+            }
+        }
+
+        private static void SetLaunchPointInner(Projectile p, Vector3 from) => IsoRim.Projectiles.SetLaunchPoint(p, from);
+
+        // Where IsoRim's drawn flight starts (x, z in the game's rows; y the height in cells), or null without the API.
+        public static Vector3? DrawnStart(Projectile p) => HasLaunchPoint ? DrawnStartInner(p) : (Vector3?)null;
+
+        private static Vector3 DrawnStartInner(Projectile p) => IsoRim.Projectiles.DrawnStart(p);
+
+        // IsoRim's muzzle point (tests): x, z on the map, y the height over the owner's feet.
+        public static Vector3 Muzzle(Thing owner, ThingDef gun, Vector3 from, Vector3 dir) => Present ? MuzzleInner(owner, gun, from, dir) : from;
+
+        private static Vector3 MuzzleInner(Thing owner, ThingDef gun, Vector3 from, Vector3 dir) => IsoRim.Projectiles.Muzzle(owner, gun, from, dir);
+
         public static float AimHeight(Projectile p) => Present ? AimHeightInner(p) : 0f;
 
         private static float AimHeightInner(Projectile p) => IsoRim.Projectiles.AimHeight(p);

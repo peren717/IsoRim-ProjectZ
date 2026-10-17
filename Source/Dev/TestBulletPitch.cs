@@ -163,6 +163,8 @@ namespace ProjectZ.Dev
             Teleport(iA, IEdge(map));
             Teleport(iB, new IntVec3(icx - 3, 0, iEz + 8));
             Teleport(iD, new IntVec3(icx + 3, 0, iEz + 10));
+            // fired while the ground is viewed (floors 2 and 3 hidden: the shooter upstairs is not drawn), as in play
+            FloorView.Set(0);
             Pawn s = Shooter(c);
             iProj = null;
             iOrdered = false;
@@ -222,6 +224,14 @@ namespace ProjectZ.Dev
             return null;
         }
 
+        // A map point (x, z in any floor's rows) as a true 3D point over the ground: x, height, ground z.
+        private static Vector3 OverGround(Vector3 at, float height, Map map)
+        {
+            IntVec3 c = at.ToIntVec3();
+            IntVec3 g = ProjectZ.GroundCellOf(c, map);
+            return new Vector3(at.x, height, at.z - (g.IsValid ? c.z - g.z : 0));
+        }
+
         private static void LogPitch(Map map, PitchCase c, int frame)
         {
             Projectile p = iProj;
@@ -231,22 +241,29 @@ namespace ProjectZ.Dev
             bool cross = Flights.cross.TryGetValue(p, out Flights.Cross x);
             int ko = cross ? x.from : ProjectZ.FloorOf(p.Position, map);
             int kd = cross ? x.to : ko;
-            // (a mortar shell between floors: IsoRim finds no turret at the moved launch point and starts it at the
-            // pawn's muzzle height, MuzzleOwner; the barrel height is logged)
-            Thing owner = Shooter(c);
             float storey = IsoRimBridge.StoreyHeight;
-            float hs = ko * storey + IsoRimBridge.MuzzleHeight(owner);
-            float ht = kd * storey + IsoRimBridge.AimHeight(p);
-            float expected = cross ? Mathf.Atan2(ht - hs, flat) * Mathf.Rad2Deg : 0f;
+            // The expected start: the muzzle of the real shooter (a manned mortar: its barrel), from where the game
+            // launched the shot (the shooter's middle), toward the destination over the ground.
+            Thing owner = c.target == 'm' ? (Thing)iMortar : Shooter(c);
+            Vector3 dg = OverGround(d, kd * storey + IsoRimBridge.AimHeight(p), map);
+            Vector3 og = OverGround(owner.DrawPos, 0f, map);
+            Vector3 dir = new Vector3(dg.x - og.x, 0f, dg.z - og.z).normalized;
+            Vector3 m = IsoRimBridge.Muzzle(owner, p.EquipmentDef, owner.DrawPos, dir);
+            Vector3 muzzle = OverGround(m, ko * storey + m.y, map);
+            Vector3? ds = IsoRimBridge.DrawnStart(p);
+            Vector3 start = ds.HasValue ? OverGround(ds.Value, ds.Value.y, map) : OverGround(o, IsoRimBridge.ProjectileHeight(p, o), map);
+            float startOff = (start - muzzle).magnitude;
+            float expected = cross ? Mathf.Atan2(dg.y - muzzle.y, new Vector2(dg.x - muzzle.x, dg.z - muzzle.z).magnitude) * Mathf.Rad2Deg : 0f;
             bool drawn = ProjectilePitch.drawnPitch.TryGetValue(p.thingIDNumber, out float pitch);
-            // IsoRim's own drawn height at both ends (what the tilt follows)
-            float hO = IsoRimBridge.ProjectileHeight(p, o), hD = IsoRimBridge.ProjectileHeight(p, d);
-            float drawnSlope = cross ? Mathf.Atan2(hD - hO, flat) * Mathf.Rad2Deg : 0f;
+            // IsoRim's own drawn flight: its start to the destination (what the tilt follows)
+            float hD = IsoRimBridge.ProjectileHeight(p, d);
+            Vector3 dd = OverGround(d, hD, map);
+            float drawnSlope = cross ? Mathf.Atan2(hD - start.y, new Vector2(dd.x - start.x, dd.z - start.z).magnitude) * Mathf.Rad2Deg : 0f;
             Vector3 ex = p.ExactPosition;
-            IntVec3 pc = ex.ToIntVec3();
-            IntVec3 pg = ProjectZ.GroundCellOf(pc, map);
-            Vector2 px = IsoRimBridge.ScreenOf(new Vector3(ex.x, IsoRimBridge.ProjectileHeight(p, ex), ex.z - (pc.z - pg.z)));
-            string detail = $"screen px ({px.x:0}, {Screen.height - px.y:0}) of {Screen.width}x{Screen.height}; {(c.target == 'm' ? $"mortar barrel {ko * storey + IsoRimBridge.MuzzleHeight(iMortar):0.00}; " : "")}{p.def.defName} floor {ko + 1} -> {kd + 1}, {f:P0} of {flat:0.0} cells; drawn pitch {(drawn ? pitch.ToString("0.0") : "not drawn")} deg, expected {expected:0.0} (heights {hs:0.00} -> {ht:0.00}), IsoRim's drawn heights {hO:0.00} -> {hD:0.00} ({drawnSlope:0.0} deg); arc {p.def.projectile.arcHeightFactor}, spin {p.def.projectile.spinRate}, overhead {p.def.projectile.flyOverhead}";
+            Vector2 px = IsoRimBridge.ScreenOf(OverGround(ex, IsoRimBridge.ProjectileHeight(p, ex), map));
+            string detail = $"screen px ({px.x:0}, {Screen.height - px.y:0}) of {Screen.width}x{Screen.height}; {p.def.defName} floor {ko + 1} -> {kd + 1}, {f:P0} of {flat:0.0} cells; "
+                + $"drawn start {start.x:0.00},{start.y:0.00},{start.z:0.00} vs {(c.target == 'm' ? "barrel" : "muzzle")} of {owner} {muzzle.x:0.00},{muzzle.y:0.00},{muzzle.z:0.00} (off {startOff:0.000}; game launch point {og.x:0.00},{og.z:0.00}); "
+                + $"drawn pitch {(drawn ? pitch.ToString("0.0") : "not drawn")} deg, expected {expected:0.0}, IsoRim's drawn slope {drawnSlope:0.0}; arc {p.def.projectile.arcHeightFactor}, spin {p.def.projectile.spinRate}, overhead {p.def.projectile.flyOverhead}";
             if (frame > 0)
             {
                 Info($"{c.name} frame {frame}: {detail}");
@@ -257,8 +274,9 @@ namespace ProjectZ.Dev
                 Result($"{c.name}: on one floor, drawn flat as before (no tilt)", drawn && !cross && pitch == 0f, detail);
                 return;
             }
+            Result($"{c.name}: drawn leaving from the real {(c.target == 'm' ? "barrel" : "muzzle")} (within 0.05 cells)", startOff < 0.05f, detail);
             bool sign = c.toFloor < c.fromFloor ? pitch < -1f : pitch > 1f;
-            Result($"{c.name}: drawn pitched {(c.toFloor < c.fromFloor ? "down" : "up")} along its 3D flight (within 1.5 deg of expected)", drawn && cross && sign && Mathf.Abs(pitch - expected) < 1.5f && Mathf.Abs(pitch - drawnSlope) < 0.2f, detail);
+            Result($"{c.name}: drawn pitched {(c.toFloor < c.fromFloor ? "down" : "up")} along its 3D flight (within 1 deg of expected)", drawn && cross && sign && Mathf.Abs(pitch - expected) < 1f && Mathf.Abs(pitch - drawnSlope) < 0.2f, detail);
         }
 
         private static void EndCase(Map map)

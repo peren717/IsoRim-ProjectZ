@@ -12,8 +12,9 @@ namespace ProjectZ.Combat
     // thrown thing's spin), at a height that blends from the muzzle to the target: between floors that is a slope of
     // up to several cells, but the card stays flat. Here IsoRim's one draw of the card (its Graphics.DrawMesh call) is
     // routed through Draw, which for a shot between floors (Flights.cross, set at launch) tilts it from the flat flight
-    // direction onto the drawn 3D one: the flat path from launch to destination plus the change of IsoRim's own drawn
-    // height over it (Projectiles.Height, true cells). The card is turned in true space and then squashed as IsoRim
+    // direction onto the drawn 3D one: from where IsoRim's drawn flight starts (Projectiles.DrawnStart: the real
+    // shooter's muzzle, a manned mortar's barrel, which the launch patch tells IsoRim with SetLaunchPoint) to the
+    // destination, plus the change of IsoRim's own drawn height over it (Projectiles.Height, true cells). The card is turned in true space and then squashed as IsoRim
     // draws everything (drawn y = true / Squash), so it shows the true angle and length. Bullets, arrows, rockets and
     // thrown things alike (a spinning thing's spin plane tilts with it); a lobbed shell's or grenade's arc stays as
     // IsoRim draws it (height, no pitch, as on one floor), only the floor-to-floor slope pitches it. Shots on one
@@ -99,12 +100,19 @@ namespace ProjectZ.Combat
             if (!c.tiltKnown)
             {
                 c.tiltKnown = true;
+                // from where IsoRim's drawn flight starts (the muzzle: the launch point plus its lead) to the destination
                 Vector3 o = originRef(p);
                 Vector3 d = destinationRef(p);
+                Vector3? start = IsoRimBridge.DrawnStart(p);
+                float h0 = start.HasValue ? start.Value.y : IsoRimBridge.ProjectileHeight(p, o);
+                if (start.HasValue)
+                {
+                    o = start.Value;
+                }
                 Vector3 flat = new Vector3(d.x - o.x, 0f, d.z - o.z);
                 if (flat.sqrMagnitude > 0.0025f)
                 {
-                    float rise = IsoRimBridge.ProjectileHeight(p, d) - IsoRimBridge.ProjectileHeight(p, o);
+                    float rise = IsoRimBridge.ProjectileHeight(p, d) - h0;
                     c.tilt = Quaternion.FromToRotation(flat, flat + new Vector3(0f, rise, 0f));
                     c.tilted = true;
                 }
