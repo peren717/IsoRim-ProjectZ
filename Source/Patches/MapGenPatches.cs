@@ -25,27 +25,48 @@ namespace ProjectZ.Patches
 
         internal static Pending pending;
 
-        // Annex cells: open air, unfogged, nothing else (no roof, no snow, no things). Written straight into the
-        // terrain grid (SetTerrain's per-cell notifications aren't needed). Map.Size must be the full size.
-        // Returns how many cells were not open air or were fogged before.
-        internal static int FillAnnex(Map map, int groundZ, bool withPathCosts)
+        // Mountains foundation F6: what one annex cell (any upper band or void row) gets at generation.
+        internal struct AnnexCell
         {
+            public TerrainDef terrain;
+            public bool fogged;
+        }
+
+        internal delegate AnnexCell FillRule(IntVec3 c, Map map);
+
+        // Today's rule for every annex cell: open air, unfogged. (Phase 1 plugs the mountain fill in here: rock floors,
+        // fogged interior rock; basements likewise.)
+        internal static AnnexCell OpenAir(IntVec3 c, Map map) => new AnnexCell { terrain = PZDefOf.PZ_OpenAir, fogged = false };
+
+        // The rule both FillAnnex calls use.
+        internal static FillRule Rule = OpenAir;
+
+        // Annex cells: the rule's terrain and fog, nothing else (no roof, no snow, no things). Written straight into the
+        // terrain grid (SetTerrain's per-cell notifications aren't needed). Map.Size must be the full size.
+        // Returns how many cells differed from the rule before.
+        internal static int FillAnnex(Map map, int groundZ, bool withPathCosts, FillRule rule = null)
+        {
+            rule = rule ?? Rule;
             TerrainDef[] top = map.terrainGrid.topGrid;
-            TerrainDef air = PZDefOf.PZ_OpenAir;
             CellIndices ci = map.cellIndices;
             int changed = 0;
             for (int i = ci.CellToIndex(new IntVec3(0, 0, groundZ)); i < ci.NumGridCells; i++)
             {
+                IntVec3 c = ci.IndexToCell(i);
+                AnnexCell want = rule(c, map);
                 bool fogged = map.fogGrid.IsFogged(i);
-                if (top[i] != air || fogged)
+                if (top[i] != want.terrain || fogged != want.fogged)
                 {
                     changed++;
                 }
-                top[i] = air;
-                IntVec3 c = ci.IndexToCell(i);
-                if (fogged)
+                top[i] = want.terrain;
+                if (fogged && !want.fogged)
                 {
                     map.fogGrid.Unfog(c);
+                }
+                else if (!fogged && want.fogged)
+                {
+                    map.fogGrid.Refog(CellRect.SingleCell(c));
                 }
                 if (withPathCosts)
                 {

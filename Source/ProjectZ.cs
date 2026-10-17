@@ -44,6 +44,8 @@ namespace ProjectZ
         public int stride;    // H
         public int floors = 1; // total storeys including the ground
         public int layoutVersion = CurrentLayoutVersion; // saves without it are version 1
+        // F5: vanilla's elevation per ground cell (NaturalElevation), captured at generation; null on maps made before.
+        public byte[] elevation;
 
         public AnnexMapComponent(Map map) : base(map)
         {
@@ -66,6 +68,7 @@ namespace ProjectZ
             Scribe_Values.Look(ref stride, "stride", 0);
             Scribe_Values.Look(ref floors, "floors", 1);
             Scribe_Values.Look(ref layoutVersion, "layoutVersion", 1, forceSave: true);
+            DataExposeUtility.LookByteArray(ref elevation, "elevation");
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
                 ProjectZ.Invalidate();
