@@ -4,4 +4,6 @@
   <PZ_OpenAir.description>楼上的空处。可以在下层的墙或柱子附近铺楼板。</PZ_OpenAir.description>
   <PZ_UpperFloor.label>楼板</PZ_UpperFloor.label>
   <PZ_UpperFloor.description>一层梁格，作为上一层的地面。切换到上一层，铺在能盖屋顶的地方：下层的墙、柱子或楼梯附近。</PZ_UpperFloor.description>
+  <PZ_ShipDeck.label>飞船上层甲板</PZ_ShipDeck.label>
+  <PZ_ShipDeck.description>上层用的逆重飞船基架。建在飞船基架或另一层上层甲板的正上方，并在逆重引擎的作用范围内。上面可以建造飞船部件。\n\n用“移除地基”指令从上往下拆除。</PZ_ShipDeck.description>
 </LanguageData>

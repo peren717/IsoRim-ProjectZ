@@ -12,6 +12,8 @@ namespace ProjectZ
         public static ThingDef PZ_Stairs;
         public static RoofDef PZ_FloorRoof;
         public static RoofDef PZ_StairwellRoof;
+        [MayRequireOdyssey]
+        public static TerrainDef PZ_ShipDeck;     // the ship upper deck (ShipDeck.cs); null without Odyssey
 
         static PZDefOf()
         {
@@ -82,6 +84,8 @@ namespace ProjectZ
                 ProjectZ.DebugLog($"map {map}: size {map.Size}, ground z {groundZ}, stride {stride}, floors {floors}");
                 // D6: roofs under upper floors are the floors' own (saves from before M1c, or anything that slipped through).
                 FloorRoof.Normalize(map);
+                // ship decks over cells that lost their substructure fall (ShipDeck)
+                ShipDeck.CheckAllLater(map);
             }
         }
     }

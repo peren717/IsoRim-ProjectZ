@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- The ship upper deck (multi-level gravships P1, Source/ShipDeck.cs): vanilla gravship substructure for upper floors.
+       A copy of Odyssey's Substructure (cost, work, gravtech gate, affordances incl. Substructure, the Substructure tag), laid
+       as the foundation over open air, only right above ground substructure or another deck (ProjectZ.PlaceWorker_ShipDeck).
+       Its own texture: the substructure surface with the upper floor's lattice marks (tools\pz_ship_deck_texture.ps1). -->
+  <TerrainDef ParentName="FloorBase" MayRequire="Ludeon.RimWorld.Odyssey">
+    <defName>PZ_ShipDeck</defName>
+    <label>ship upper deck</label>
+    <description>Gravship substructure for the floor above. Build it right above the gravship's substructure or another upper deck, within range of a grav engine. Gravship parts can be built on it.\n\nRemove it with the 'remove foundation' designator, from the top down.</description>
+    <texturePath>ProjectZ/Terrain/ShipDeck</texturePath>
+    <uiIconPath>ProjectZ/ShipDeck_MenuIcon</uiIconPath>
+    <fertility>0</fertility>
+    <edgeType>Hard</edgeType>
+    <renderPrecedence>399</renderPrecedence>
+    <constructEffect>ConstructMetal</constructEffect>
+    <isPaintable>true</isPaintable>
+    <designationCategory>Odyssey</designationCategory>
+    <isFoundation>true</isFoundation>
+    <preventCraters>true</preventCraters>
+    <affordances>
+      <li>Substructure</li>
+    </affordances>
+    <statBases>
+      <WorkToBuild>600</WorkToBuild>
+      <Flammability>0</Flammability>
+      <CleaningTimeFactor>0.9</CleaningTimeFactor>
+    </statBases>
+    <costList>
+      <GravlitePanel>1</GravlitePanel>
+      <Steel>4</Steel>
+    </costList>
+    <uiOrder>1001</uiOrder>
+    <requireInspectedGravEngine>true</requireInspectedGravEngine>
+    <terrainAffordanceNeeded>PZ_FloorSupport</terrainAffordanceNeeded>
+    <resourcesFractionWhenDeconstructed>1</resourcesFractionWhenDeconstructed>
+    <tags>
+      <li>Substructure</li>
+    </tags>
+    <placeWorkers>
+      <li>PlaceWorker_InSubstructureFootprint</li>
+      <li>PlaceWorker_BuildingsValidOverSubstructure</li>
+      <li>ProjectZ.PlaceWorker_ShipDeck</li>
+    </placeWorkers>
+  </TerrainDef>
+
+</Defs>

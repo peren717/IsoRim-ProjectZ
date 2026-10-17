@@ -91,6 +91,10 @@ namespace ProjectZ.Dev
     //                                   damaged slab refusing a carpet and taken up, an orbital bombardment and a power beam
     //                                   burning down a 3-storey pavilion, lightning on a slab, mortar misses near the ground's
     //                                   north edge); -projectzfloors=3 (TestStrikes)
+    //                                   shipdeck: the ship upper deck (multi-level gravships P1: refusals, colonists building
+    //                                   decks on floors 2 and 3, ship parts and a carpet on them, removal top-down, support,
+    //                                   save/reload, a real launch leaving the decks behind to fall); -projectzfloors=3,
+    //                                   Odyssey (TestShipDeck)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -501,6 +505,11 @@ namespace ProjectZ.Dev
                 StepGravLand(map);
                 return;
             }
+            if (stage.StartsWith("sd_"))
+            {
+                StepShipDeck(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -647,6 +656,10 @@ namespace ProjectZ.Dev
                     else if (mode == "gravland")
                     {
                         stage = "gl_setup";
+                    }
+                    else if (mode == "shipdeck")
+                    {
+                        stage = "sd_setup";
                     }
                     else if (mode == "skydrop")
                     {

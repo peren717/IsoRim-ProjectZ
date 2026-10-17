@@ -32,7 +32,8 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            if (SlabDefs.Is(entDef))
+            // (a ship deck as a slab, with its own rules: ShipDeck.Check)
+            if (SlabDefs.Is(entDef) || ShipDeck.Is(entDef))
             {
                 if (ProjectZ.FloorOf(center, map) < 1)
                 {
@@ -44,7 +45,7 @@ namespace ProjectZ.Patches
                     __result = "PZ_AlreadyFloor".Translate();
                     return;
                 }
-                AcceptanceReport r = PlaceWorker_UpperFloor.Check(center, map);
+                AcceptanceReport r = ShipDeck.Is(entDef) ? ShipDeck.Check(center, map) : PlaceWorker_UpperFloor.Check(center, map);
                 if (!r.Accepted)
                 {
                     __result = r;

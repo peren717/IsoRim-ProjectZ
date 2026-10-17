@@ -618,6 +618,12 @@ namespace ProjectZ
                     Slab.PlaceDown(t, land.IsValid ? land : u, map, land.IsValid ? ProjectZ.FloorOf(land, map) : ProjectZ.FloorOf(u, map) - 1);
                 }
             }
+            // S1 (ship decks): a deck is a foundation, SetTerrain left it; it goes once everything on it has fallen (a
+            // no-op for slabs). The decks above it follow (ShipDeck).
+            if (map.terrainGrid.FoundationAt(u) != null)
+            {
+                map.terrainGrid.RemoveFoundation(u, false);
+            }
             ProjectZ.DebugLog($"slab at {u} collapsed: {built.Count} built thing(s) destroyed, {falling.Count} fell {fallen} floor(s) to {land}");
             Dev.PZStats.slabCollapses++;
         }

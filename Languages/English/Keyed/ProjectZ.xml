@@ -42,4 +42,7 @@
   <PZ_DamagedSlab>damaged {0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Take it up with the remove tool and lay a new one.</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>Damaged upper floor: take it up and lay it again</PZ_DamagedSlabNoFloor>
+  <PZ_DeckNeedsShipBelow>Must be built right above gravship substructure</PZ_DeckNeedsShipBelow>
+  <PZ_DeckAboveFirst>Remove the deck above first</PZ_DeckAboveFirst>
+  <PZ_DeckBelowFirst>Waiting for the deck below</PZ_DeckBelowFirst>
 </LanguageData>
