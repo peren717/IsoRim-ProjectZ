@@ -28,42 +28,9 @@ namespace ProjectZ.Dev
 
         private static IntVec3 E(int dx, int dz) => new IntVec3(eO.x + dx, 0, eO.z + dz);
 
-        // Test only (-projectzspacefloors): the IsoRim one-line fix proposed for space maps, applied at run time without
-        // touching IsoRim. IsoRim.Floors.BeginFrame turns stacked floors off while WorldRendererUtility.WorldRendered,
-        // which is also true on every map whose generator renders the planet behind it (Odyssey space maps: Background
-        // mode). The fix asks for the world view proper instead: !WorldRendererUtility.DrawingMap (Planet mode).
-        private static void PatchIsoRimSpaceFloors(HarmonyLib.Harmony h)
-        {
-            System.Reflection.MethodInfo begin = HarmonyLib.AccessTools.Method("IsoRim.Floors:BeginFrame");
-            if (begin == null)
-            {
-                Out("space floors fix: IsoRim.Floors.BeginFrame not found");
-                return;
-            }
-            h.Patch(begin, transpiler: new HarmonyLib.HarmonyMethod(typeof(TestRunner), nameof(SpaceFloorsTranspiler)));
-            Out("space floors fix applied (test only)");
-        }
-
-        private static bool WorldViewOnly() => !WorldRendererUtility.DrawingMap;
-
-        private static IEnumerable<HarmonyLib.CodeInstruction> SpaceFloorsTranspiler(IEnumerable<HarmonyLib.CodeInstruction> code)
-        {
-            System.Reflection.MethodInfo rendered = HarmonyLib.AccessTools.PropertyGetter(typeof(WorldRendererUtility), nameof(WorldRendererUtility.WorldRendered));
-            System.Reflection.MethodInfo mine = HarmonyLib.AccessTools.Method(typeof(TestRunner), nameof(WorldViewOnly));
-            foreach (HarmonyLib.CodeInstruction ci in code)
-            {
-                if ((ci.opcode == System.Reflection.Emit.OpCodes.Call || ci.opcode == System.Reflection.Emit.OpCodes.Callvirt) && Equals(ci.operand, rendered))
-                {
-                    ci.operand = mine;
-                }
-                yield return ci;
-            }
-        }
-
         private static string IsoFloorsOn()
         {
-            System.Reflection.FieldInfo f = HarmonyLib.AccessTools.Field(HarmonyLib.AccessTools.TypeByName("IsoRim.Floors"), "On");
-            return $"IsoRim stacked floors on: {f?.GetValue(null)}, world render mode {WorldRendererUtility.CurrentWorldRenderMode}";
+            return $"IsoRim stacked floors on: {IsoRimBridge.FloorsDrawn}, world render mode {WorldRendererUtility.CurrentWorldRenderMode}";
         }
 
         private static string Census(Map map, IEnumerable<IntVec3> cells)

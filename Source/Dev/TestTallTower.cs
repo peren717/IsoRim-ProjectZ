@@ -609,8 +609,7 @@ namespace ProjectZ.Dev
 
         private static void GapFill(bool on)
         {
-            System.Reflection.FieldInfo f = AccessTools.Field(AccessTools.TypeByName("IsoRim.Floors"), "ShadowGapFill");
-            f?.SetValue(null, on);
+            IsoRimBridge.SetShadowGapFill(on);
         }
 
         private static Vector2 Cast()
@@ -685,7 +684,7 @@ namespace ProjectZ.Dev
 
         private static bool OnScreen(Vector2 p)
         {
-            Vector2 s = IsoRim.View3D.WorldToScreen(new Vector3(p.x, 0f, p.y));
+            Vector2 s = IsoRimBridge.ScreenOf(new Vector3(p.x, 0f, p.y));
             return s.x >= 6f && s.y >= 6f && s.x <= Screen.width - 6f && s.y <= Screen.height - 6f;
         }
 
@@ -707,7 +706,7 @@ namespace ProjectZ.Dev
 
         private static string Px(Vector2 p)
         {
-            Vector2 s = IsoRim.View3D.WorldToScreen(new Vector3(p.x, 0f, p.y));
+            Vector2 s = IsoRimBridge.ScreenOf(new Vector3(p.x, 0f, p.y));
             return $"{s.x:0.0},{s.y:0.0}";
         }
 

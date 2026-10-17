@@ -672,8 +672,8 @@ namespace ProjectZ.Dev
                 {
                     if (IsoRimBridge.Present)
                     {
-                        Result("wall height locked at 1.65 (storey 1.67)", Mathf.Abs(IsoRimBridge.WallHeight - 1.65f) < 0.001f && Mathf.Abs(IsoRimBridge.StoreyHeight - 1.67f) < 0.001f && Mathf.Abs(IsoRim.View3D.LockedWallHeight - 1.65f) < 0.001f,
-                            $"wall {IsoRimBridge.WallHeight}, storey {IsoRimBridge.StoreyHeight}, locked {IsoRim.View3D.LockedWallHeight} by {IsoRim.View3D.LockedBy}, option value {IsoRimBridge.SetOption("wallHeight", IsoRimBridge.SetOption("wallHeight", 1.2f))}");
+                        Result("wall height locked at 1.65 (storey 1.67)", Mathf.Abs(IsoRimBridge.WallHeight - 1.65f) < 0.001f && Mathf.Abs(IsoRimBridge.StoreyHeight - 1.67f) < 0.001f && Mathf.Abs(IsoRimBridge.LockedWallHeight - 1.65f) < 0.001f,
+                            $"wall {IsoRimBridge.WallHeight}, storey {IsoRimBridge.StoreyHeight}, locked {IsoRimBridge.LockedWallHeight} by {IsoRimBridge.ViewLockedBy}, option value {IsoRimBridge.SetOption("wallHeight", IsoRimBridge.SetOption("wallHeight", 1.2f))}");
                     }
                     Building_Door under = map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("OrnateDoor")).OfType<Building_Door>().FirstOrDefault(d => d.OccupiedRect().Cells.Any(c => FloorRoof.FloorAbove(c, map)));
                     Building_Door open = map.listerThings.ThingsOfDef(DefDatabase<ThingDef>.GetNamed("OrnateDoor")).OfType<Building_Door>().FirstOrDefault(d => d != under);
@@ -757,7 +757,7 @@ namespace ProjectZ.Dev
             }
         }
 
-        private static bool DoorSlab(Map map, Building_Door d) => d.OccupiedRect().Cells.Any(c => IsoRim.Floors.SlabOver(map, c));
+        private static bool DoorSlab(Map map, Building_Door d) => d.OccupiedRect().Cells.Any(c => IsoRimBridge.SlabOver(map, c));
 
         private static void SetupStairs(Map map)
         {

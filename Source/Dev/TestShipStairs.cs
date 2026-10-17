@@ -146,7 +146,7 @@ namespace ProjectZ.Dev
             {
                 return;
             }
-            AccessTools.Field(AccessTools.TypeByName("IsoRim.View3D"), "Active").SetValue(null, on);
+            IsoRimBridge.SetView3DActive(on);
             map.mapDrawer.RegenerateEverythingNow();
         }
 

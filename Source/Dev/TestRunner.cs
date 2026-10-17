@@ -51,8 +51,7 @@ namespace ProjectZ.Dev
     //                                   thick: thick rock roofs (no slab over, no stairs under them, the roof guard, stairs at
     //                                   a mountain edge, infestations) (TestThick)
     //                                   space: the orbital relay map of the gravship start (Odyssey): stairs, landing, upper
-    //                                   floors, walking up, taking a slab up, vacuum under the floors; -projectzspacefloors
-    //                                   applies IsoRim's proposed space-map fix at run time (TestSpace)
+    //                                   floors, walking up, taking a slab up, vacuum under the floors (TestSpace)
     //                                   power: power across floors (conduit risers over 3 floors, a battery that must
     //                                   not join, hidden conduits under walls, hookups at the band edge, a colonist
     //                                   deconstructing and rebuilding the riser's ground conduit, save/reload) with
@@ -227,10 +226,6 @@ namespace ProjectZ.Dev
             if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange")
             {
                 PatchMouse(h);
-            }
-            if (GenCommandLine.CommandLineArgPassed("projectzspacefloors"))
-            {
-                PatchIsoRimSpaceFloors(h);
             }
             h.Patch(AccessTools.Method(typeof(Frame), nameof(Frame.FailConstruction)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(BotchPrefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))

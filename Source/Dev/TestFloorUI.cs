@@ -72,7 +72,7 @@ namespace ProjectZ.Dev
         }
 
         // The screen point over ground cell g raised to floor `floor` (as the camera sees it).
-        private static Vector2 ScreenOf(IntVec3 g, int floor) => IsoRim.View3D.WorldToScreen(new Vector3(g.x + 0.5f, floor * IsoRimBridge.StoreyHeight, g.z + 0.5f));
+        private static Vector2 ScreenOf(IntVec3 g, int floor) => IsoRimBridge.ScreenOf(new Vector3(g.x + 0.5f, floor * IsoRimBridge.StoreyHeight, g.z + 0.5f));
 
         private static IntVec3 OnFloor(IntVec3 g, int floor, Map map) => ProjectZ.CellOnFloor(new IntVec3(g.x, 0, g.z), floor, map);
 
@@ -628,7 +628,7 @@ namespace ProjectZ.Dev
             IntVec3 c = target.Position;
             int k = ProjectZ.FloorOf(c, map);
             IntVec3 g = ProjectZ.GroundCellOf(c, map);
-            Vector2 px = IsoRim.View3D.WorldToScreen(new Vector3(c.x + 0.5f, k * IsoRimBridge.StoreyHeight, g.z + 0.5f));
+            Vector2 px = IsoRimBridge.ScreenOf(new Vector3(c.x + 0.5f, k * IsoRimBridge.StoreyHeight, g.z + 0.5f));
             Vector2 mid = new Vector2(Screen.width / 2f, Screen.height / 2f);
             float off = (px - mid).magnitude / Screen.height;
             IntVec3 cam = Find.CameraDriver.MapPosition;

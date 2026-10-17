@@ -649,7 +649,7 @@ namespace ProjectZ.Dev
             Result($"pointer picks floor {floor + 1}'s cell", got == want, $"screen {px} -> {got}, expected {want}");
         }
 
-        private static Vector2 PickScreen(Vector3 p) => IsoRim.View3D.WorldToScreen(p);
+        private static Vector2 PickScreen(Vector3 p) => IsoRimBridge.ScreenOf(p);
     }
 
     // Counters for the test (cheap, always on).

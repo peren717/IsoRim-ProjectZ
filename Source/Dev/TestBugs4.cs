@@ -251,7 +251,7 @@ namespace ProjectZ.Dev
             Vector3 lit = c - new Vector3(dir.x, 0f, dir.y) * 2.6f;
             string P(Vector3 w)
             {
-                Vector2 s = IsoRim.View3D.WorldToScreen(new Vector3(w.x, 0f, w.z));
+                Vector2 s = IsoRimBridge.ScreenOf(new Vector3(w.x, 0f, w.z));
                 return $"{Mathf.RoundToInt(s.x)},{Mathf.RoundToInt(s.y)}";
             }
             results.Add($"SAMPLE {shot} screen={Screen.width}x{Screen.height} hour={GenLocalDate.HourOfDay(map)} cast={v.x:0.00},{v.y:0.00} strength={GenCelestial.CurShadowStrength(map):0.00} shadow={P(inShadow)} lit={P(lit)}");

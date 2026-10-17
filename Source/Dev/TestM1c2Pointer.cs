@@ -81,7 +81,7 @@ namespace ProjectZ.Dev
         {
             IntVec3 cell = ProjectZ.CellOnFloor(new IntVec3(g.x, 0, g.z), floor, map);
             float h = floor * IsoRimBridge.StoreyHeight;
-            Vector2 px = IsoRim.View3D.WorldToScreen(new Vector3(g.x + 0.5f, h, g.z + 0.5f));
+            Vector2 px = IsoRimBridge.ScreenOf(new Vector3(g.x + 0.5f, h, g.z + 0.5f));
             Vector3 clickPos = Verse.UI.UIToMapPosition(px / Prefs.UIScale);
             IntVec3 got = clickPos.ToIntVec3();
             Result($"pointer {what} picks floor {floor + 1}'s cell", got == cell, $"screen {px} -> {got}, expected {cell}");

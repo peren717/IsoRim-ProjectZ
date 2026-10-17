@@ -219,10 +219,7 @@ namespace ProjectZ.Dev
 
         private static string GlowCorner(Map map, IntVec3 c)
         {
-            IsoRim.IsoGlowMap g = IsoRim.IsoGlowMap.For(map);
-            Color32[] corners = HarmonyLib.Traverse.Create(g).Field("corners").GetValue<Color32[]>();
-            int i = c.z * g.width + c.x;
-            return corners != null && i >= 0 && i < corners.Length ? corners[i].ToString() : "?";
+            return IsoRimBridge.GlowCorner(map, c);
         }
 
         // Screen pixel (top-left origin) of the centre of sample cells: floor 2 cells mapped by IsoRim (Camera hook).
