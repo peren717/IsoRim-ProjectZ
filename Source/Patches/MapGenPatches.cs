@@ -22,6 +22,7 @@ namespace ProjectZ.Patches
             public Map map;      // set once ConstructComponents ran
             public byte[] elevation;   // F5, captured during the genSteps; given to the component after GridFixer
             public bool shrunk;
+            public bool mountains;     // tall mountains (Mountains.cs), filled in the FinalizeInit prefix
         }
 
         internal static Pending pending;
@@ -91,7 +92,7 @@ namespace ProjectZ.Patches
                 return;
             }
             int stride = ProjectZ.StrideFor(mapSize.z);
-            AnnexGen.pending = new AnnexGen.Pending { groundSize = mapSize, stride = stride, floors = floors };
+            AnnexGen.pending = new AnnexGen.Pending { groundSize = mapSize, stride = stride, floors = floors, mountains = ProjectZ.TallMountainsForNewMaps };
             ProjectZ.DebugLog($"generating {mapGenerator?.defName} map: ground {mapSize.x}x{mapSize.z}, stride {stride}, floors {floors} -> {mapSize.x}x{floors * stride}");
             mapSize = new IntVec3(mapSize.x, mapSize.y, floors * stride);
         }
@@ -242,6 +243,10 @@ namespace ProjectZ.Patches
             // all rebuilt right after this in FinalizeInit.
             int changed = AnnexGen.FillAnnex(map, groundZ, withPathCosts: false);
             ProjectZ.DebugLog($"annex checked: {changed} cell(s) changed during generation, {fixedGrids} ground-sized grid(s) resized, map size now {map.Size}");
+            if (p.mountains && comp != null && comp.elevation != null)
+            {
+                Mountains.Generate(map, comp);
+            }
         }
     }
 }

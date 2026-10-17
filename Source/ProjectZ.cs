@@ -53,6 +53,9 @@ namespace ProjectZ
         public List<int> bandLevel;
         // F5: vanilla's elevation per ground cell (NaturalElevation), captured at generation; null on maps made before.
         public byte[] elevation;
+        // Tall mountains (Mountains.cs): this map was generated with its mountains risen into the bands (saved; the
+        // rules that only matter where natural rock floors exist ask it).
+        public bool tallMountains;
 
         // F1, derived from bandLevel (not saved): level per band, band per level (index L - minLevel).
         private int[] levelOfBand;
@@ -210,6 +213,7 @@ namespace ProjectZ
             Scribe_Values.Look(ref layoutVersion, "layoutVersion", 1, forceSave: true);
             Scribe_Collections.Look(ref bandLevel, "bandLevel", LookMode.Value);
             DataExposeUtility.LookByteArray(ref elevation, "elevation");
+            Scribe_Values.Look(ref tallMountains, "tallMountains", false);
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
                 if (layoutVersion < 2)
@@ -263,6 +267,9 @@ namespace ProjectZ
 
         // Floors for a map generated now: the current game's, fixed when its world was created (WorldFloors.cs).
         public static int FloorsForNewMaps => WorldFloors.ForThisGame;
+
+        // Tall mountains for a map generated now (the current game's, WorldFloors).
+        public static bool TallMountainsForNewMaps => WorldFloors.TallMountainsThisGame;
 
         public static bool DebugOn => ProjectZMod.Settings != null && ProjectZMod.Settings.debug || Dev.TestRunner.Active;
 

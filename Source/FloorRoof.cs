@@ -48,10 +48,24 @@ namespace ProjectZ
             return up.IsValid ? Floors.CeilingUnder(up, map) : null;
         }
 
-        // A roof that never drops: a floor's (the floor itself) or the stairwell's (an opening).
+        // A built floor (slab or ship deck) right above c, not a natural rock floor.
+        public static bool BuiltFloorAbove(IntVec3 c, Map map)
+        {
+            IntVec3 up = Above(c, map);
+            if (!up.IsValid || !ProjectZ.HasFloor(up, map))
+            {
+                return false;
+            }
+            FloorKind k = Floors.KindAt(up, map);
+            return k == FloorKind.Slab || k == FloorKind.ShipDeck;
+        }
+
+        // A roof that never drops: a built floor's (the floor itself) or the stairwell's (an opening). The thick roof
+        // under a natural rock floor (tall mountains) is vanilla's overhead mountain: it collapses as vanilla (drops rocks
+        // and stays), so it is not kept here.
         public static bool Kept(IntVec3 c, Map map)
         {
-            return c.InBounds(map) && (FloorAbove(c, map) || ProjectZ.Annex(map) != null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
+            return c.InBounds(map) && (BuiltFloorAbove(c, map) || ProjectZ.Annex(map) != null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
         }
 
         // The cell under c on the floor below (c on an upper floor), else Invalid.
