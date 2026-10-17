@@ -152,6 +152,7 @@ namespace ProjectZ.Dev
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
             DropRules.ShuttleFixOff = GenCommandLine.CommandLineArgPassed("projectznoshuttlefix");
             Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
+            Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -515,6 +516,11 @@ namespace ProjectZ.Dev
                 StepExplode(map);
                 return;
             }
+            if (stage.StartsWith("fa_"))
+            {
+                StepFacility(map);
+                return;
+            }
             if (stage.StartsWith("jp_"))
             {
                 StepJump(map);
@@ -661,6 +667,10 @@ namespace ProjectZ.Dev
                     else if (mode == "strikes")
                     {
                         stage = "sx_setup";
+                    }
+                    else if (mode == "facility")
+                    {
+                        stage = "fa_setup";
                     }
                     else if (mode == "bulletpitch")
                     {
