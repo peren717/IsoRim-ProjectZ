@@ -319,14 +319,13 @@ namespace ProjectZ
         public int FloorCount(Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
-            return a == null ? 0 : a.floors - 1;
+            return a == null ? 0 : a.MaxLevel;   // IsoRim's floors 1..FloorCount = our levels above the ground
         }
 
         public bool Floor(Map map, int k, out float height, out int zShift)
         {
-            AnnexMapComponent a = ProjectZ.Annex(map);
             height = k * IsoRimBridge.StoreyHeight;
-            zShift = a == null ? 0 : k * a.stride;
+            zShift = Levels.Shift(map, k);
             return k <= FloorView.Current;
         }
 

@@ -136,7 +136,7 @@ namespace ProjectZ
                 return 0;
             }
             int n = 0;
-            for (int k = 1; k < a.floors; k++)
+            for (int k = 1; k <= a.MaxLevel; k++)
             {
                 for (int z = 0; z < a.groundZ; z++)
                 {

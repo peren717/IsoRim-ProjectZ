@@ -574,8 +574,8 @@ namespace ProjectZ.Combat
             // A miss past the north edge of a floor lands on its top row, not in the void between floors.
             if (kd < 0 && dc.z >= a.groundZ)
             {
-                kd = Mathf.Clamp(dc.z / a.stride, 0, a.floors - 1);
-                ___destination.z = Mathf.Min(___destination.z, kd * a.stride + a.groundZ - 0.01f);
+                kd = Mathf.Clamp(Levels.LevelOfRowLoose(map, dc.z), a.MinLevel, a.MaxLevel);
+                ___destination.z = Mathf.Min(___destination.z, Levels.RowMax(map, kd) + 1 - 0.01f);
                 dc = ___destination.ToIntVec3();
                 moved = true;
             }
@@ -588,7 +588,7 @@ namespace ProjectZ.Combat
             }
             if (land != kd)
             {
-                ___destination.z -= (kd - land) * a.stride;
+                ___destination.z += Levels.Shift(map, land) - Levels.Shift(map, kd);
                 moved = true;
             }
             if (land != ko)
@@ -596,7 +596,7 @@ namespace ProjectZ.Combat
                 // IsoRim draws the shot leaving from the real shooter's muzzle (a manned mortar's barrel), not from
                 // the moved launch point
                 IsoRimBridge.SetLaunchPoint(__instance, ___origin);
-                ___origin.z += (land - ko) * a.stride;
+                ___origin.z += Levels.Shift(map, land) - Levels.Shift(map, ko);
                 moved = true;
             }
             if (!moved)
@@ -677,12 +677,12 @@ namespace ProjectZ.Combat
             float hi = Mathf.Max(f.last, h);
             bool down = f.last > h;
             f.last = h;
-            for (int k = 1; k <= a.floors; k++)
+            for (int k = a.MinLevel + 1; k <= a.MaxLevel + 1; k++)
             {
                 float level = k * Heights.Storey;
-                if (level >= lo && level <= hi && Heights.Plane(g, k, map, a.floors))
+                if (level >= lo && level <= hi && Heights.Plane(g, k, map))
                 {
-                    IntVec3 hitCell = ProjectZ.CellOnFloor(g, Mathf.Min(down ? k : k - 1, a.floors - 1), map);
+                    IntVec3 hitCell = ProjectZ.CellOnFloor(g, Mathf.Min(down ? k : k - 1, a.MaxLevel), map);
                     if (hitCell.IsValid)
                     {
                         p.Position = hitCell;
@@ -697,7 +697,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            int floor = Mathf.Clamp(Mathf.FloorToInt(h / Heights.Storey), 0, a.floors - 1);
+            int floor = Mathf.Clamp(Mathf.FloorToInt(h / Heights.Storey), a.MinLevel, a.MaxLevel);
             IntVec3 ck = ProjectZ.CellOnFloor(g, floor, map);
             if (!ck.IsValid || !ck.InBounds(map))
             {

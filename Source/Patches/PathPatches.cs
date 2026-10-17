@@ -179,14 +179,14 @@ namespace ProjectZ.Patches
                     return (int)last.TotalCost;
                 }
                 ProjectZ.DebugLog($"route (jumps {jumps}): no last leg {from} -> {dest.Cell}");
-                if (f < 0 || depth >= a.floors)
+                if (f < 0 || depth >= Levels.Count(map))
                 {
                     return -1;
                 }
                 // The same floor but not joined on it (SplitFloor: a landing in the open, another building's floor):
                 // down and back up (or up and down) by other stairs.
             }
-            if (f < 0 || depth >= a.floors)
+            if (f < 0 || depth >= Levels.Count(map))
             {
                 return -1;
             }

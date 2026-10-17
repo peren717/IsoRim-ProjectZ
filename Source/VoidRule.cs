@@ -44,9 +44,13 @@ namespace ProjectZ
             Stopwatch sw = Stopwatch.StartNew();
             int cells = 0, gas = 0;
             int sx = map.Size.x;
-            for (int k = 0; k < a.floors; k++)
+            // every void row (the rows after each band, IsVoid)
+            for (int z = a.groundZ; z < map.Size.z; z++)
             {
-                for (int z = k * a.stride + a.groundZ; z < (k + 1) * a.stride && z < map.Size.z; z++)
+                if (!ProjectZ.IsVoid(new IntVec3(0, 0, z), map))
+                {
+                    continue;
+                }
                 {
                     for (int x = 0; x < sx; x++)
                     {

@@ -115,7 +115,7 @@ namespace ProjectZ
             IntVec3 was = c;
             IntVec3 g = new IntVec3(c.x, 0, c.z);
             AnnexMapComponent an = ProjectZ.Annex(map);
-            IntVec3 up = an != null && c.y > 0 && c.y < an.floors && g.z < an.groundZ ? ProjectZ.CellOnFloor(g, c.y, map) : IntVec3.Invalid;
+            IntVec3 up = an != null && c.y > 0 && c.y <= an.MaxLevel && g.z < an.groundZ ? ProjectZ.CellOnFloor(g, c.y, map) : IntVec3.Invalid;
             c = up.IsValid ? up : g;
             Nets++;
             Log.ErrorOnce($"[ProjectZ] {where}: cell {was} still carries a gravship floor tag; put at {c}", 81723403 ^ where.GetHashCode());

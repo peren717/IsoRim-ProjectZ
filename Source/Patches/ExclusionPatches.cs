@@ -143,7 +143,7 @@ namespace ProjectZ.Patches
                 for (int i = 0; i < 3000; i++)
                 {
                     IntVec3 g = new IntVec3(Rand.Range(0, map.Size.x), 0, Rand.Range(0, a.groundZ));
-                    IntVec3 c = ProjectZ.CellOnFloor(g, Rand.Range(0, a.floors), map);
+                    IntVec3 c = ProjectZ.CellOnFloor(g, Rand.Range(a.MinLevel, a.MaxLevel + 1), map);
                     if (c.IsValid && !DropRules.Blocked(c, map) && (!standableOnly || c.Standable(map)) && !c.GetTerrain(map).IsWater && (roofOk || !c.Roofed(map)) && !c.Fogged(map))
                     {
                         __result = c;

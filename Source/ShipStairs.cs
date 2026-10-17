@@ -33,7 +33,7 @@ namespace ProjectZ
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int k = ProjectZ.FloorOf(loc, map);
-            if (a == null || k < 0 || k + 1 >= a.floors)
+            if (a == null || k < 0 || k + 1 > a.MaxLevel)
             {
                 return "PZ_NoFloorAbove".Translate();
             }

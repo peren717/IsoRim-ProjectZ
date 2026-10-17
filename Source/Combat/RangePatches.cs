@@ -271,7 +271,7 @@ namespace ProjectZ.Combat
                 }
                 float range = v.verbProps.range;
                 float min = v.verbProps.EffectiveMinRange(allowAdjacentShot: true);
-                for (int k = 0; k < a.floors; k++)
+                for (int k = a.MinLevel; k <= a.MaxLevel; k++)
                 {
                     if (k == ks)
                     {

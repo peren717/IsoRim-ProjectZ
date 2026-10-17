@@ -62,15 +62,15 @@ namespace ProjectZ.Combat
             return ProjectZ.HasFloor(c, map);
         }
 
-        // The plane between floor k-1 and floor k over ground cell g is solid (k >= 1; k = floors is the top floor's roof).
-        public static bool Plane(IntVec3 g, int k, Map map, int floors)
+        // The plane between level k-1 and level k over ground cell g is solid (k = the top level + 1 is the top floor's roof).
+        public static bool Plane(IntVec3 g, int k, Map map)
         {
             IntVec3 below = ProjectZ.CellOnFloor(g, k - 1, map);
             if (below.IsValid && !Column.OpenAbove(below, map))
             {
                 return true;
             }
-            return k < floors && Slab(ProjectZ.CellOnFloor(g, k, map), map);
+            return k <= Levels.Max(map) && Slab(ProjectZ.CellOnFloor(g, k, map), map);
         }
 
         // Height of a building's top over its floor, for cover (walls Wall, others their fill).
@@ -133,7 +133,7 @@ namespace ProjectZ.Combat
             }
             float hs = ks * Storey + fromHeight;
             float ht = kt * Storey + toHeight;
-            return Clear(gs, gt, hs, ht, map, an.floors);
+            return Clear(gs, gt, hs, ht, map);
         }
 
         private static readonly List<IntVec3> seeDests = new List<IntVec3>();
@@ -208,8 +208,9 @@ namespace ProjectZ.Combat
 
         // Walks the line between two ground cells with its heights at each end: no solid plane crossed, no sight-blocking
         // building passed below its top (the end cells themselves don't block).
-        public static bool Clear(IntVec3 gs, IntVec3 gt, float hs, float ht, Map map, int floors)
+        public static bool Clear(IntVec3 gs, IntVec3 gt, float hs, float ht, Map map)
         {
+            int lowest = Levels.Min(map), top = Levels.Max(map);
             List<IntVec3> l = Line(gs, gt);
             int n = l.Count - 1;
             float len = Mathf.Max((gt - gs).LengthHorizontal, 0.5f);
@@ -224,10 +225,10 @@ namespace ProjectZ.Combat
                 float b = Mathf.Lerp(hs, ht, t1);
                 float lo = Mathf.Min(a, b);
                 float hi = Mathf.Max(a, b);
-                for (int k = 1; k <= floors; k++)
+                for (int k = lowest + 1; k <= top + 1; k++)
                 {
                     float level = k * Storey;
-                    if (level >= lo && level <= hi && Plane(g, k, map, floors))
+                    if (level >= lo && level <= hi && Plane(g, k, map))
                     {
                         return false;
                     }
@@ -236,7 +237,7 @@ namespace ProjectZ.Combat
                 {
                     continue;
                 }
-                for (int k = 0; k < floors; k++)
+                for (int k = lowest; k <= top; k++)
                 {
                     float bottom = k * Storey;
                     if (hi < bottom || lo > bottom + Wall)

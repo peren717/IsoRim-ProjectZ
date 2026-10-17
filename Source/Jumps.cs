@@ -333,9 +333,7 @@ namespace ProjectZ
         public static float RampRise(Building_Stairs s, Vector3 drawn, Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
-            int row = Mathf.FloorToInt(drawn.z);
-            int k = a == null || row < a.groundZ ? 0 : row / a.stride;
-            float gz = a == null ? drawn.z : drawn.z - k * a.stride;
+            float gz = a == null ? drawn.z : Levels.GroundZLoose(map, drawn.z);
             Vector3 centre = ProjectZ.GroundCellOf(s.Position, map).ToVector3Shifted();
             float dx = drawn.x - centre.x;
             float dz = gz - centre.z;

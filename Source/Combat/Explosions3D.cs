@@ -51,7 +51,7 @@ namespace ProjectZ.Combat
             }
             IntVec3 gc = ProjectZ.GroundCellOf(center, map);
             float hc = kc * Heights.Storey + Heights.Middle;
-            for (int k = 0; k < an.floors; k++)
+            for (int k = an.MinLevel; k <= an.MaxLevel; k++)
             {
                 if (k == kc)
                 {
@@ -85,7 +85,7 @@ namespace ProjectZ.Combat
                     {
                         continue;
                     }
-                    if (!IgnoreBlocking && !Heights.Clear(gc, g, hc, ht, map, an.floors) && !Heights.Clear(gc, g, hc, hn, map, an.floors))
+                    if (!IgnoreBlocking && !Heights.Clear(gc, g, hc, ht, map) && !Heights.Clear(gc, g, hc, hn, map))
                     {
                         continue;
                     }
@@ -341,8 +341,7 @@ namespace ProjectZ.Combat
             {
                 return r;
             }
-            int lo = k * an.stride;
-            r = CellRect.FromLimits(r.minX, Mathf.Max(r.minZ, lo), r.maxX, Mathf.Min(r.maxZ, lo + an.groundZ - 1));
+            r = CellRect.FromLimits(r.minX, Mathf.Max(r.minZ, Levels.RowMin(map, k)), r.maxX, Mathf.Min(r.maxZ, Levels.RowMax(map, k)));
             return r;
         }
     }

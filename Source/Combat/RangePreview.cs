@@ -143,7 +143,7 @@ namespace ProjectZ.Combat
             {
                 return true;
             }
-            int lo = k * a.stride, hi = k * a.stride + a.groundZ - 1;
+            int lo = Levels.RowMin(map, k), hi = Levels.RowMax(map, k);
             cells.Clear();
             cut.Clear();
             int n = GenRadial.NumCellsInRadius(radius);

@@ -43,8 +43,9 @@ namespace ProjectZ
         private static int animFloors, shown, from;
         private static float switchedAt = -1f;
 
-        // dots, per floor, refreshed a few times a second
+        // dots, per floor (index = level - the map's lowest level), refreshed a few times a second
         private static Map cacheMap;
+        private static int cacheLowest;
         private static float cacheAt = -100f;
         private static bool[] colonist = new bool[0], danger = new bool[0];
 
@@ -61,7 +62,8 @@ namespace ProjectZ
 
         private static ProjectZSettings S => ProjectZMod.Settings;
 
-        // The row (bar plus half the gaps, full HUD width) of floor k in the HUD rect r: the click and tooltip target.
+        // The row (bar plus half the gaps, full HUD width) of row index k (level - the lowest level, 0 = bottom bar) in
+        // the HUD rect r: the click and tooltip target.
         public static Rect RowRect(Rect r, int floors, int k)
         {
             int i = floors - 1 - k;
@@ -78,7 +80,7 @@ namespace ProjectZ
                 dragging = false;
                 return;
             }
-            float h = StackHeight(a.floors);
+            float h = StackHeight(Levels.Count(map));
             Rect r;
             if (S.floorHudMoved)
             {
@@ -90,7 +92,7 @@ namespace ProjectZ
                 r = new Rect(UI.screenWidth - EdgeGap - Width, curBaseY - h, Width, h);
                 curBaseY -= h;
             }
-            OnGUI(r, map, a.floors);
+            OnGUI(r, map, Levels.Count(map));
         }
 
         private static Rect MovedRect(float h)
@@ -122,12 +124,15 @@ namespace ProjectZ
                     }
                 }
             }
+            // (rows by index i, level = lowest + i)
+            int lowest = Levels.Min(map);
             int cur = FloorView.Current;
             if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
             {
-                for (int k = 0; k < floors; k++)
+                for (int i = 0; i < floors; i++)
                 {
-                    if (RowRect(r, floors, k).Contains(e.mousePosition))
+                    int k = lowest + i;
+                    if (RowRect(r, floors, i).Contains(e.mousePosition))
                     {
                         if (e.alt)
                         {
@@ -146,19 +151,19 @@ namespace ProjectZ
                     }
                 }
             }
-            for (int k = 0; k < floors; k++)
+            for (int i = 0; i < floors; i++)
             {
-                Rect row = RowRect(r, floors, k);
+                Rect row = RowRect(r, floors, i);
                 if (Mouse.IsOver(row))
                 {
                     MouseoverSounds.DoRegion(row);
-                    int floor = k;
-                    TooltipHandler.TipRegion(row, new TipSignal(() => Tip(floor), 0x5A10F + k));
+                    int floor = lowest + i;
+                    TooltipHandler.TipRegion(row, new TipSignal(() => Tip(floor), 0x5A10F + i));
                 }
             }
             if (e.type == EventType.Repaint)
             {
-                Draw(r, map, floors, FloorView.Current);
+                Draw(r, map, floors, FloorView.Current - lowest, -lowest);
             }
         }
 
@@ -181,7 +186,8 @@ namespace ProjectZ
             S.floorHudMoved = false;
         }
 
-        private static void Draw(Rect r, Map map, int floors, int cur)
+        // (k, cur, ground: row indices; ground = the ground's row)
+        private static void Draw(Rect r, Map map, int floors, int cur, int ground)
         {
             float now = Time.realtimeSinceStartup;
             if (animMap != map || animFloors != floors)
@@ -204,10 +210,10 @@ namespace ProjectZ
             {
                 float v = Mathf.Lerp(k == from ? 1f : 0f, k == shown ? 1f : 0f, ease);
                 float f = Mathf.Lerp(k <= from ? 1f : 0f, k <= shown ? 1f : 0f, ease);
-                float w = BarW + (k == 0 ? GroundExtra : 0f);
+                float w = BarW + (k == ground ? GroundExtra : 0f);
                 float y = r.y + (floors - 1 - k) * (BarH + Gap);
                 Rect bar = new Rect(r.xMax - v * Shift - w, y, w, BarH);
-                DrawBar(bar, k == 0, v, f);
+                DrawBar(bar, k == ground, v, f);
                 if (!dragging && Mouse.IsOver(RowRect(r, floors, k)))
                 {
                     Widgets.DrawHighlight(bar);
@@ -268,15 +274,18 @@ namespace ProjectZ
 
         private static Color Fade(Color c, float a) => new Color(c.r, c.g, c.b, c.a * a);
 
-        // Colonists and danger per floor (cell floor; the void rows between floors count for none).
+        // Colonists and danger per floor (cell level; the void rows between floors count for none). floors = the
+        // number of levels, indexed from the lowest.
         public static void Refresh(Map map, int floors, float now, bool force = false)
         {
-            if (!force && cacheMap == map && colonist.Length == floors && now - cacheAt < CacheTime && now >= cacheAt)
+            int lowest = Levels.Min(map);
+            if (!force && cacheMap == map && colonist.Length == floors && cacheLowest == lowest && now - cacheAt < CacheTime && now >= cacheAt)
             {
                 return;
             }
             cacheMap = map;
             cacheAt = now;
+            cacheLowest = lowest;
             if (colonist.Length != floors)
             {
                 colonist = new bool[floors];
@@ -288,7 +297,7 @@ namespace ProjectZ
             }
             foreach (Pawn p in map.mapPawns.FreeColonistsSpawned)
             {
-                int k = ProjectZ.FloorOf(p.Position, map);
+                int k = Row(p.Position, map, lowest);
                 if (k >= 0 && k < floors)
                 {
                     colonist[k] = true;
@@ -298,7 +307,7 @@ namespace ProjectZ
             {
                 if (t.Thing is Pawn p && p.Spawned && GenHostility.IsActiveThreatToPlayer(t))
                 {
-                    int k = ProjectZ.FloorOf(p.Position, map);
+                    int k = Row(p.Position, map, lowest);
                     if (k >= 0 && k < floors)
                     {
                         danger[k] = true;
@@ -309,7 +318,7 @@ namespace ProjectZ
             {
                 if (fire.Spawned && !fire.Position.Fogged(map))
                 {
-                    int k = ProjectZ.FloorOf(fire.Position, map);
+                    int k = Row(fire.Position, map, lowest);
                     if (k >= 0 && k < floors)
                     {
                         danger[k] = true;
@@ -318,9 +327,16 @@ namespace ProjectZ
             }
         }
 
-        // Test hooks.
-        public static bool ColonistOn(int k) => k >= 0 && k < colonist.Length && colonist[k];
-        public static bool DangerOn(int k) => k >= 0 && k < danger.Length && danger[k];
+        // A cell's row index (level - lowest); -1 for a void row.
+        private static int Row(IntVec3 c, Map map, int lowest)
+        {
+            int L = Levels.LevelOf(c, map);
+            return L == Levels.None ? -1 : L - lowest;
+        }
+
+        // Test hooks (k = a level).
+        public static bool ColonistOn(int k) => k - cacheLowest >= 0 && k - cacheLowest < colonist.Length && colonist[k - cacheLowest];
+        public static bool DangerOn(int k) => k - cacheLowest >= 0 && k - cacheLowest < danger.Length && danger[k - cacheLowest];
     }
 
     // The HUD's slot: right above the play settings (the icon rows at the bottom right), below the time controls.

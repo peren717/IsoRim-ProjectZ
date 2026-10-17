@@ -96,7 +96,7 @@ namespace ProjectZ.Combat
             {
                 bool last = x == gt.x && z == gt.z;
                 float u1 = last ? 1f : Mathf.Min(1f, Mathf.Min(tmx, tmz));
-                if (u1 - u0 > 1e-4f && !ColumnClear(new IntVec3(x, 0, z), u0, u1, len, props, ks, kt, gs, gt, map, an.floors))
+                if (u1 - u0 > 1e-4f && !ColumnClear(new IntVec3(x, 0, z), u0, u1, len, props, ks, kt, gs, gt, map))
                 {
                     return false;
                 }
@@ -130,8 +130,9 @@ namespace ProjectZ.Combat
         // Over ground column g the pawn's feet run between the lowest and highest point of the path in [u0, u1], its head
         // Body higher. Blocked by a solid plane (slab, roof) strictly inside that span, or a sight-blocking building it
         // overlaps (the take-off and landing cells themselves don't count).
-        private static bool ColumnClear(IntVec3 g, float u0, float u1, float len, PawnFlyerProperties props, int ks, int kt, IntVec3 gs, IntVec3 gt, Map map, int floors)
+        private static bool ColumnClear(IntVec3 g, float u0, float u1, float len, PawnFlyerProperties props, int ks, int kt, IntVec3 gs, IntVec3 gt, Map map)
         {
+            int lowest = Levels.Min(map), top = Levels.Max(map);
             int m = Mathf.Max(1, Mathf.CeilToInt((u1 - u0) * len / Step));
             float lo = float.MaxValue, hi = float.MinValue;
             for (int j = 0; j <= m; j++)
@@ -143,15 +144,15 @@ namespace ProjectZ.Combat
             float head = hi + Body;
             float storey = IsoRimBridge.StoreyHeight;
             float wall = IsoRimBridge.WallHeight;
-            for (int k = 1; k <= floors; k++)
+            for (int k = lowest + 1; k <= top + 1; k++)
             {
                 float level = k * storey;
-                if (level > lo + Eps && level < head && Heights.Plane(g, k, map, floors))
+                if (level > lo + Eps && level < head && Heights.Plane(g, k, map))
                 {
                     return false;
                 }
             }
-            for (int k = 0; k < floors; k++)
+            for (int k = lowest; k <= top; k++)
             {
                 if (g == gs && k == ks || g == gt && k == kt)
                 {
@@ -409,8 +410,8 @@ namespace ProjectZ.Combat
             float eh = effectiveHeight(f);
             Vector3 s = startVec(f);
             Vector3 d = f.DestinationPos;
-            Vector3 gs = new Vector3(s.x, s.y, s.z - ks * an.stride);
-            Vector3 gd = new Vector3(d.x, d.y, d.z - kd * an.stride);
+            Vector3 gs = new Vector3(s.x, s.y, s.z - Levels.Shift(map, ks));
+            Vector3 gd = new Vector3(d.x, d.y, d.z - Levels.Shift(map, kd));
             Vector3 g = Vector3.Lerp(gs, gd, t2);
             float storey = IsoRimBridge.StoreyHeight;
             float path = JumpRules.Path(ks, kd, t2);
@@ -420,7 +421,7 @@ namespace ProjectZ.Combat
             // the band whose floor it is above now (so a floor hidden over it hides it once it rises past that floor)
             int band = Mathf.Clamp(Mathf.FloorToInt(height / storey + 0.001f), lo, hi);
             IntVec3 gc = new IntVec3(Mathf.Clamp(Mathf.FloorToInt(g.x), 0, map.Size.x - 1), 0, Mathf.Clamp(Mathf.FloorToInt(g.z), 0, an.groundZ - 1));
-            Vector3 onBand = new Vector3(g.x, g.y, g.z + band * an.stride);
+            Vector3 onBand = new Vector3(g.x, g.y, g.z + Levels.Shift(map, band));
             groundPos(f) = onBand;
             effectivePos(f) = onBand + Altitudes.AltIncVect * eh + Vector3.forward * lift;
             IntVec3 cell = ProjectZ.CellOnFloor(gc, band, map);
@@ -428,7 +429,7 @@ namespace ProjectZ.Combat
             {
                 f.Position = cell;
             }
-            int top = Mathf.Min(Mathf.FloorToInt(height / storey + 0.001f), an.floors - 1);
+            int top = Mathf.Min(Mathf.FloorToInt(height / storey + 0.001f), an.MaxLevel);
             int shadow = 0;
             for (int j = top; j >= 1; j--)
             {
@@ -463,7 +464,7 @@ namespace ProjectZ.Combat
             float squash = IsoRimBridge.Squash;
             float back = p.rise / (squash > 0.01f ? squash : 1f);
             // (moved onto the shadow floor's rows: IsoRim lifts it by that floor's height)
-            drawLoc = new Vector3(drawLoc.x, drawLoc.y - back, drawLoc.z + (p.shadow - p.band) * an.stride);
+            drawLoc = new Vector3(drawLoc.x, drawLoc.y - back, drawLoc.z + Levels.Shift(f.Map, p.shadow) - Levels.Shift(f.Map, p.band));
         }
     }
 

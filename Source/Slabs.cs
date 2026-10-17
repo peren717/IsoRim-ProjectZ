@@ -287,6 +287,7 @@ namespace ProjectZ
         private int[] dist;
         private int[] parent;
         private int[] maxDist;
+        private int maxLowest;
         private bool dirty = true;
         private bool listening;
         private int maxTick = -1;
@@ -404,9 +405,12 @@ namespace ProjectZ
             }
             maxTick = now;
             AnnexMapComponent a = ProjectZ.Annex(map);
-            if (maxDist == null || maxDist.Length != a.floors)
+            // (per level, index level - the lowest level)
+            int lowest = a.MinLevel, levels = a.MaxLevel - a.MinLevel + 1;
+            if (maxDist == null || maxDist.Length != levels || maxLowest != lowest)
             {
-                maxDist = new int[a.floors];
+                maxDist = new int[levels];
+                maxLowest = lowest;
             }
             for (int k = 0; k < maxDist.Length; k++)
             {
@@ -420,7 +424,7 @@ namespace ProjectZ
                     continue;
                 }
                 int d = dist[map.cellIndices.CellToIndex(c)];
-                int k = ProjectZ.FloorOf(c, map);
+                int k = ProjectZ.FloorOf(c, map) - lowest;
                 if (d > maxDist[k] && Slab.Blocker(c, map) == null)
                 {
                     maxDist[k] = d;
@@ -433,7 +437,7 @@ namespace ProjectZ
         {
             Ensure();
             int d = dist[map.cellIndices.CellToIndex(c)];
-            return d > 0 && d == maxDist[ProjectZ.FloorOf(c, map)];
+            return d > 0 && d == maxDist[ProjectZ.FloorOf(c, map) - maxLowest];
         }
 
         // Where the worker stands: the cell one step nearer the stairs. Invalid when the slab isn't reached.

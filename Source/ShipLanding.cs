@@ -54,7 +54,7 @@ namespace ProjectZ
                 {
                     continue;   // (vanilla refuses it)
                 }
-                string why = an == null || h >= an.floors ? "PZ_ShipNotEnoughFloors".Translate().ToString() : Column(c, h, map, an);
+                string why = an == null || h > an.MaxLevel ? "PZ_ShipNotEnoughFloors".Translate().ToString() : Column(c, h, map, an);
                 if (why == null)
                 {
                     continue;
@@ -77,7 +77,7 @@ namespace ProjectZ
                 return null;   // (not a ground cell: the ground-only rule refuses it)
             }
             TerrainGrid tg = map.terrainGrid;
-            for (int k = 1; k < an.floors; k++)
+            for (int k = 1; k <= an.MaxLevel; k++)
             {
                 IntVec3 u = ProjectZ.CellOnFloor(c, k, map);
                 if (u.IsValid && (tg.FoundationAt(u) != null || tg.TerrainAt(u) != PZDefOf.PZ_OpenAir))
@@ -85,7 +85,7 @@ namespace ProjectZ
                     return "PZ_ShipFloorAbove".Translate();
                 }
             }
-            for (int k = 1; k < an.floors; k++)
+            for (int k = 1; k <= an.MaxLevel; k++)
             {
                 IntVec3 u = ProjectZ.CellOnFloor(c, k, map);
                 if (!u.IsValid)

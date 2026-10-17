@@ -64,7 +64,7 @@ namespace ProjectZ
                     int ddx = x - mg.x, ddz = z - mg.z;
                     if (ddx * ddx + ddz * ddz + dy * dy <= r * r)
                     {
-                        into.Add(new IntVec3(x, 0, z + k * an.stride));
+                        into.Add(new IntVec3(x, 0, z + Levels.Shift(map, k)));
                     }
                 }
             }
@@ -191,7 +191,7 @@ namespace ProjectZ
         private static void Cut(int k, Map map, AnnexMapComponent an)
         {
             cut.Clear();
-            int lo = k * an.stride - 1, hi = k * an.stride + an.groundZ;
+            int lo = Levels.RowMin(map, k) - 1, hi = Levels.RowMax(map, k) + 1;
             for (int x = 0; x < map.Size.x; x++)
             {
                 if (lo >= 0)

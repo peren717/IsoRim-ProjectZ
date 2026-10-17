@@ -27,7 +27,7 @@ namespace ProjectZ
                 return false;
             }
             int k = ProjectZ.FloorOf(c, map);
-            if (k < 0 || k + 1 >= a.floors)
+            if (k < 0 || k + 1 > a.MaxLevel)
             {
                 return false;
             }
@@ -83,7 +83,7 @@ namespace ProjectZ
                 return 0;
             }
             int fixedCells = 0;
-            for (int k = 0; k < a.floors; k++)
+            for (int k = a.MinLevel; k <= a.MaxLevel; k++)
             {
                 for (int z = 0; z < a.groundZ; z++)
                 {

@@ -100,7 +100,7 @@ namespace ProjectZ
             // floor by floor, in the order of the floor below
             tmpPrev.Clear();
             tmpPrev.AddRange(tmpGround);
-            for (int k = 1; k < an.floors && tmpPrev.Count > 0 && cells.Count < maxCells; k++)
+            for (int k = 1; k <= an.MaxLevel && tmpPrev.Count > 0 && cells.Count < maxCells; k++)
             {
                 tmpCur.Clear();
                 for (int i = 0; i < tmpPrev.Count; i++)

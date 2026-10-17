@@ -25,6 +25,7 @@ namespace ProjectZ.Combat
 
         private static float Scale => Range3D.Storey / Heights.Storey;
 
+        // The level of a raw position's band (its void rows counted with it), within the map's levels.
         private static int BandOf(Vector3 p, AnnexMapComponent an)
         {
             int z = Mathf.FloorToInt(p.z);
@@ -32,13 +33,13 @@ namespace ProjectZ.Combat
             {
                 return 0;
             }
-            return Mathf.Clamp(z / an.stride, 0, an.floors - 1);
+            return Mathf.Clamp(Levels.LevelOfRowLoose(an.map, z), an.MinLevel, an.MaxLevel);
         }
 
-        // A raw position on band k to virtual 3D (y in cells).
+        // A raw position on level k to virtual 3D (y in cells).
         private static Vector3 V(Vector3 p, int k, float h, AnnexMapComponent an)
         {
-            return new Vector3(p.x, h * Scale, p.z - k * an.stride);
+            return new Vector3(p.x, h * Scale, p.z - Levels.Shift(an.map, k));
         }
 
         private static float HeightAt(Projectile p, Vector3 pos, int k)
@@ -103,7 +104,7 @@ namespace ProjectZ.Combat
             CompProperties_ProjectileInterceptor props = __instance.Props;
             float r = props.radius;
             bool overhead = projectile.def.projectile.flyOverhead;
-            Vector3 s = new Vector3(sc.x + 0.5f, ks * Range3D.Storey, sc.z + 0.5f - ks * an.stride);
+            Vector3 s = new Vector3(sc.x + 0.5f, ks * Range3D.Storey, sc.z + 0.5f - Levels.Shift(map, ks));
             int k0 = BandOf(lastExactPos, an);
             Vector3 p0 = V(lastExactPos, k0, HeightAt(projectile, lastExactPos, k0), an);
             Vector3 p1 = V(newExactPos, kp, HeightAt(projectile, newExactPos, kp), an);

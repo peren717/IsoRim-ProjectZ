@@ -358,7 +358,7 @@ namespace ProjectZ.Dev
             bool Straight(IntVec3 from, IntVec3 to)
             {
                 return Heights.Clear(ProjectZ.GroundCellOf(from, map), ProjectZ.GroundCellOf(to, map), ProjectZ.FloorOf(from, map) * Heights.Storey + Heights.Eye,
-                    ProjectZ.FloorOf(to, map) * Heights.Storey + Heights.Middle, map, an.floors);
+                    ProjectZ.FloorOf(to, map) * Heights.Storey + Heights.Middle, map);
             }
             int Deepest(IntVec3 from)
             {

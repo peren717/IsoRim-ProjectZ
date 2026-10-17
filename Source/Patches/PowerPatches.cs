@@ -130,8 +130,8 @@ namespace ProjectZ.Patches
             {
                 return clipped;
             }
-            int lo = k * a.stride;
-            int hi = lo + a.groundZ - 1;
+            int lo = Levels.RowMin(map, k);
+            int hi = Levels.RowMax(map, k);
             if (clipped.minZ < lo)
             {
                 clipped.minZ = lo;

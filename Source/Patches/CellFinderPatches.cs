@@ -293,12 +293,13 @@ namespace ProjectZ.Patches
             {
                 return true;
             }
-            int z = v.z < a.groundZ ? v.z : v.z % a.stride;
-            if (z >= a.groundZ)
+            IntVec3 g = Levels.Ground(v, map);
+            if (!g.IsValid)
             {
                 __result = 0; // void gap
                 return false;
             }
+            int z = g.z;
             __result = Mathf.Max(Mathf.Min(Mathf.Min(Mathf.Min(v.x, z), map.Size.x - v.x - 1), a.groundZ - z - 1), 0);
             return false;
         }

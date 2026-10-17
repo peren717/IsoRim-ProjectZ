@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -36,16 +37,27 @@ namespace ProjectZ
     //    inserted below or between, so no existing cell index ever moves;
     //  - groundZ and stride are fixed per map once generated (StrideFor is only called at generation).
     // Bump layoutVersion if a future change breaks either rule, and migrate older saves explicitly.
+    //
+    // layoutVersion 2 (mountains foundation F1, Levels.cs): bands and levels are told apart. Band b holds level
+    // bandLevel[b] (saved; missing = identity, so a version-1 save is a version-2 save with the identity table and is
+    // upgraded on load as it is). "floors" stays the number of bands.
     public class AnnexMapComponent : MapComponent
     {
-        public const int CurrentLayoutVersion = 1;
+        public const int CurrentLayoutVersion = 2;
 
         public int groundZ;   // ground rows
         public int stride;    // H
-        public int floors = 1; // total storeys including the ground
+        public int floors = 1; // number of bands including the ground (one level each)
         public int layoutVersion = CurrentLayoutVersion; // saves without it are version 1
+        // F1: the level of each band (index = band); null = identity (band b is level b). Read through Levels.
+        public List<int> bandLevel;
         // F5: vanilla's elevation per ground cell (NaturalElevation), captured at generation; null on maps made before.
         public byte[] elevation;
+
+        // F1, derived from bandLevel (not saved): level per band, band per level (index L - minLevel).
+        private int[] levelOfBand;
+        private int[] bandOfLevel;
+        private int minLevel, maxLevel;
 
         public AnnexMapComponent(Map map) : base(map)
         {
@@ -58,7 +70,122 @@ namespace ProjectZ
             this.groundZ = groundZ;
             this.stride = stride;
             this.floors = floors;
+            levelOfBand = null;
             ProjectZ.Invalidate();
+        }
+
+        public int MinLevel
+        {
+            get
+            {
+                EnsureLevels();
+                return minLevel;
+            }
+        }
+
+        public int MaxLevel
+        {
+            get
+            {
+                EnsureLevels();
+                return maxLevel;
+            }
+        }
+
+        // Band of a world row: 0 below groundZ, -1 for a void row, else the band (past the map's north edge the band
+        // number goes on counting, Levels' 1:1 rule).
+        public int BandOfRow(int z)
+        {
+            if (z < groundZ)
+            {
+                return 0;
+            }
+            return z % stride < groundZ ? z / stride : -1;
+        }
+
+        // The band whose rows or following void rows hold row z (0 below groundZ).
+        public int BandOfRowLoose(int z) => z < groundZ ? 0 : z / stride;
+
+        // The level band b holds (b outside 0..floors-1: 1:1 on from the nearest band).
+        public int LevelOfBand(int b)
+        {
+            EnsureLevels();
+            if (b < 0)
+            {
+                return levelOfBand[0] + b;
+            }
+            if (b >= levelOfBand.Length)
+            {
+                return levelOfBand[levelOfBand.Length - 1] + (b - (levelOfBand.Length - 1));
+            }
+            return levelOfBand[b];
+        }
+
+        // The band holding level L (L outside MinLevel..MaxLevel: 1:1 on from the band of the nearest end).
+        public int BandOfLevel(int L)
+        {
+            EnsureLevels();
+            if (L < minLevel)
+            {
+                return bandOfLevel[0] - (minLevel - L);
+            }
+            if (L > maxLevel)
+            {
+                return bandOfLevel[maxLevel - minLevel] + (L - maxLevel);
+            }
+            return bandOfLevel[L - minLevel];
+        }
+
+        private void EnsureLevels()
+        {
+            int n = Mathf.Max(1, floors);
+            if (levelOfBand != null && levelOfBand.Length == n)
+            {
+                return;
+            }
+            if (bandLevel != null && !ValidTable(bandLevel, n))
+            {
+                Log.Error($"[ProjectZ] map {map}: band level table [{string.Join(", ", bandLevel)}] does not fit {n} band(s) (band 0 = level 0, one run of distinct levels); using one level per band.");
+                bandLevel = null;
+            }
+            int[] lob = new int[n];
+            int lo = 0, hi = 0;
+            for (int b = 0; b < n; b++)
+            {
+                lob[b] = bandLevel == null ? b : bandLevel[b];
+                lo = Mathf.Min(lo, lob[b]);
+                hi = Mathf.Max(hi, lob[b]);
+            }
+            int[] bol = new int[hi - lo + 1];
+            for (int b = 0; b < n; b++)
+            {
+                bol[lob[b] - lo] = b;
+            }
+            minLevel = lo;
+            maxLevel = hi;
+            bandOfLevel = bol;
+            levelOfBand = lob;
+        }
+
+        // A band level table for n bands: n entries, band 0 = level 0, distinct, one unbroken run of levels.
+        public static bool ValidTable(List<int> t, int n)
+        {
+            if (t == null || t.Count != n || n < 1 || t[0] != 0)
+            {
+                return false;
+            }
+            int lo = 0, hi = 0;
+            HashSet<int> seen = new HashSet<int>();
+            foreach (int L in t)
+            {
+                if (!seen.Add(L))
+                {
+                    return false;
+                }
+                lo = Mathf.Min(lo, L);
+                hi = Mathf.Max(hi, L);
+            }
+            return hi - lo + 1 == n;
         }
 
         public override void ExposeData()
@@ -68,9 +195,17 @@ namespace ProjectZ
             Scribe_Values.Look(ref stride, "stride", 0);
             Scribe_Values.Look(ref floors, "floors", 1);
             Scribe_Values.Look(ref layoutVersion, "layoutVersion", 1, forceSave: true);
+            Scribe_Collections.Look(ref bandLevel, "bandLevel", LookMode.Value);
             DataExposeUtility.LookByteArray(ref elevation, "elevation");
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
+                if (layoutVersion < 2)
+                {
+                    // version 1: one level per band, bottom up = the identity table
+                    bandLevel = null;
+                    layoutVersion = 2;
+                }
+                levelOfBand = null;
                 ProjectZ.Invalidate();
             }
         }
@@ -163,7 +298,8 @@ namespace ProjectZ
             return a != null && c.z >= a.groundZ;
         }
 
-        // Storey of a cell: 0 = ground, k = floor k; -1 = a void gap row (no floor there).
+        // Storey of a cell (its level, Levels.LevelOf): 0 = ground, k = floor k; -1 = a void gap row (no floor there).
+        // (-1 stands for "void" only while no level is below the ground; code for negative levels uses Levels.LevelOf.)
         public static int FloorOf(IntVec3 c, Map map)
         {
             AnnexMapComponent a = Annex(map);
@@ -171,18 +307,19 @@ namespace ProjectZ
             {
                 return 0;
             }
-            return c.z % a.stride < a.groundZ ? c.z / a.stride : -1;
+            int b = a.BandOfRow(c.z);
+            return b < 0 ? -1 : a.LevelOfBand(b);
         }
 
         // A void gap row cell (between two bands, or above the top band). Never on a map without floors.
         public static bool IsVoid(IntVec3 c, Map map)
         {
             AnnexMapComponent a = Annex(map);
-            return a != null && c.z >= a.groundZ && c.z % a.stride >= a.groundZ;
+            return a != null && a.BandOfRow(c.z) < 0;
         }
 
-        // The band a cell is in: its floor, -1 for void rows (FloorOf).
-        public static int Band(IntVec3 c, Map map) => FloorOf(c, map);
+        // The band a cell is in (Levels.BandOfCell): 0 for the ground, -1 for void rows.
+        public static int Band(IntVec3 c, Map map) => Levels.BandOfCell(c, map);
 
         // Two cells in the same band (always true on a map without floors); a void cell is in no band.
         public static bool SameBand(IntVec3 a, IntVec3 b, Map map)
@@ -192,41 +329,25 @@ namespace ProjectZ
             {
                 return true;
             }
-            int ka = FloorOf(a, map);
-            return ka >= 0 && ka == FloorOf(b, map);
+            int ka = an.BandOfRow(a.z);
+            return ka >= 0 && ka == an.BandOfRow(b.z);
         }
 
-        // The ground cell under (or at) c; Invalid for a void gap cell.
-        public static IntVec3 GroundCellOf(IntVec3 c, Map map)
-        {
-            AnnexMapComponent a = Annex(map);
-            if (a == null || c.z < a.groundZ)
-            {
-                return c;
-            }
-            int zg = c.z % a.stride;
-            return zg < a.groundZ ? new IntVec3(c.x, c.y, zg) : IntVec3.Invalid;
-        }
+        // The ground cell under (or at) c; Invalid for a void gap cell (Levels.Ground).
+        public static IntVec3 GroundCellOf(IntVec3 c, Map map) => Levels.Ground(c, map);
 
-        // Ground cell g lifted to floor k (k = 0 returns g). Invalid when the map has no such floor.
-        public static IntVec3 CellOnFloor(IntVec3 g, int k, Map map)
-        {
-            if (k == 0)
-            {
-                return g;
-            }
-            AnnexMapComponent a = Annex(map);
-            if (a == null || k < 0 || k >= a.floors || g.z < 0 || g.z >= a.groundZ)
-            {
-                return IntVec3.Invalid;
-            }
-            return new IntVec3(g.x, g.y, g.z + k * a.stride);
-        }
+        // Ground cell g lifted to floor (level) k (k = 0 returns g). Invalid when the map has no such level (Levels.Cell).
+        public static IntVec3 CellOnFloor(IntVec3 g, int k, Map map) => Levels.Cell(g, k, map);
 
-        // An upper-floor cell with a floor built on it (any terrain but open air).
+        // A cell of an upper band with a floor on it (any terrain but open air).
         public static bool HasFloor(IntVec3 c, Map map)
         {
-            return c.IsValid && FloorOf(c, map) >= 1 && map.terrainGrid.TerrainAt(c) != PZDefOf.PZ_OpenAir;
+            if (!c.IsValid)
+            {
+                return false;
+            }
+            AnnexMapComponent a = Annex(map);
+            return a != null && c.z >= a.groundZ && a.BandOfRow(c.z) >= 1 && map.terrainGrid.TerrainAt(c) != PZDefOf.PZ_OpenAir;
         }
 
         // The top of the column over c: the highest floor cell with a floor over c's ground cell, else the ground cell
@@ -244,7 +365,7 @@ namespace ProjectZ
             {
                 return IntVec3.Invalid;
             }
-            for (int k = a.floors - 1; k >= 1; k--)
+            for (int k = a.MaxLevel; k >= 1; k--)
             {
                 IntVec3 u = CellOnFloor(g, k, map);
                 if (HasFloor(u, map))
@@ -265,8 +386,8 @@ namespace ProjectZ
             {
                 return new Vector3(p.x, 0f, p.z);
             }
-            int k = Mathf.FloorToInt(p.z) / a.stride;
-            return new Vector3(p.x, k * Combat.Heights.Storey, p.z - k * a.stride);
+            int b = a.BandOfRowLoose(Mathf.FloorToInt(p.z));
+            return new Vector3(p.x, a.LevelOfBand(b) * Combat.Heights.Storey, p.z - b * a.stride);
         }
 
         public static Vector3 Virtual(IntVec3 c, Map map) => Virtual(c.ToVector3Shifted(), map);

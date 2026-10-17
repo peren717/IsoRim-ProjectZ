@@ -44,7 +44,7 @@ namespace ProjectZ.Patches
                 if (ka != kb && ka >= 0 && kb >= 0)
                 {
                     float dx = a.x - b.x;
-                    float dz = (a.z - ka * an.stride) - (b.z - kb * an.stride);
+                    float dz = (a.z - Levels.Shift(map, ka)) - (b.z - Levels.Shift(map, kb));
                     float dy = (ka - kb) * Range3D.Storey;
                     return Mathf.Sqrt(dx * dx + dz * dz + dy * dy);
                 }

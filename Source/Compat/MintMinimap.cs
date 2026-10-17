@@ -160,7 +160,7 @@ namespace ProjectZ.Compat
             {
                 return p;
             }
-            return new Vector3(p.x, p.y, p.z - Mathf.FloorToInt(p.z) / a.stride * a.stride);
+            return new Vector3(p.x, p.y, Levels.GroundZLoose(thing.MapHeld, p.z));
         }
 
         private static bool UpdateMapTexPrefix(Map map, bool forced, ref Texture2D __result)

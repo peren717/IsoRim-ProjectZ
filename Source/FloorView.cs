@@ -32,7 +32,7 @@ namespace ProjectZ
             get
             {
                 AnnexMapComponent a = ProjectZ.Annex(Find.CurrentMap);
-                return a == null ? 0 : Mathf.Clamp(current, 0, a.floors - 1);
+                return a == null ? 0 : Mathf.Clamp(current, a.MinLevel, a.MaxLevel);
             }
         }
 
@@ -44,7 +44,7 @@ namespace ProjectZ
                 current = 0;
                 return;
             }
-            int k = Mathf.Clamp(floor, 0, a.floors - 1);
+            int k = Mathf.Clamp(floor, a.MinLevel, a.MaxLevel);
             if (k != Current)
             {
                 current = k;
@@ -59,8 +59,8 @@ namespace ProjectZ
         {
             int was = current;
             AnnexMapComponent a = ProjectZ.Annex(map);
-            current = a == null ? Mathf.Max(0, floor) : Mathf.Clamp(floor, 0, a.floors - 1);
-            return a == null ? was : Mathf.Clamp(was, 0, a.floors - 1);
+            current = a == null ? Mathf.Max(0, floor) : Mathf.Clamp(floor, a.MinLevel, a.MaxLevel);
+            return a == null ? was : Mathf.Clamp(was, a.MinLevel, a.MaxLevel);
         }
 
         public static string Label(int floor) => "PZ_FloorLabel".Translate(floor + 1);
