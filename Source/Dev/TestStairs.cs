@@ -870,6 +870,12 @@ namespace ProjectZ.Dev
                 Info("starting at " + from);
                 return;
             }
+            if (mode == "minimap")
+            {
+                Info($"minimap: house A {sHouseA} (stairs {stairPos}), far ground {farGround}");
+                stage = "mm_start";
+                return;
+            }
             if (mode == "floorui")
             {
                 Info($"floorui: house A {sHouseA}, floor over x > {sHouseA.maxX - 4} only; stairs {stairPos}; far ground {farGround}");

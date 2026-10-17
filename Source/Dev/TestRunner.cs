@@ -113,6 +113,9 @@ namespace ProjectZ.Dev
     //                                   with them working); -projectzfloors=4, Odyssey (TestShipStairs)
     //                                   (-projectzshipfresh: a fresh ship, the landing deck; -projectzshiproof: stairs in
     //                                   roofed rooms, the roof over a ship stairwell, TestShipRoof)
+    //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
+    //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
+    //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -123,6 +126,8 @@ namespace ProjectZ.Dev
         public static int FloorsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
+        // Test only (-projectzmintbreak=<member>): that Dubs Mint Minimap member counts as missing (Compat/MintMinimap).
+        public static string MintBreak;
 
         private static string mode = "main";
         private static string tag = "projectz";
@@ -177,6 +182,10 @@ namespace ProjectZ.Dev
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
             VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
+            if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
+            {
+                MintBreak = mb;
+            }
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -623,6 +632,11 @@ namespace ProjectZ.Dev
                 StepTallTower(map);
                 return;
             }
+            if (stage.StartsWith("mm_"))
+            {
+                StepMinimap(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -664,7 +678,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "d_setup";
                     }
-                    else if (mode == "stairs" || mode == "floorui")
+                    else if (mode == "stairs" || mode == "floorui" || mode == "minimap")
                     {
                         stage = "s_setup";
                     }
