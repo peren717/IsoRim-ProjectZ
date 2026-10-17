@@ -358,7 +358,7 @@ namespace ProjectZ.Dev
             }
         }
 
-        private static void SetupShipSet(Map map)
+        private static void SetupShipSet(Map map, string next = "ss_count")
         {
             AnnexMapComponent an = ProjectZ.Annex(map);
             if (an == null || an.floors < 3 || !ModsConfig.OdysseyActive || PZDefOf.PZ_ShipDeck == null)
@@ -537,7 +537,7 @@ namespace ProjectZ.Dev
             }
             SetWork(map, false);
             Info($"field {found}, ship SW {ssO}, engine {e.Position}, ground {ssGround}, decks f2 {ssF2.Count} f3 {ssF3.Count}, strip {ssStrip.Count}, extender cost {string.Join(", ", extDef.CostList.Select(c => c.thingDef.defName + " " + c.count))}, ground rows {an.groundZ}, stride {an.stride}");
-            Wait(30, "ss_count");
+            Wait(30, next);
         }
     }
 }

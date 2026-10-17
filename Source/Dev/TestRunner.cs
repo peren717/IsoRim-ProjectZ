@@ -101,6 +101,9 @@ namespace ProjectZ.Dev
     //                                   cutting the top floor first, the 3D footprint sphere, an extender built on a deck,
     //                                   thrusters on decks, the engine installed on a deck, the launch allowed since P4);
     //                                   -projectzfloors=3, Odyssey (TestShipSet; -projectznoshipset: the flat P1 set)
+    //                                   shiprange: the footprint range preview (multi-level gravships P3: cross-section rings
+    //                                   on the ground and the viewed floor, the sphere shell of the selected or placed engine
+    //                                   or extender, the facility ring cut on other floors; shots); -projectzfloors=3, Odyssey (TestShipRange)
     //                                   shipfly: a 3-storey gravship flies (multi-level gravships P4: launched for real with
     //                                   colonists, a sleeper, items, a lamp on a riser and rooms upstairs, saved and reloaded
     //                                   in flight, landed turned on a new map and back home with the grav anchor; landing
@@ -221,7 +224,7 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange")
             {
                 PatchMouse(h);
             }
@@ -535,6 +538,11 @@ namespace ProjectZ.Dev
                 StepShipSet(map);
                 return;
             }
+            if (stage.StartsWith("sr_"))
+            {
+                StepShipRange(map);
+                return;
+            }
             if (stage.StartsWith("sf_"))
             {
                 StepShipFly(map);
@@ -704,6 +712,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipset")
                     {
                         stage = "ss_setup";
+                    }
+                    else if (mode == "shiprange")
+                    {
+                        stage = "sr_setup";
                     }
                     else if (mode == "shipfly")
                     {
