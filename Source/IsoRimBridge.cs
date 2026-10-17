@@ -48,7 +48,18 @@ namespace ProjectZ
         }
 
         // The wall height under ProjectZ (IsoRim's option is locked to it).
-        public const float LockedWall = 1.65f;
+        public static readonly float LockedWall = DevWallHeight(1.65f);
+
+        // Dev only: -projectzwallheight=X starts the game with another locked wall height (wall-height comparison shots).
+        private static float DevWallHeight(float normal)
+        {
+            if (GenCommandLine.TryGetCommandLineArg("projectzwallheight", out string s) && float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float h) && h >= 0.5f && h <= 4f)
+            {
+                Log.Warning("[ProjectZ] dev: wall height " + h + " (-projectzwallheight)");
+                return h;
+            }
+            return normal;
+        }
 
         // Height of one storey, in cells: the wall height and a little more, so a floor never meets the tops of the
         // walls below it in one plane.

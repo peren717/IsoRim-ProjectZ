@@ -202,6 +202,10 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
+            if (mode == "wallheight")
+            {
+                h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
+            }
             if (mode == "worldfloors")
             {
                 FloorsOverride = 0;
@@ -303,6 +307,15 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
+            if (mode == "wallheight")
+            {
+                Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
+            }
+        }
+
+        private static void WallHeightSeedPrefix()
+        {
+            Rand.PushState(717);
         }
 
         public static void Out(string s)
@@ -500,6 +513,11 @@ namespace ProjectZ.Dev
                 StepBugs4(map);
                 return;
             }
+            if (stage.StartsWith("wh_"))
+            {
+                StepWallHeight(map);
+                return;
+            }
             if (stage.StartsWith("e_"))
             {
                 StepSpace(map);
@@ -657,6 +675,10 @@ namespace ProjectZ.Dev
                     else if (mode == "slabremove")
                     {
                         stage = "z_setup";
+                    }
+                    else if (mode == "wallheight")
+                    {
+                        stage = "wh_setup";
                     }
                     else if (mode == "staircolour")
                     {
