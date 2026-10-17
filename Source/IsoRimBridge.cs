@@ -150,6 +150,21 @@ namespace ProjectZ
 
         private static float MuzzleHeightInner(Thing t) => IsoRim.Projectiles.MuzzleHeight(t);
 
+        // The height (cells over the ground, true) IsoRim draws a projectile at when the game has it at point at of its
+        // flat path, and the height of what it is aimed at over its floor (tests).
+        public static float ProjectileHeight(Projectile p, Vector3 at) => Present ? ProjectileHeightInner(p, at) : 0f;
+
+        private static float ProjectileHeightInner(Projectile p, Vector3 at) => IsoRim.Projectiles.Height(p, at);
+
+        // Where a point (ground x and z, true height in cells as y) shows on screen, pixels from the bottom left (tests).
+        public static Vector2 ScreenOf(Vector3 p) => Present ? ScreenOfInner(p) : Vector2.zero;
+
+        private static Vector2 ScreenOfInner(Vector3 p) => IsoRim.View3D.WorldToScreen(p);
+
+        public static float AimHeight(Projectile p) => Present ? AimHeightInner(p) : 0f;
+
+        private static float AimHeightInner(Projectile p) => IsoRim.Projectiles.AimHeight(p);
+
         // (made on first use, on the main thread; the holder keeps the game's static-asset check quiet)
         [StaticConstructorOnStartup]
         private static class ShellHolder

@@ -66,6 +66,9 @@ namespace ProjectZ.Dev
     //                                   talltower: sun shadows of a 3-storey tower built by colonists (3x the one-storey
     //                                   block), the joints between storeys, hidden floors, walls taken down; run with
     //                                   -projectzfloors=3 (TestTallTower; tools: tallshadow.ps1)
+    //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
+    //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
+    //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -454,6 +457,11 @@ namespace ProjectZ.Dev
                 StepRiser(map);
                 return;
             }
+            if (stage.StartsWith("i_"))
+            {
+                StepBulletPitch(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -561,6 +569,10 @@ namespace ProjectZ.Dev
                     else if (mode == "riser")
                     {
                         stage = "j_setup";
+                    }
+                    else if (mode == "bulletpitch")
+                    {
+                        stage = "i_setup";
                     }
                     else if (mode == "range")
                     {

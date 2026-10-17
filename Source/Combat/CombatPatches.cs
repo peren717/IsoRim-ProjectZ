@@ -470,6 +470,19 @@ namespace ProjectZ.Combat
 
         public static readonly ConditionalWeakTable<Projectile, Flight> table = new ConditionalWeakTable<Projectile, Flight>();
 
+        // Every projectile between floors (shells too, which have no Flight): from and to floor, for its drawn pitch
+        // (ProjectilePitch).
+        public sealed class Cross
+        {
+            public int from;
+            public int to;
+            public bool tiltKnown;
+            public bool tilted;
+            public Quaternion tilt;
+        }
+
+        public static readonly ConditionalWeakTable<Projectile, Cross> cross = new ConditionalWeakTable<Projectile, Cross>();
+
         public static Flight Of(Projectile p)
         {
             return table.TryGetValue(p, out Flight f) ? f : null;
@@ -558,6 +571,7 @@ namespace ProjectZ.Combat
             {
                 return;   // only clamped onto its own floor
             }
+            Flights.cross.AddOrUpdate(__instance, new Flights.Cross { from = ko, to = land });
             if (!__instance.def.projectile.flyOverhead)
             {
                 bool aimed = land == kd && (__instance.usedTarget.HasThing || __instance.intendedTarget.HasThing);
