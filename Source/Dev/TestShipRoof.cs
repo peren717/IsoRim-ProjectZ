@@ -341,11 +341,12 @@ namespace ProjectZ.Dev
                 a == null ? "no stairs A" : string.Join(", ", a.OccupiedRect().Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none")));
             Room room = SPF(2, 2, 1, map).GetRoom(map);
             Result("R4 the floor-2 room is closed (no open roof)", room != null && room.OpenRoofCount == 0, $"room cells {room?.CellCount}, open roof {room?.OpenRoofCount}");
-            foreach (int k in new[] { 1, 2 })
+            foreach (int k in new[] { 0, 1, 2 })   // 0: the ship room under the deck, seen from the ground (no lid over it)
             {
                 GlShot(k, SP(3, 4), 8f, $"sr_room_f{k + 1}_roofs");
                 glRoofShots.Add($"sr_room_f{k + 1}_roofs");
             }
+            GlShot(0, SP(3, 4), 8f, "sr_room_f1_noroofs");
             GlShot(1, SP(3, 4), 8f, "sr_room_f2_noroofs");
             glAfter = "sp_r_launch";
             Wait(2, "gl_shots");
