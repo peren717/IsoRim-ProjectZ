@@ -201,8 +201,18 @@ namespace ProjectZ
         // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.)
         public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.terrainGrid.FoundationAt(c)?.IsSubstructure ?? false);
 
-        // Thick roof or gravship under a cell: the reason no floor or stairs may use it, or null.
-        public static string ColumnBlocked(IntVec3 c, Map map)
+        // Mountains foundation F4: "may build" and "may use" are two rules.
+        //  - BUILD (BuildBlocked and its slab and stairs forms): a slab, a stairwell or a stairs landing to be made over
+        //    a cell with a thick roof (or on a gravship) is refused: their roof would replace the rock roof (user
+        //    decision 2026-10-16). Placement and construction ask (CoverOk, ThickRoofCheck, CanConstruct, ShipDeck,
+        //    ShipStairs).
+        //  - USE (LandingBlocked): a floor that is already there is used as it is. A natural rock floor (a mountain top,
+        //    Floors.KindAt) has the thick roof under it as its own ceiling, so stairs may land on it. Drops and jumps
+        //    only ask the landing cell's own roof (Column.OpenAbove, DropRules), never the column under it, so they
+        //    already use any floor. No natural rock floors exist yet: today both rules give what ColumnBlocked gave.
+        //
+        // Thick roof or gravship under a cell: the reason no floor or stairs may be built over it, or null.
+        public static string BuildBlocked(IntVec3 c, Map map)
         {
             if (ThickRoof(c, map))
             {
@@ -214,15 +224,27 @@ namespace ProjectZ
         // The same for a slab (or a stairs landing): over a gravship it points to the ship upper deck (Odyssey).
         public static string SlabColumnBlocked(IntVec3 c, Map map)
         {
-            string key = ColumnBlocked(c, map);
+            string key = BuildBlocked(c, map);
             return key == "PZ_OverGravship" && PZDefOf.PZ_ShipDeck != null ? "PZ_OverGravshipUseDeck" : key;
         }
 
         // The same for ordinary stairs: on (or landing over) a gravship it points to the ship stairs (Odyssey).
         public static string StairsColumnBlocked(IntVec3 c, Map map)
         {
-            string key = ColumnBlocked(c, map);
+            string key = BuildBlocked(c, map);
             return key == "PZ_OverGravship" && PZDefOf.PZ_ShipStairs != null ? "PZ_OverGravshipUseStairs" : key;
+        }
+
+        // USE: why ordinary stairs may not land on upper cell top (its column), or null. A natural rock floor is used as
+        // it is; anything else (open air: the landing is made with the stairs; a slab or deck already there) keeps the
+        // build rule for the cell under it.
+        public static string LandingBlocked(IntVec3 top, Map map)
+        {
+            if (Floors.KindAt(top, map) == FloorKind.NaturalRock)
+            {
+                return null;
+            }
+            return StairsColumnBlocked(FloorRoof.Below(top, map), map);
         }
 
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();

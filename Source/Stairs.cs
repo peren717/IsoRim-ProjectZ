@@ -498,7 +498,8 @@ namespace ProjectZ
 
         // No stairs where the stairwell (the footprint, whose roof becomes the stairwell's), the landing or the cell under
         // the landing has a thick roof (SlabSupport.ThickRoof), and none on a gravship or with its landing over one
-        // (SlabSupport.Gravship). Placement and construction both ask.
+        // (SlabSupport.Gravship). The cell under the landing is a "use" (F4, SlabSupport.LandingBlocked): a natural rock
+        // floor there is landed on as it is. Placement and construction both ask.
         public static AcceptanceReport ThickRoofCheck(IntVec3 loc, Rot4 rot, Map map)
         {
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
@@ -512,7 +513,7 @@ namespace ProjectZ
             IntVec3 top = StairShape.Exit(loc, rot, map);
             if (top.IsValid)
             {
-                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.StairsColumnBlocked(FloorRoof.Below(top, map), map);
+                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.LandingBlocked(top, map);
                 if (blocked != null)
                 {
                     return blocked.Translate();

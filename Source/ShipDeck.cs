@@ -10,7 +10,7 @@ namespace ProjectZ
     // It IS vanilla gravship substructure (a copy of the Substructure def with its tag and affordances), laid as the
     // foundation over open air on an upper floor, only right above ground substructure or another deck (no overhang).
     // Because of the tag, vanilla treats deck cells as substructure by itself (ship parts placed on them, the
-    // substructure overlay, "remove foundation"); ordinary slabs and stairs over it are refused by SlabSupport.ColumnBlocked.
+    // substructure overlay, "remove foundation"); ordinary slabs and stairs over it are refused by SlabSupport.BuildBlocked.
     //   - Placement: PlaceWorker_ShipDeck (Check); a planned deck waits for the deck or substructure below (CanConstruct).
     //   - Support (user decision 2026-10-17): the game's roof rules, as for any upper floor: the roof under a deck
     //     (PZ_FloorRoof) needs a wall, column or stairs within range below, at placement (planned decks next to it count)

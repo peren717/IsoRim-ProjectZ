@@ -16,7 +16,7 @@ namespace ProjectZ.Dev
     //   2, and stairs up to a floor-3 walkway), all placed. Then real flows:
     //   D1 refusals of the deck designator: on the ground, over plain ground, an overhang next to the ship, on a slab,
     //      over a slab, over substructure outside the engine's footprint; an ordinary slab over the ship and ordinary
-    //      stairs on its substructure (ColumnBlocked);
+    //      stairs on its substructure (BuildBlocked);
     //   D2 colonists build 27 decks on floor 2 and 8 on floor 3 (planned at once: a floor-3 deck waits for the one below),
     //      walking up the ordinary stairs; roofs under them are the floors' roofs; colonists walk on the decks;
     //   D3 ship parts on a deck (placement acceptance of thruster, tank, extender; two hull pieces built), a carpet laid
