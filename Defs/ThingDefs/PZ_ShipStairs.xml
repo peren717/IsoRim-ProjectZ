@@ -3,14 +3,14 @@
 
   <!-- Ship stairs (multi-level gravships P5, Source/ShipStairs.cs): the same 1x3 ramp as PZ_Stairs (same class, so path,
        reach, rise and the stairwell work unchanged), stuffless gravtech, only on a gravship: the whole ramp on the ship's
-       deck (ground substructure or a ship upper deck) and its exit on the ship upper deck above
+       deck (ground substructure or a ship upper deck) and its exit on or over it (a ship upper deck is laid there with them)
        (ProjectZ.PlaceWorker_ShipStairs). The deck over the ramp is marked for removal, as ordinary stairs do with a floor.
        They are part of the ship and fly with it. IsoRim draws the stairs model with a ship texture
        (IsoRim/Defs/PZ_Models.xml); the sprite is the plain fallback. -->
   <ThingDef ParentName="BuildingBase" MayRequire="Ludeon.RimWorld.Odyssey">
     <defName>PZ_ShipStairs</defName>
     <label>ship stairs</label>
-    <description>Gravship stairs up to the ship upper deck above. The whole ramp must stand on the gravship's deck, and the cell past the top must be a ship upper deck. The deck over the ramp is removed to leave a stairwell. Like a wall, ship stairs hold up roofs and floors nearby. They fly with the ship.</description>
+    <description>Gravship stairs up to the floor above. The whole ramp must stand on the gravship's deck, and the cell past the top must be over it: a ship upper deck is laid there with the stairs if there is none. The deck over the ramp is removed to leave a stairwell. Like a wall, ship stairs hold up roofs and floors nearby. They fly with the ship.</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/ShipStairs</texPath>

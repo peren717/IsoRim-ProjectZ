@@ -135,6 +135,13 @@ namespace ProjectZ
             SlabPeel.Dirty(map);
             JumpGrid.For(map)?.Dirty();
             map.reachability?.ClearCache();
+            // The upper decks' cells turned to open air (walkability changed: vanilla's path-cost pass dirtied their
+            // regions). Rebuild now: vanilla's vacuum rebuild right after a take-off (a map with a grav anchor) walks
+            // the room list and asks rooms by cell, which would rebuild regions mid-walk ("collection was modified").
+            if (map.regionDirtyer.AnyDirty)
+            {
+                map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            }
         }
     }
 

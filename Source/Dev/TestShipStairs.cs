@@ -29,6 +29,13 @@ namespace ProjectZ.Dev
     //      (seen on each ramp); colonists haul steel from the ground deck to a floor-2 stockpile over ship stairs 1;
     //   T5 the 3-storey ship flies to a neighbouring tile and lands turned (shipfly's flight and landing): both ship stairs
     //      on their floor and turned place, links usable, stairwell roofs; a colonist walks up both and back down there.
+    // With -projectzshipfresh instead (the landing fix): the same ship with nothing upstairs and no other way up.
+    //   F0 no floor, deck or stairs upstairs; F1 refused: a ramp on a substructure strip whose exit is over open ground, plain
+    //   ground; ship stairs 1 accepted; F2 colonists build them, the landing deck is laid (floor roof under it, part of the
+    //   ship, can't be removed), the link usable; F3 a colonist walks up onto it, decks planned next to it; F4 colonists build
+    //   them from up there, then ship stairs 2 on them up to floor 3 (their landing deck laid too); F5 a colonist walks up
+    //   both; then T5's flight and landing, plus every deck cell landed; F6 colonists take ship stairs 2 down: their landing
+    //   deck goes with them, stairs 1 keep theirs.
     public static partial class TestRunner
     {
         private static IntVec3 spO;
@@ -38,6 +45,10 @@ namespace ProjectZ.Dev
         private static readonly List<Thing> spDisplay = new List<Thing>();
         private static readonly List<(string id, List<IntVec3> offs, Rot4 rot)> spRec = new List<(string, List<IntVec3>, Rot4)>();
         private static IntVec3 spUpOff, spDownOff, spGoal, spBack;
+        private static bool spFresh;
+        private static readonly List<IntVec3> spDeckRec = new List<IntVec3>();
+        private static readonly List<IntVec3> spF2Decks = new List<IntVec3>();
+        private static int spOnF2Seen;
 
         private static IntVec3 SP(int dx, int dz) => new IntVec3(spO.x + dx, 0, spO.z + dz);
 
@@ -122,6 +133,30 @@ namespace ProjectZ.Dev
                     return;
                 case "sp_launch":
                     SpLaunch(map);
+                    return;
+                case "sp_f_built1":
+                    SpFreshBuilt1(map);
+                    return;
+                case "sp_f_walk1":
+                    SpFreshWalk1(map);
+                    return;
+                case "sp_f_walked1":
+                    SpFreshWalked1(map);
+                    return;
+                case "sp_f_decks":
+                    SpFreshDecks(map);
+                    return;
+                case "sp_f_built2":
+                    SpFreshBuilt2(map);
+                    return;
+                case "sp_f_walked2":
+                    SpFreshWalked2(map);
+                    return;
+                case "sp_f_decon":
+                    SpFreshDecon(SfNew());
+                    return;
+                case "sp_f_deconned":
+                    SpFreshDeconned(SfNew());
                     return;
                 case "sp_landed":
                     SpLanded();
@@ -243,6 +278,13 @@ namespace ProjectZ.Dev
             BuildShip(map, spO, 13, 11);
             Building_GravEngine e = GlEngine(map);
             e.nameHidden = false;
+            spFresh = GenCommandLine.CommandLineArgPassed("projectzshipfresh");
+            spDeckRec.Clear();
+            if (spFresh)
+            {
+                SpFreshSetup(map, e, cols);
+                return;
+            }
             TerrainDef wood = PZDefOf.PZ_UpperFloor;
             ThingDef woodLog = ThingDefOf.WoodLog;
             // the ordinary access (as shipfly): stairs A on the ground up to a floor-2 walkway west of the ship, stairs B on it
@@ -336,9 +378,10 @@ namespace ProjectZ.Dev
                 Result($"T0 key {key} translated", key.CanTranslate(), key.Translate());
             }
             string onDeck = "PZ_ShipStairsOnDeck".Translate();
-            SpExpect("T1 ship stairs on plain ground refused", ss, null, SP(-8, 6), Rot4.North, map, onDeck);
+            SpExpect("T1 ship stairs on plain ground refused", ss, null, SP(17, 2), Rot4.North, map, onDeck);
             SpExpect("T1 ship stairs overhanging the floor-2 deck edge refused", ss, null, SPF(12, 10, 1, map), Rot4.North, map, onDeck);
-            SpExpect("T1 ship stairs whose exit is over open air (no floor-3 deck) refused", ss, null, SPF(9, 7, 1, map), Rot4.North, map, onDeck);
+            SpExpect("T1 ship stairs whose exit is over open air outside the ship refused", ss, null, SPF(11, 9, 1, map), Rot4.North, map, onDeck);
+            SpExpect("T1 ship stairs whose exit is over the ship's deck with no floor-3 deck yet accepted (the landing is laid with them)", ss, null, SPF(9, 7, 1, map), Rot4.North, map, null);
             Thing wall = Place(ThingDefOf.Wall, ThingDefOf.WoodLog, SPF(2, 3, 2, map), map);
             SpExpect("T1 ship stairs under a wall on the deck above refused (stairwell)", ss, null, SPF(2, 3, 1, map), Rot4.North, map, "PZ_WellNotOpen".Translate());
             wall.Destroy();
@@ -577,7 +620,8 @@ namespace ProjectZ.Dev
         {
             Building_GravEngine e = GlEngine(map);
             List<Pawn> cols = Colonists(map);
-            IntVec3[] aboard = { SP(1, 9), SPF(9, 5, 1, map), SPF(5, 8, 2, map) };
+            // (fresh: no one on the single floor-3 landing cell, the walker's goal)
+            IntVec3[] aboard = spFresh ? new[] { SP(1, 9), SPF(2, 6, 1, map) } : new[] { SP(1, 9), SPF(9, 5, 1, map), SPF(5, 8, 2, map) };
             for (int i = 0; i < cols.Count; i++)
             {
                 Teleport(cols[i], i < aboard.Length ? aboard[i] : SP(-8 - i, 4));
@@ -585,7 +629,26 @@ namespace ProjectZ.Dev
             }
             spWalker = cols[0].ThingID;
             spDownOff = ShipLocal.From(SP(1, 9), e.Position, map);
-            spUpOff = ShipLocal.From(SPF(4, 8, 2, map), e.Position, map);
+            spUpOff = ShipLocal.From(spFresh ? SPF(1, 8, 2, map) : SPF(4, 8, 2, map), e.Position, map);
+            if (spFresh)
+            {
+                spDeckRec.Clear();
+                for (int k = 1; k < ProjectZ.Annex(map).floors; k++)
+                {
+                    for (int x = -1; x <= 13; x++)
+                    {
+                        for (int z = -1; z <= 11; z++)
+                        {
+                            IntVec3 c = SPF(x, z, k, map);
+                            if (ShipDeck.At(c, map))
+                            {
+                                spDeckRec.Add(ShipLocal.From(c, e.Position, map));
+                            }
+                        }
+                    }
+                }
+                Info($"fresh: {spDeckRec.Count} deck cells to fly; set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            }
             spRec.Clear();
             foreach (Building_Stairs s in SpShipStairs(map))
             {
@@ -637,8 +700,14 @@ namespace ProjectZ.Dev
             int usable = g == null ? 0 : g.links.Count(l => st.Contains(l.stairs) && g.Usable(l));
             int wellRoof = st.Sum(s => s.OccupiedRect().Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof));
             int open = st.Sum(s => s.OccupiedRect().Cells.Count(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir));
-            Result("T5 their links usable, stairwells open with the stairwell roof", usable == 2 && wellRoof == 6 && open == 6 && st.All(s => ShipDeck.At(s.TopCell, map)),
+            Result("T5 their links usable, stairwells open with the stairwell roof", usable == 2 && wellRoof == (spFresh ? 3 : 6) && open == 6 && st.All(s => ShipDeck.At(s.TopCell, map)),
                 $"{usable} usable links, stairwell roofs {wellRoof}/6, open {open}/6, exits {string.Join(", ", st.Select(s => SpCell(s.TopCell, map) + " " + s.TopCell.GetTerrain(map)?.defName))}");
+            if (spFresh)
+            {
+                int decks = spDeckRec.Count(o => ShipDeck.At(SfAt(o, sfRoot, sfRot, map), map));
+                Result("F5 every deck flew and landed with the ship (both stairs landings and the decks built from them)", decks == spDeckRec.Count && spDeckRec.Count > 0,
+                    $"{decks} of {spDeckRec.Count} deck cells on the new map; set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            }
             spFoot1.Clear();
             spFoot2.Clear();
             if (st.Count == 2)
@@ -685,8 +754,265 @@ namespace ProjectZ.Dev
             IntVec3 eg = ProjectZ.GroundCellOf(e.Position, map);
             GlShot(0, eg, 12f, "sp_3_landed_ground");
             GlShot(1, eg, 12f, "sp_3_landed_f2");
-            glAfter = "sp_end";
+            glAfter = spFresh ? "sp_f_decon" : "sp_end";
             Wait(2, "gl_shots");
+        }
+
+        // ---- -projectzshipfresh: the first ship stairs on a fresh one-storey ship (no deck upstairs, no other way up)
+
+        private static void SpFreshSetup(Map map, Building_GravEngine e, List<Pawn> cols)
+        {
+            while (cols.Count < 5)
+            {
+                Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                GenSpawn.Spawn(p, SP(-5, -4), map);
+                cols.Add(p);
+            }
+            for (int i = 0; i < cols.Count; i++)
+            {
+                Teleport(cols[i], SP(-4 - i, -4));
+                Draft(cols[i], true);
+            }
+            spWalker = cols[0].ThingID;
+            AnnexMapComponent an = ProjectZ.Annex(map);
+            int upper = 0;
+            for (int k = 1; k < an.floors; k++)
+            {
+                foreach (IntVec3 g in new CellRect(spO.x - 12, spO.z - 6, 40, 24).ClipInsideMap(map))
+                {
+                    IntVec3 u = ProjectZ.CellOnFloor(g, k, map);
+                    if (u.IsValid && ProjectZ.HasFloor(u, map))
+                    {
+                        upper++;
+                    }
+                }
+            }
+            int stairs = map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).Count + map.listerThings.ThingsOfDef(PZDefOf.PZ_ShipStairs).Count;
+            Result("F0 a fresh one-storey ship: no floor or deck upstairs, no stairs", upper == 0 && stairs == 0, $"upper floor cells {upper}, stairs {stairs}; set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            ThingDef ss = PZDefOf.PZ_ShipStairs;
+            string onDeck = "PZ_ShipStairsOnDeck".Translate();
+            // a substructure strip east of the ship: a ramp on it whose exit is over open ground
+            TerrainDef sub = DefDatabase<TerrainDef>.GetNamed("Substructure");
+            IntVec3[] strip = { SP(13, 5), SP(14, 5), SP(15, 5) };
+            foreach (IntVec3 c in strip)
+            {
+                map.terrainGrid.SetTerrain(c, sub);
+            }
+            SpExpect("F1 ship stairs whose exit is over open ground outside the ship refused", ss, null, SP(14, 5), Rot4.East, map, onDeck);
+            foreach (IntVec3 c in strip)
+            {
+                map.terrainGrid.RemoveFoundation(c, false);
+            }
+            SpExpect("F1 ship stairs on plain ground refused", ss, null, SP(17, 2), Rot4.North, map, onDeck);
+            SpExpect("F1 ship stairs 1 on the fresh ship (exit over the ship, nothing upstairs) accepted", ss, null, SP(1, 2), Rot4.North, map, null);
+            Blueprint b1 = GenConstruct.PlaceBlueprintForBuild(ss, SP(1, 2), map, Rot4.North, Faction.OfPlayer, null) as Blueprint;
+            spBp1 = b1?.ThingID;
+            foreach ((ThingDef def, int n, IntVec3 at) in new[] { (ThingDefOf.Steel, 75, SP(-6, 1)), (ThingDefOf.Steel, 75, SP(-6, 2)), (ThingDefOf.Steel, 75, SP(-6, 3)),
+                (DefDatabase<ThingDef>.GetNamed("GravlitePanel"), 25, SP(-6, 4)), (DefDatabase<ThingDef>.GetNamed("GravlitePanel"), 25, SP(-6, 5)), (ThingDefOf.ComponentIndustrial, 6, SP(-6, 6)) })
+            {
+                Thing t = ThingMaker.MakeThing(def);
+                t.stackCount = n;
+                GenSpawn.Spawn(t, at, map);
+            }
+            e.ForceSubstructureDirty();
+            Info($"fresh ship SW {spO}, engine {GlCell(e.Position, map)}, blueprint {b1 != null}");
+            SpWork(map, construct: true);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            TickUntil(60000, () =>
+            {
+                SpKeep(map);
+                return SpShipStairs(map).Count >= 1;
+            }, "sp_f_built1", 120);
+        }
+
+        private static bool SpLandingOk(Building_Stairs s, Map map, out string detail)
+        {
+            IntVec3 top = s.TopCell;
+            IntVec3 below = FloorRoof.Below(top, map);
+            detail = $"exit {SpCell(top, map)}: foundation {map.terrainGrid.FoundationAt(top)?.defName ?? "none"}, standable {top.Standable(map)}, roof below {map.roofGrid.RoofAt(below)?.defName ?? "none"}";
+            return ShipDeck.At(top, map) && top.Standable(map) && map.roofGrid.RoofAt(below) == PZDefOf.PZ_FloorRoof;
+        }
+
+        private static void SpFreshBuilt1(Map map)
+        {
+            tickWatch = null;
+            List<Building_Stairs> st = SpShipStairs(map);
+            Result("F2 colonists built ship stairs 1 on the fresh ship", st.Count == 1, $"{st.Count} after {ticksTotal} ticks");
+            if (st.Count < 1)
+            {
+                Finish();
+                return;
+            }
+            Building_Stairs s1 = st[0];
+            IntVec3 top = s1.TopCell;
+            Result("F2 the stairs laid their landing: a ship upper deck at the exit, the floor's roof under it", SpLandingOk(s1, map, out string d), d);
+            Building_GravEngine e = GlEngine(map);
+            Result("F2 the landing deck is part of the ship", e.ValidSubstructure.Contains(top), $"set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            FloorView.Set(1);
+            AcceptanceReport rem = new Designator_RemoveFoundation().CanDesignateCell(top);
+            Result("F2 the landing deck can't be removed while the stairs stand", !rem.Accepted && rem.Reason == "PZ_StairsLandHere".Translate(), GlRep(rem));
+            FloorView.Set(0);
+            StairGrid g = StairGrid.For(map);
+            Result("F2 the link is usable", g != null && g.links.Any(l => l.stairs == s1 && g.Usable(l)), $"{g?.Count ?? 0} links");
+            spFoot1.Clear();
+            spFoot1.AddRange(s1.OccupiedRect().Cells);
+            spFoot2.Clear();
+            Pawn w = SfPawn(spWalker);
+            Teleport(w, SP(6, 13));
+            spGoal = top;
+            GlShot(0, SP(3, 4), 9f, "sp_f1_stairs1_ground");
+            GlShot(1, SP(3, 4), 9f, "sp_f1_stairs1_f2");
+            glAfter = "sp_f_walk1";
+            Wait(2, "gl_shots");
+        }
+
+        private static void SpFreshWalk1(Map map)
+        {
+            Pawn w = SfPawn(spWalker);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            GoTo(w, spGoal);
+            spSeen1 = spSeen2 = 0;
+            TickUntil(8000, () => SpWatchWalker(map) && w.Position == spGoal, "sp_f_walked1", 1);
+        }
+
+        private static void SpFreshWalked1(Map map)
+        {
+            tickWatch = null;
+            Pawn w = SfPawn(spWalker);
+            Result("F3 a colonist walks from outside up ship stairs 1 onto the landing deck on floor 2", w?.Position == spGoal && spSeen1 > 0, $"at {SpCell(w?.Position ?? IntVec3.Invalid, map)}, ticks on the ramp {spSeen1}, after {ticksTotal} ticks");
+            // decks on floor 2 from the landing out: a row north (ship stairs 2 go on it) and one beside it
+            spF2Decks.Clear();
+            for (int z = 5; z <= 8; z++)
+            {
+                spF2Decks.Add(SPF(1, z, 1, map));
+            }
+            for (int z = 4; z <= 7; z++)
+            {
+                spF2Decks.Add(SPF(2, z, 1, map));
+            }
+            int ok = 0;
+            foreach (IntVec3 c in spF2Decks)
+            {
+                AcceptanceReport r = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_ShipDeck, c, Rot4.North, map);
+                if (r.Accepted && GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_ShipDeck, c, map, Rot4.North, Faction.OfPlayer, null) != null)
+                {
+                    ok++;
+                }
+                else
+                {
+                    Info($"deck at {SpCell(c, map)}: {GlRep(r)}");
+                }
+            }
+            Result("F3 floor-2 decks planned next to the landing", ok == spF2Decks.Count, $"{ok} of {spF2Decks.Count}");
+            SpWork(map, construct: true);
+            spOnF2Seen = 0;
+            TickUntil(60000, () =>
+            {
+                if (Find.TickManager.TicksGame % 240 == 0)
+                {
+                    SpKeep(map);
+                }
+                spOnF2Seen += Colonists(map).Count(p => ProjectZ.FloorOf(p.Position, map) == 1 && p.CurJobDef == JobDefOf.FinishFrame);
+                return spF2Decks.All(c => ShipDeck.At(c, map));
+            }, "sp_f_decks", 60);
+        }
+
+        private static void SpFreshDecks(Map map)
+        {
+            tickWatch = null;
+            int built = spF2Decks.Count(c => ShipDeck.At(c, map));
+            Result("F4 colonists built the floor-2 decks, working up there (reached over ship stairs 1)", built == spF2Decks.Count && spOnF2Seen > 0, $"{built} of {spF2Decks.Count} after {ticksTotal} ticks, builder seen on floor 2 {spOnF2Seen}x");
+            SpExpect("F4 ship stairs 2 on the floor-2 decks (exit over them, nothing on floor 3) accepted", PZDefOf.PZ_ShipStairs, null, SPF(1, 6, 1, map), Rot4.North, map, null);
+            Blueprint b2 = GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_ShipStairs, SPF(1, 6, 1, map), map, Rot4.North, Faction.OfPlayer, null) as Blueprint;
+            spBp2 = b2?.ThingID;
+            TickUntil(60000, () =>
+            {
+                SpKeep(map);
+                return SpShipStairs(map).Count >= 2;
+            }, "sp_f_built2", 120);
+        }
+
+        private static void SpFreshBuilt2(Map map)
+        {
+            tickWatch = null;
+            List<Building_Stairs> st = SpShipStairs(map);
+            Result("F4 colonists built ship stairs 2 on floor 2", st.Count == 2 && ProjectZ.FloorOf(st[st.Count - 1].Position, map) == 1, $"{st.Count} after {ticksTotal} ticks");
+            if (st.Count < 2)
+            {
+                Finish();
+                return;
+            }
+            Building_Stairs s1 = st[0], s2 = st[1];
+            Result("F4 ship stairs 2 laid their landing deck on floor 3", SpLandingOk(s2, map, out string d) && ProjectZ.FloorOf(s2.TopCell, map) == 2, d);
+            StairGrid g = StairGrid.For(map);
+            int usable = g == null ? 0 : g.links.Count(l => (l.stairs == s1 || l.stairs == s2) && g.Usable(l));
+            int open = st.Sum(s => s.OccupiedRect().Cells.Count(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.terrainGrid.FoundationAt(StairShape.Above(c, map)) == null));
+            int wellRoof = st.Sum(s => s.OccupiedRect().Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof));
+            // (stairs 1 stand under the ground room's roof: their stairwell roof; stairs 2 on floor 2 have open sky over them, no roof)
+            Result("F4 both links usable, both stairwells open, the stairwell roof over stairs 1 (stairs 2 stand outdoors)", usable == 2 && open == 6 && wellRoof == 3 && s2.OccupiedRect().Cells.All(c => map.roofGrid.RoofAt(c) == null), $"{usable} usable, open {open}/6, stairwell roofs {wellRoof}/3");
+            Building_GravEngine e = GlEngine(map);
+            Result("F4 the stairs and decks are part of the ship", e.OnValidSubstructure(s1) && e.OnValidSubstructure(s2) && e.ValidSubstructure.Contains(s2.TopCell) && spF2Decks.All(c => e.ValidSubstructure.Contains(c)),
+                $"set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            spFoot1.Clear();
+            spFoot1.AddRange(s1.OccupiedRect().Cells);
+            spFoot2.Clear();
+            spFoot2.AddRange(s2.OccupiedRect().Cells);
+            Pawn w = SfPawn(spWalker);
+            Teleport(w, SP(6, 13));
+            spGoal = s2.TopCell;
+            GoTo(w, spGoal);
+            spSeen1 = spSeen2 = 0;
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            TickUntil(8000, () => SpWatchWalker(map) && w.Position == spGoal, "sp_f_walked2", 1);
+        }
+
+        private static void SpFreshWalked2(Map map)
+        {
+            tickWatch = null;
+            Pawn w = SfPawn(spWalker);
+            Result("F5 a colonist walks from outside up both ship stairs to the floor-3 landing", w?.Position == spGoal && spSeen1 > 0 && spSeen2 > 0, $"at {SpCell(w?.Position ?? IntVec3.Invalid, map)}, ticks on ramp 1 {spSeen1}, ramp 2 {spSeen2}, after {ticksTotal} ticks");
+            GlShot(0, SP(3, 4), 9f, "sp_f2_ship_ground");
+            GlShot(1, SP(3, 5), 9f, "sp_f2_ship_f2");
+            GlShot(2, SP(3, 6), 9f, "sp_f2_ship_f3");
+            glAfter = "sp_launch";
+            Wait(2, "gl_shots");
+        }
+
+        private static IntVec3 spTop1, spTop2;
+
+        // F6 (landed): colonists take ship stairs 2 down; their landing deck goes with them (nothing on it, no deck above),
+        // stairs 1 and their landing (decks next to it) stay.
+        private static void SpFreshDecon(Map map)
+        {
+            List<Building_Stairs> st = SpShipStairs(map);
+            if (st.Count < 2)
+            {
+                Result("F6 both ship stairs on the landed map", false, $"{st.Count}");
+                Finish();
+                return;
+            }
+            spTop1 = st[0].TopCell;
+            spTop2 = st[1].TopCell;
+            Result("F6 before: both landing decks there", ShipDeck.At(spTop1, map) && ShipDeck.At(spTop2, map), $"{SpCell(spTop1, map)} {SpCell(spTop2, map)}");
+            map.designationManager.AddDesignation(new Designation(st[1], DesignationDefOf.Deconstruct));
+            SpWork(map, construct: true);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            TickUntil(30000, () =>
+            {
+                SpKeep(map);
+                return SpShipStairs(map).Count < 2;
+            }, "sp_f_deconned", 120);
+        }
+
+        private static void SpFreshDeconned(Map map)
+        {
+            tickWatch = null;
+            List<Building_Stairs> st = SpShipStairs(map);
+            Result("F6 colonists took ship stairs 2 down", st.Count == 1, $"{st.Count} left after {ticksTotal} ticks");
+            Result("F6 their landing deck went with them (open air), stairs 1 kept theirs",
+                !ShipDeck.At(spTop2, map) && spTop2.GetTerrain(map) == PZDefOf.PZ_OpenAir && ShipDeck.At(spTop1, map) && st.Count == 1 && st[0].TopCell == spTop1,
+                $"exit 2 {SpCell(spTop2, map)}: {spTop2.GetTerrain(map)?.defName}, foundation {map.terrainGrid.FoundationAt(spTop2)?.defName ?? "none"}; exit 1 deck {ShipDeck.At(spTop1, map)}");
+            Wait(10, "sp_end");
         }
     }
 }

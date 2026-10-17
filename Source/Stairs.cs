@@ -56,7 +56,7 @@ namespace ProjectZ
     // Every stairs def (multi-level gravships S2): the ordinary stairs and the ship stairs (Odyssey only, ShipStairs.cs).
     // Both are Building_Stairs; the rules that know the stairs by def (stairwell, exits, building sites, jump landings,
     // the height rule, the touch from above, the square icon) ask this. Ordinary-stairs-only rules (thick roof, not on a
-    // gravship, the landing laid with them) keep testing PZDefOf.PZ_Stairs.
+    // gravship, a slab landing) keep testing PZDefOf.PZ_Stairs; the ship stairs lay a ship upper deck (ShipStairs.LayLanding).
     public static class StairDefs
     {
         public static bool Is(BuildableDef d) => d != null && (d == PZDefOf.PZ_Stairs || d == PZDefOf.PZ_ShipStairs);
@@ -195,7 +195,13 @@ namespace ProjectZ
             {
                 return;
             }
-            // (ship stairs lay no landing: their exit is always a ship upper deck, ShipStairs)
+            // (ship stairs lay a ship upper deck as their landing, ShipStairs.LayLanding; a landing ship keeps the one it
+            // brought: decks are placed before the things)
+            if (!respawningAfterLoad && ShipStairs.Is(def) && top.GetTerrain(map) == PZDefOf.PZ_OpenAir && map.terrainGrid.FoundationAt(top) == null)
+            {
+                landingRoofLaid = ShipStairs.LayLanding(top, map);
+                landingLaid = true;
+            }
             if (!respawningAfterLoad && def == PZDefOf.PZ_Stairs && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
                 // Q2: the landing is made with the stairs (the placement checked the cell under it), of their stuff.
@@ -244,6 +250,15 @@ namespace ProjectZ
         private void TakeLanding(Map map)
         {
             IntVec3 top = TopCell;
+            if (landingLaid && top.IsValid && ShipStairs.Is(def))
+            {
+                if (ShipStairs.TakeLanding(this, top, map))
+                {
+                    landingLaid = false;
+                    TakeLandingRoof(top, map);
+                }
+                return;
+            }
             if (!landingLaid || !top.IsValid || !Slab.At(top, map))
             {
                 return;
@@ -263,6 +278,11 @@ namespace ProjectZ
                 GenLeaving.DoLeavingsFor(covering, top, map);
             }
             Slab.Remove(top, map, doLeavings: false, cause: this);
+            TakeLandingRoof(top, map);
+        }
+
+        private void TakeLandingRoof(IntVec3 top, Map map)
+        {
             IntVec3 below = FloorRoof.Below(top, map);
             if (landingRoofLaid && below.IsValid && map.roofGrid.Roofed(below) && !SlabSupport.Supported(below, map, ignore: this))
             {

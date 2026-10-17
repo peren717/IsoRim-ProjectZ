@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
   <PZ_ShipStairs.label>飞船楼梯</PZ_ShipStairs.label>
-  <PZ_ShipStairs.description>通往上方飞船上层甲板的逆重飞船楼梯。整段楼梯必须建在逆重飞船甲板上，顶端前方一格必须是飞船上层甲板。楼梯上方的甲板会被拆除，留出楼梯井。飞船楼梯像墙一样能撑住附近的屋顶和楼板，并随飞船一起飞行。</PZ_ShipStairs.description>
+  <PZ_ShipStairs.description>通往上一层的逆重飞船楼梯。整段楼梯必须建在逆重飞船甲板上，顶端前方一格也要在甲板上方：那里没有飞船上层甲板时，会和楼梯一起建好。楼梯上方的甲板会被拆除，留出楼梯井。飞船楼梯像墙一样能撑住附近的屋顶和楼板，并随飞船一起飞行。</PZ_ShipStairs.description>
 </LanguageData>
