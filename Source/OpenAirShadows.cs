@@ -10,8 +10,8 @@ namespace ProjectZ
     // Open air upstairs (PZ_OpenAir) is such terrain, and IsoRim draws an upper floor's blocks over the ground they
     // stand on: the open air of the viewed floor masked the whole ground below it, so every ground shadow went.
     // One rule, at the source: open air on an upper floor makes no shadow mask. (The ground keeps its own masks:
-    // rooms, fog, its undrawn cells.) Upper floors draw no building sun shadows (IsoRim leaves those out up there);
-    // pawn and model shadows on a floor are cast as anywhere else.
+    // rooms, fog, its undrawn cells.) Upper floors' building sun shadows are drawn by IsoRim on the ground under
+    // the column, slid by the floor's height (Floors.DrawSunShadow); pawn and model shadows on a floor are cast as anywhere else.
     [HarmonyPatch(typeof(SectionLayer_Terrain), nameof(SectionLayer_Terrain.Regenerate))]
     public static class TerrainShadowMask_OpenAir_Patch
     {

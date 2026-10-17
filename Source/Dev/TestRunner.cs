@@ -63,6 +63,9 @@ namespace ProjectZ.Dev
     //                                   worldfloors: floors fixed per game (Create World page row, a second settled map,
     //                                   setting changed mid-game, save/reload, old-save migrations); run mode plain
     //                                   first; no -projectzfloors (TestWorldFloors)
+    //                                   talltower: sun shadows of a 3-storey tower built by colonists (3x the one-storey
+    //                                   block), the joints between storeys, hidden floors, walls taken down; run with
+    //                                   -projectzfloors=3 (TestTallTower; tools: tallshadow.ps1)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -461,6 +464,11 @@ namespace ProjectZ.Dev
                 StepWorldFloors(map);
                 return;
             }
+            if (stage.StartsWith("h_"))
+            {
+                StepTallTower(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -537,6 +545,10 @@ namespace ProjectZ.Dev
                     else if (mode == "bugs4")
                     {
                         stage = "y_setup";
+                    }
+                    else if (mode == "talltower")
+                    {
+                        stage = "h_setup";
                     }
                     else if (mode == "space")
                     {
