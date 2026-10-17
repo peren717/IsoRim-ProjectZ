@@ -109,6 +109,22 @@ namespace ProjectZ.Patches
         }
     }
 
+    // Gravships land only on the ground (user decision 2026-10-16): no ship cell on an upper floor or a void row. Every
+    // landing spot is checked cell by cell in the move designator's IsValidCell (the placement UI, which also covers
+    // landing back on a map with a grav anchor); a new map puts the marker on its start spot, generated on the ground.
+    // Ground cells under a slab are already refused by vanilla (its kept roof).
+    [HarmonyPatch(typeof(Designator_MoveGravship), "IsValidCell")]
+    public static class Designator_MoveGravship_IsValidCell_Patch
+    {
+        public static void Postfix(IntVec3 cell, Map map, ref AcceptanceReport __result)
+        {
+            if (cell.InBounds(map) && ProjectZ.IsAnnex(cell, map))
+            {
+                __result = "PZ_GravshipGroundOnly".Translate();
+            }
+        }
+    }
+
     // Scattered drops (RandomDrop raids, random drop spots) pick any cell of the map like the ground does: the game's
     // random-cell finder is kept on the ground (M1a), so on maps with floors the spot is drawn over every floor's cells
     // (uniform, so a floor gets pods by its walkable open area) with the game's own conditions.

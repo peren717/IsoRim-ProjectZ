@@ -17,6 +17,7 @@
   <PZ_GroundOnly>Must be built on the ground</PZ_GroundOnly>
   <PZ_ThickRoof>Can't build under a thick rock roof</PZ_ThickRoof>
   <PZ_OverGravship>Can't build an upper floor over a gravship</PZ_OverGravship>
+  <PZ_GravshipGroundOnly>Must land on the ground</PZ_GravshipGroundOnly>
   <PZ_StairsLeadTo>Leads up to floor {0}</PZ_StairsLeadTo>
   <PZ_NoFloorAbove>Place stairs on the lower floor, they lead up to the next one</PZ_NoFloorAbove>
   <PZ_NeedsRoofHere>Needs a roof here</PZ_NeedsRoofHere>

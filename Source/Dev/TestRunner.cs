@@ -81,6 +81,9 @@ namespace ProjectZ.Dev
     //                                   jump: jumps between floors (jump pack and longjump: targeting refusals, ground
     //                                   to floor 2 and back, across a gap, a plain jump-down for comparison, a paramedic
     //                                   mech's own rescue jump), flights filmed; -projectzfloors=2 (TestJump)
+    //                                   gravland: gravships land only on the ground (a real launch from the ground, the landing
+    //                                   designator refusing a floor-2 slab, a void row, the ground edge and under a slab, then
+    //                                   a landing on the ground with a colonist aboard), filmed; -projectzfloors=2, Odyssey (TestGravLand)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -475,6 +478,11 @@ namespace ProjectZ.Dev
                 StepShuttles(map);
                 return;
             }
+            if (stage.StartsWith("gl_"))
+            {
+                StepGravLand(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -602,6 +610,10 @@ namespace ProjectZ.Dev
                     else if (mode == "riser")
                     {
                         stage = "j_setup";
+                    }
+                    else if (mode == "gravland")
+                    {
+                        stage = "gl_setup";
                     }
                     else if (mode == "skydrop")
                     {
