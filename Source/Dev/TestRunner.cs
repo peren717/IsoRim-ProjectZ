@@ -84,6 +84,9 @@ namespace ProjectZ.Dev
     //                                   gravland: gravships land only on the ground (a real launch from the ground, the landing
     //                                   designator refusing a floor-2 slab, a void row, the ground edge and under a slab, then
     //                                   a landing on the ground with a colonist aboard), filmed; -projectzfloors=2, Odyssey (TestGravLand)
+    //                                   explode: explosions across floors (a grenade thrown on a slab edge, a shell on a slab
+    //                                   edge, a doomsday rocket near the ground's north edge; probes of every cell hit, fire
+    //                                   and filth); -projectzfloors=2 (TestExplode; -projectznoexplfix: the game's flat explosions)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -144,6 +147,7 @@ namespace ProjectZ.Dev
             TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
             DropRules.ShuttleFixOff = GenCommandLine.CommandLineArgPassed("projectznoshuttlefix");
+            Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -179,6 +183,10 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
+            if (mode == "explode")
+            {
+                PatchExplodeProbe(h);
+            }
             if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser")
             {
                 PatchMouse(h);
@@ -488,6 +496,11 @@ namespace ProjectZ.Dev
                 StepSkyDrop(map);
                 return;
             }
+            if (stage.StartsWith("ex_"))
+            {
+                StepExplode(map);
+                return;
+            }
             if (stage.StartsWith("jp_"))
             {
                 StepJump(map);
@@ -626,6 +639,10 @@ namespace ProjectZ.Dev
                     else if (mode == "jump")
                     {
                         stage = "jp_setup";
+                    }
+                    else if (mode == "explode")
+                    {
+                        stage = "ex_setup";
                     }
                     else if (mode == "bulletpitch")
                     {
