@@ -69,6 +69,26 @@ namespace ProjectZ
             return g;
         }
 
+        // The level of the natural top over ground cell g: the highest level with a natural rock floor (a mountain top,
+        // Floors.KindAt), else 0 (the ground). A walk over at most the map's levels of terrain lookups, so not cached.
+        public static int NaturalTop(IntVec3 g, Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (a == null)
+            {
+                return 0;
+            }
+            for (int L = a.MaxLevel; L >= 1; L--)
+            {
+                IntVec3 c = Levels.Cell(g, L, map);
+                if (c.IsValid && Floors.KindAt(c, map) == FloorKind.NaturalRock)
+                {
+                    return L;
+                }
+            }
+            return 0;
+        }
+
         // Height of level L's floor over the ground: in wall units (Heights, a wall = 1) and in cells (Range3D, as drawn).
         public static float WallHeight(int L) => L * Combat.Heights.Storey;
 

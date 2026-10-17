@@ -18,21 +18,34 @@ namespace ProjectZ
     // map loads: every cell under a floor gets the floor's roof, also where it had none.
     public static class FloorRoof
     {
-        // The cell right above c on the next floor has a floor on it.
-        public static bool FloorAbove(IntVec3 c, Map map)
+        // The cell right above c on the next level (Invalid: none).
+        public static IntVec3 Above(IntVec3 c, Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             if (a == null || !c.InBounds(map))
             {
-                return false;
+                return IntVec3.Invalid;
             }
             int k = ProjectZ.FloorOf(c, map);
             if (k < 0 || k + 1 > a.MaxLevel)
             {
-                return false;
+                return IntVec3.Invalid;
             }
-            IntVec3 up = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), k + 1, map);
+            return ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), k + 1, map);
+        }
+
+        // The cell right above c on the next floor has a floor on it.
+        public static bool FloorAbove(IntVec3 c, Map map)
+        {
+            IntVec3 up = Above(c, map);
             return up.IsValid && ProjectZ.HasFloor(up, map);
+        }
+
+        // The roof the floor right above c puts on c (by its kind, Floors.CeilingFor); null without a floor above.
+        public static RoofDef CeilingOf(IntVec3 c, Map map)
+        {
+            IntVec3 up = Above(c, map);
+            return up.IsValid ? Floors.CeilingUnder(up, map) : null;
         }
 
         // A roof that never drops: a floor's (the floor itself) or the stairwell's (an opening).
@@ -63,9 +76,10 @@ namespace ProjectZ
             RoofDef cur = map.roofGrid.RoofAt(below);
             if (ProjectZ.HasFloor(c, map))
             {
-                if (cur != PZDefOf.PZ_FloorRoof)
+                RoofDef want = Floors.CeilingUnder(c, map);
+                if (cur != want)
                 {
-                    map.roofGrid.SetRoof(below, PZDefOf.PZ_FloorRoof);
+                    map.roofGrid.SetRoof(below, want);
                 }
             }
             else if (cur == PZDefOf.PZ_FloorRoof)
@@ -91,10 +105,11 @@ namespace ProjectZ
                     {
                         IntVec3 c = ProjectZ.CellOnFloor(new IntVec3(x, 0, z), k, map);
                         RoofDef cur = map.roofGrid.RoofAt(c);
-                        bool above = FloorAbove(c, map);
-                        if (above && cur != PZDefOf.PZ_FloorRoof)
+                        RoofDef want = CeilingOf(c, map);
+                        bool above = want != null;
+                        if (above && cur != want)
                         {
-                            map.roofGrid.SetRoof(c, PZDefOf.PZ_FloorRoof);
+                            map.roofGrid.SetRoof(c, want);
                             fixedCells++;
                         }
                         else if (!above && cur == PZDefOf.PZ_FloorRoof)
@@ -163,7 +178,7 @@ namespace ProjectZ
                 {
                     return;
                 }
-                def = PZDefOf.PZ_FloorRoof;
+                def = FloorRoof.CeilingOf(c, map);
             }
             else
             {
