@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using ProjectZ.Patches;
 using RimWorld;
@@ -576,7 +577,7 @@ namespace ProjectZ.Dev
                     if (!ModsConfig.OdysseyActive || psDef == null)
                     {
                         Info("Odyssey not active: passenger shuttle skipped");
-                        stage = "sh_end";
+                        stage = "sh_range";
                         return true;
                     }
                     ShDaylight(map);
@@ -606,7 +607,7 @@ namespace ProjectZ.Dev
                     Result("the passenger shuttle takes off from floor 2", lv != null && lv.Position == at, lv == null ? "no leaving shuttle" : ACell(lv.Position, map) + " " + lv.def.defName);
                     if (lv == null)
                     {
-                        stage = "sh_end";
+                        stage = "sh_range";
                         return true;
                     }
                     ShFilm(lv, "passenger_takeoff", new List<ShFrame> { new ShFrame { mark = 8, view = 1 }, new ShFrame { mark = 35, view = 1 }, new ShFrame { mark = 35, view = 0 }, new ShFrame { mark = 80, view = 1, yaw = 180f } }, "sh_pass_fly");
@@ -621,7 +622,7 @@ namespace ProjectZ.Dev
                     Result("the passenger shuttle comes down at T1 on floor 2", si != null && si.Position == ShU(18, 5, map), si == null ? "none" : ACell(si.Position, map) + " " + si.def.defName);
                     if (si == null)
                     {
-                        stage = "sh_end";
+                        stage = "sh_range";
                         return true;
                     }
                     ShFilm(si, "passenger_landing", new List<ShFrame>
@@ -642,6 +643,18 @@ namespace ProjectZ.Dev
                         ps != null && ps.Position == ShU(18, 5, map) && ShuttleRect(ps.Position, ps.def, ps.Rotation).Cells.All(c => ProjectZ.HasFloor(c, map)) && pilot != null && ProjectZ.FloorOf(pilot.Position, map) == 1,
                         $"shuttle {(ps == null ? "none" : ACell(ps.Position, map) + " rot " + ps.Rotation)}, pilot {(pilot == null ? "inside" : ACell(pilot.Position, map))}");
                     Result("slabs and their roofs as at the start", SlabCount(map) == shSlabs && KeptCount(map) == shKept, $"slabs {shSlabs} -> {SlabCount(map)}, floor roofs {shKept} -> {KeptCount(map)}");
+                    stage = "sh_range";
+                    return true;
+                }
+                // ---- 6: targeted permits' range between floors, in fog (vanilla only caps the range in bad weather)
+                case "sh_range":
+                    PermitRangeChecks(map);
+                    return true;
+                case "sh_range_landed":
+                {
+                    Thing sh = map.listerThings.ThingsOfDef(ThingDefOf.Shuttle).FirstOrDefault();
+                    Result("in fog, a ground colonist calls a shuttle onto floor 2 and it lands there", sh != null && sh.Position == ShU(16, 13, map),
+                        sh == null ? "no shuttle" : ACell(sh.Position, map));
                     stage = "sh_end";
                     return true;
                 }
@@ -652,6 +665,103 @@ namespace ProjectZ.Dev
                     return true;
             }
             return false;
+        }
+
+        // Starts a targeted permit's targeting the way its float-menu option does (its private Begin* method).
+        private static RoyalTitlePermitWorker_Targeted ShBeginPermit(RoyalTitlePermitDef def, Pawn caller, Map map)
+        {
+            RoyalTitlePermitWorker_Targeted w = def.Worker as RoyalTitlePermitWorker_Targeted;
+            MethodInfo begin = w?.GetType().GetMethods(AccessTools.all).FirstOrDefault(m => m.Name.StartsWith("Begin") && m.GetParameters().Any(p => p.ParameterType == typeof(Map)));
+            if (begin == null)
+            {
+                return null;
+            }
+            object[] args = begin.GetParameters().Select(p => p.ParameterType == typeof(Pawn) ? caller : p.ParameterType == typeof(Map) ? map : p.ParameterType == typeof(Faction) ? shEmpire
+                : p.ParameterType == typeof(bool) ? (object)true : p.ParameterType == typeof(float) ? (object)1f : null).ToArray();
+            begin.Invoke(w, args);
+            return w;
+        }
+
+        private static void PermitRangeChecks(Map map)
+        {
+            WeatherDef fog = DefDatabase<WeatherDef>.AllDefs.Where(w => w.maxRangeCap > 0f).OrderBy(w => w.maxRangeCap).FirstOrDefault();
+            Pawn caller = ById(map, shCallerId);
+            if (fog == null || caller?.royalty == null || shEmpire == null)
+            {
+                Result("permit range setup", false, $"weather with a range cap {fog?.defName}, caller {caller}, empire {shEmpire}");
+                stage = "sh_end";
+                return;
+            }
+            map.weatherManager.curWeather = fog;
+            map.weatherManager.lastWeather = fog;
+            foreach (Thing t in map.listerThings.AllThings.Where(t => t is Pawn p && p.IsColonist && p != caller && p.Spawned).ToList())
+            {
+                Teleport((Pawn)t, ShP(-6, -14 - t.thingIDNumber % 3));   // out of the targets' way
+            }
+            string[] names = { "CallTransportShuttle", "CallLaborerTeam", "CallMilitaryAidSmall", "CallOrbitalStrike" };
+            List<RoyalTitlePermitDef> permits = names.Select(n => DefDatabase<RoyalTitlePermitDef>.GetNamedSilentFail(n)).Where(d => d != null).ToList();
+            RoyalTitlePermitDef drop = DefDatabase<RoyalTitlePermitDef>.AllDefs.FirstOrDefault(d => d.workerClass == typeof(RoyalTitlePermitWorker_DropResources));
+            if (drop != null)
+            {
+                permits.Add(drop);
+            }
+            float cap = fog.maxRangeCap;
+            Info($"weather {fog.defName} (range cap {cap}); storey {IsoRimBridge.StoreyHeight:0.00}; permits {string.Join(", ", permits.Select(p => p.defName + " " + p.royalAid?.targetingRange))}");
+            var cases = new (string name, IntVec3 from, IntVec3 to, bool want)[]
+            {
+                ("ground caller -> floor-2 slab 11 cells over the ground", ShP(16, -3), ShU(16, 8, map), true),
+                ("floor-2 caller -> ground 14 cells over the ground", ShU(16, 8, map), ShP(16, -6), true),
+                ("ground caller -> floor-2 slab corner 24.8 cells away: out of range", ShP(16, -3), ShU(0, 16, map), false),
+                ("floor-2 caller -> ground 29.7 cells away: out of range", ShU(2, 14, map), ShP(22, -8), false),
+                ("same floor (ground), 12 cells", ShP(16, -3), ShP(16, -15), true),
+                ("same floor (ground), 24 cells: out of range", ShP(-8, -3), ShP(16, -3), false),
+                ("same floor (floor 2), 14 cells", ShU(2, 14, map), ShU(16, 14, map), true),
+            };
+            foreach (var k in cases)
+            {
+                Teleport(caller, k.from);
+                List<string> got = new List<string>();
+                bool ok = true;
+                foreach (RoyalTitlePermitDef d in permits)
+                {
+                    RoyalTitlePermitWorker_Targeted w = ShBeginPermit(d, caller, map);
+                    bool can = w != null && ((ITargetingSource)w).targetParams.CanTarget(new TargetInfo(k.to, map), w);
+                    ok &= w != null && can == k.want;
+                    got.Add($"{d.defName} {can}");
+                    if (Find.Targeter.IsTargeting)
+                    {
+                        Find.Targeter.StopTargeting();
+                    }
+                }
+                Result($"permit range in fog, {k.name}: {(k.want ? "allowed" : "refused")} by every targeted permit", ok,
+                    $"{ACell(k.from, map)} -> {ACell(k.to, map)}: map-row distance {k.from.DistanceTo(k.to):0.0}, 3D {Combat.Range3D.Distance(k.from, k.to, map):0.0}; {string.Join(", ", got)}");
+            }
+            // a real call across floors: a ground caller calls the shuttle onto floor 2
+            Teleport(caller, ShP(16, -3));
+            RoyalTitlePermitDef sp = DefDatabase<RoyalTitlePermitDef>.GetNamedSilentFail("CallTransportShuttle");
+            RoyalTitlePermitWorker_Targeted ws = ShBeginPermit(sp, caller, map);
+            IntVec3 target = ShU(16, 13, map);
+            ITargetingSource src = ws;
+            bool pick = src.targetParams.CanTarget(new TargetInfo(target, map), src) && src.ValidateTarget(target, false);
+            Result("in fog, a ground caller can pick a floor-2 landing spot for the call-shuttle permit", pick, $"{ACell(caller.Position, map)} -> {ACell(target, map)}");
+            if (pick)
+            {
+                src.OrderForceTarget(target);
+            }
+            if (Find.Targeter.IsTargeting)
+            {
+                Find.Targeter.StopTargeting();
+            }
+            map.weatherManager.curWeather = WeatherDefOf.Clear;
+            map.weatherManager.lastWeather = WeatherDefOf.Clear;
+            if (pick)
+            {
+                TickUntil(600, () => map.listerThings.ThingsOfDef(ThingDefOf.Shuttle).Any(), "sh_range_landed", 10);
+            }
+            else
+            {
+                stage = "sh_end";
+            }
         }
 
         // Morning light for the shots (building takes hours).
