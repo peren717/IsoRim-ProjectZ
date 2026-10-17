@@ -72,6 +72,8 @@ namespace ProjectZ.Dev
     //                                   lean: shoot leaning round wall corners between floors (down from a slab edge, not
     //                                   from further in, up from behind a ground corner, AI raiders, one-floor controls),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=2 or more (TestLean)
+    //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
+    //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -460,6 +462,11 @@ namespace ProjectZ.Dev
                 StepRiser(map);
                 return;
             }
+            if (stage.StartsWith("sk_"))
+            {
+                StepSkyDrop(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -577,6 +584,10 @@ namespace ProjectZ.Dev
                     else if (mode == "riser")
                     {
                         stage = "j_setup";
+                    }
+                    else if (mode == "skydrop")
+                    {
+                        stage = "sk_setup";
                     }
                     else if (mode == "bulletpitch")
                     {
