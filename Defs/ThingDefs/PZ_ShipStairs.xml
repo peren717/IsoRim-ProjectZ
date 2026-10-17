@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Ship stairs (multi-level gravships P5, Source/ShipStairs.cs): the same 1x3 ramp as PZ_Stairs (same class, so path,
+       reach, rise and the stairwell work unchanged), stuffless gravtech, only on a gravship: the whole ramp on the ship's
+       deck (ground substructure or a ship upper deck) and its exit on the ship upper deck above
+       (ProjectZ.PlaceWorker_ShipStairs). The deck over the ramp is marked for removal, as ordinary stairs do with a floor.
+       They are part of the ship and fly with it. IsoRim draws the stairs model with a ship texture
+       (IsoRim/Defs/PZ_Models.xml); the sprite is the plain fallback. -->
+  <ThingDef ParentName="BuildingBase" MayRequire="Ludeon.RimWorld.Odyssey">
+    <defName>PZ_ShipStairs</defName>
+    <label>ship stairs</label>
+    <description>Gravship stairs up to the ship upper deck above. The whole ramp stands on the ship's deck and the cell past the top must be a ship upper deck. The deck over the ramp is taken up for the stairwell. Like a wall, they hold up roofs and floors nearby, and they fly with the ship.</description>
+    <thingClass>ProjectZ.Building_Stairs</thingClass>
+    <graphicData>
+      <texPath>ProjectZ/ShipStairs</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,3)</drawSize>
+    </graphicData>
+    <uiIconPath>ProjectZ/ShipStairs_MenuIcon</uiIconPath>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>Standable</passability>
+    <pathCost>8</pathCost>
+    <fillPercent>0.25</fillPercent>
+    <castEdgeShadows>false</castEdgeShadows>
+    <holdsRoof>true</holdsRoof>
+    <blockWind>false</blockWind>
+    <rotatable>true</rotatable>
+    <size>(1,3)</size>
+    <statBases>
+      <MaxHitPoints>300</MaxHitPoints>
+      <WorkToBuild>1600</WorkToBuild>
+      <Flammability>0</Flammability>
+      <Beauty>0</Beauty>
+    </statBases>
+    <costList>
+      <Steel>50</Steel>
+      <GravlitePanel>10</GravlitePanel>
+      <ComponentIndustrial>2</ComponentIndustrial>
+    </costList>
+    <constructEffect>ConstructMetal</constructEffect>
+    <researchPrerequisites>
+      <li>BasicGravtech</li>
+    </researchPrerequisites>
+    <terrainAffordanceNeeded>Substructure</terrainAffordanceNeeded>
+    <designationCategory>Odyssey</designationCategory>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_ShipStairs</li>
+    </placeWorkers>
+    <building>
+      <isInert>true</isInert>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <uiOrder>1810</uiOrder>
+  </ThingDef>
+
+</Defs>

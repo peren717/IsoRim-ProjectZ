@@ -52,6 +52,8 @@ namespace ProjectZ.Dev
         private static PlanetTile sfHomeTile = PlanetTile.Invalid, sfNewTile = PlanetTile.Invalid;
         private static IntVec3 sfRoot, sfOldEngine, sfRoomA, sfRoomB, sfOffA, sfOffB;
         private static Rot4 sfRot;
+        // (the stage after a landing: shipstairs flies the same way and checks its own landing)
+        private static string sfLandedStage = "sf_landed";
         private static readonly Dictionary<IntVec3, SfCellRec> sfCells = new Dictionary<IntVec3, SfCellRec>();
         private static readonly List<SfThing> sfThings = new List<SfThing>();
         private static readonly Dictionary<string, IntVec3> sfPawns = new Dictionary<string, IntVec3>();
@@ -596,7 +598,7 @@ namespace ProjectZ.Dev
             {
                 Info($"leg {sfLeg}: landing ended after {sfFrames} frames");
                 Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                Wait(30, "sf_landed");
+                Wait(30, sfLandedStage);
                 return;
             }
             if (sfFrames > 30000)

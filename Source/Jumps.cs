@@ -133,7 +133,7 @@ namespace ProjectZ
             List<Thing> list = map.thingGrid.ThingsListAtFast(c);
             for (int i = 0; i < list.Count; i++)
             {
-                if ((list[i] is Blueprint || list[i] is Frame) && list[i].def.entityDefToBuild == PZDefOf.PZ_Stairs)
+                if ((list[i] is Blueprint || list[i] is Frame) && StairDefs.Is(list[i].def.entityDefToBuild))
                 {
                     return true;
                 }

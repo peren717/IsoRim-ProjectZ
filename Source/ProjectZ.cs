@@ -14,6 +14,8 @@ namespace ProjectZ
         public static RoofDef PZ_StairwellRoof;
         [MayRequireOdyssey]
         public static TerrainDef PZ_ShipDeck;     // the ship upper deck (ShipDeck.cs); null without Odyssey
+        [MayRequireOdyssey]
+        public static ThingDef PZ_ShipStairs;     // the ship stairs (ShipStairs.cs); null without Odyssey
 
         static PZDefOf()
         {

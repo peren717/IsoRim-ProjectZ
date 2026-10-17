@@ -98,6 +98,11 @@ namespace ProjectZ
             {
                 return "PZ_DeckAboveFirst".Translate();
             }
+            // (P5: the exit of ship stairs stays while they stand, as a slab landing does)
+            if (ProjectZ.FloorOf(c, map) >= 1 && StairwellFloor.IsStairsExit(c, map))
+            {
+                return "PZ_StairsLandHere".Translate();
+            }
             return null;
         }
 

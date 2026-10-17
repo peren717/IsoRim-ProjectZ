@@ -20,7 +20,7 @@ namespace ProjectZ
     public static class StairwellFloor
     {
         // A stairs blueprint or frame (not the built stairs).
-        public static bool IsSite(Thing t) => t != null && !(t is Building_Stairs) && t.def.entityDefToBuild == PZDefOf.PZ_Stairs;
+        public static bool IsSite(Thing t) => t != null && !(t is Building_Stairs) && StairDefs.Is(t.def.entityDefToBuild);
 
         // A floor on the floor above a stairs thing: it has to go.
         public static bool MustClear(IntVec3 c, Map map)
@@ -42,11 +42,14 @@ namespace ProjectZ
         // The exit of any stairs thing (built, blueprint or frame).
         public static bool IsStairsExit(IntVec3 c, Map map)
         {
-            foreach (Thing t in map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs))
+            foreach (ThingDef def in StairDefs.All)
             {
-                if (StairShape.Exit(t.Position, t.Rotation, map) == c)
+                foreach (Thing t in map.listerThings.ThingsOfDef(def))
                 {
-                    return true;
+                    if (StairShape.Exit(t.Position, t.Rotation, map) == c)
+                    {
+                        return true;
+                    }
                 }
             }
             foreach (ThingRequestGroup g in new[] { ThingRequestGroup.Blueprint, ThingRequestGroup.BuildingFrame })

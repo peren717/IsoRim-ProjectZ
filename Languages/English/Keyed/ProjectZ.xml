@@ -49,4 +49,5 @@
   <PZ_ShipUpperCantFly>Upper ship decks can't fly: a gravship patch failed (see the log)</PZ_ShipUpperCantFly>
   <PZ_ShipNotEnoughFloors>Not enough floors here for the ship's decks</PZ_ShipNotEnoughFloors>
   <PZ_ShipFloorAbove>Blocked by an upper floor above</PZ_ShipFloorAbove>
+  <PZ_ShipStairsOnDeck>Ship stairs and their exit must be on the ship's deck</PZ_ShipStairsOnDeck>
 </LanguageData>

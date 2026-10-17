@@ -14,4 +14,15 @@
     <groundShadow>false</groundShadow>
   </IsoRim.ModelDef>
 
+  <!-- The ship stairs (multi-level gravships P5): the same stairs model (pz_ship_stairs.obj = pz_stairs.obj with its materials
+       and texture coordinates changed, tools/projectz/ship_stairs_obj.js) with a ship texture: gravship plating, dark
+       seams, cyan strips along both sides and at the landing edge. Fixed colours (stuffless). -->
+  <IsoRim.ModelDef MayRequire="Ludeon.RimWorld.Odyssey">
+    <defName>R3D_PZ_ShipStairs</defName>
+    <thingDef>PZ_ShipStairs</thingDef>
+    <model>Models/pz_ship_stairs.obj</model>
+    <builtFor>(1, 3)</builtFor>
+    <groundShadow>false</groundShadow>
+  </IsoRim.ModelDef>
+
 </Defs>

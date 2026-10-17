@@ -49,4 +49,5 @@
   <PZ_ShipUpperCantFly>上层甲板无法随飞船起飞：飞船补丁失败（见日志）</PZ_ShipUpperCantFly>
   <PZ_ShipNotEnoughFloors>这里的楼层不够放下飞船的上层甲板</PZ_ShipNotEnoughFloors>
   <PZ_ShipFloorAbove>上方有楼层挡住</PZ_ShipFloorAbove>
+  <PZ_ShipStairsOnDeck>飞船楼梯和顶端出口都必须在飞船甲板上</PZ_ShipStairsOnDeck>
 </LanguageData>

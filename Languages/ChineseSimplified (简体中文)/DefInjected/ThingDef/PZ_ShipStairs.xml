@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_ShipStairs.label>飞船楼梯</PZ_ShipStairs.label>
+  <PZ_ShipStairs.description>通往上方飞船上层甲板的楼梯。整段楼梯建在飞船甲板上，顶端前方一格必须是飞船上层甲板。楼梯上方的甲板会先被拆开。楼梯像墙一样能撑住附近的屋顶和楼板，并随飞船一起飞行。</PZ_ShipStairs.description>
+</LanguageData>

@@ -18,7 +18,7 @@ namespace ProjectZ
         public static bool TooTall(BuildableDef def)
         {
             ThingDef t = def as ThingDef;
-            if (t == null || t.category != ThingCategory.Building || t == PZDefOf.PZ_Stairs || typeof(Building_Door).IsAssignableFrom(t.thingClass))
+            if (t == null || t.category != ThingCategory.Building || StairDefs.Is(t) || typeof(Building_Door).IsAssignableFrom(t.thingClass))
             {
                 return false;
             }

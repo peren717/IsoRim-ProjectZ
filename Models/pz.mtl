@@ -10,3 +10,21 @@ map_Kd IsoRim/Swatches/{stuff}
 newmtl stuff_deep
 Kd 0.620 0.620 0.620
 map_Kd IsoRim/Swatches/{stuff}
+
+# Ship stairs (pz_ship_stairs.obj, multi-level gravships P5): fixed colours, the def is stuffless. The textures are painted
+# divided by Kd x 1.08 (tools/projectz/ship_stairs_art.ps1): on screen gravship hull grey with dark seams and cyan strips.
+newmtl ship_tread
+Kd 0.780 0.800 0.830
+map_Kd ProjectZ/ShipStairsTread
+
+newmtl ship_side
+Kd 0.780 0.800 0.830
+map_Kd ProjectZ/ShipStairsSide
+
+newmtl ship_riser
+Kd 0.400 0.430 0.470
+map_Kd IsoRim/Swatches/Metal
+
+newmtl ship_deep
+Kd 0.300 0.320 0.350
+map_Kd IsoRim/Swatches/Metal

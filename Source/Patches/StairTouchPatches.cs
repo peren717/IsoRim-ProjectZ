@@ -209,15 +209,17 @@ namespace ProjectZ.Patches
 
         private static IEnumerable<ThingDef> StairDefs()
         {
-            ThingDef d = PZDefOf.PZ_Stairs;
-            yield return d;
-            if (d.blueprintDef != null)
+            foreach (ThingDef d in global::ProjectZ.StairDefs.All)
             {
-                yield return d.blueprintDef;
-            }
-            if (d.frameDef != null)
-            {
-                yield return d.frameDef;
+                yield return d;
+                if (d.blueprintDef != null)
+                {
+                    yield return d.blueprintDef;
+                }
+                if (d.frameDef != null)
+                {
+                    yield return d.frameDef;
+                }
             }
         }
     }

@@ -53,6 +53,27 @@ namespace ProjectZ
         }
     }
 
+    // Every stairs def (multi-level gravships S2): the ordinary stairs and the ship stairs (Odyssey only, ShipStairs.cs).
+    // Both are Building_Stairs; the rules that know the stairs by def (stairwell, exits, building sites, jump landings,
+    // the height rule, the touch from above, the square icon) ask this. Ordinary-stairs-only rules (thick roof, not on a
+    // gravship, the landing laid with them) keep testing PZDefOf.PZ_Stairs.
+    public static class StairDefs
+    {
+        public static bool Is(BuildableDef d) => d != null && (d == PZDefOf.PZ_Stairs || d == PZDefOf.PZ_ShipStairs);
+
+        public static IEnumerable<ThingDef> All
+        {
+            get
+            {
+                yield return PZDefOf.PZ_Stairs;
+                if (PZDefOf.PZ_ShipStairs != null)
+                {
+                    yield return PZDefOf.PZ_ShipStairs;
+                }
+            }
+        }
+    }
+
     public class StairGrid : MapComponent
     {
         public readonly List<StairLink> links = new List<StairLink>();
@@ -174,7 +195,8 @@ namespace ProjectZ
             {
                 return;
             }
-            if (!respawningAfterLoad && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
+            // (ship stairs lay no landing: their exit is always a ship upper deck, ShipStairs)
+            if (!respawningAfterLoad && def == PZDefOf.PZ_Stairs && top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
                 // Q2: the landing is made with the stairs (the placement checked the cell under it), of their stuff.
                 IntVec3 below = FloorRoof.Below(top, map);
@@ -190,7 +212,14 @@ namespace ProjectZ
                     IntVec3 up = StairShape.Above(c, map);
                     if (StairwellFloor.MustClear(up, map))
                     {
-                        Slab.Remove(up, map, doLeavings: true);
+                        if (ShipDeck.At(up, map))
+                        {
+                            ShipStairs.ClearDeck(up, map);
+                        }
+                        else
+                        {
+                            Slab.Remove(up, map, doLeavings: true);
+                        }
                     }
                 }
             }
@@ -262,7 +291,7 @@ namespace ProjectZ
     {
         public static bool IsStairThing(Thing t)
         {
-            return t != null && (t.def == PZDefOf.PZ_Stairs || t.def.entityDefToBuild == PZDefOf.PZ_Stairs);
+            return t != null && (StairDefs.Is(t.def) || StairDefs.Is(t.def.entityDefToBuild));
         }
 
         public static bool StairThingAt(IntVec3 c, Map map)

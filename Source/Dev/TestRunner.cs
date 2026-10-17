@@ -105,6 +105,10 @@ namespace ProjectZ.Dev
     //                                   colonists, a sleeper, items, a lamp on a riser and rooms upstairs, saved and reloaded
     //                                   in flight, landed turned on a new map and back home with the grav anchor; landing
     //                                   refusals for the column); -projectzfloors=4, Odyssey (TestShipFly)
+    //                                   shipstairs: the ship stairs (multi-level gravships P5: placement refusals, colonists
+    //                                   building two on a 3-storey ship with their stairwell decks taken up, the square icon
+    //                                   in the copy gizmo, walking and hauling over them, the ship flown and landed turned
+    //                                   with them working); -projectzfloors=4, Odyssey (TestShipStairs)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -536,6 +540,11 @@ namespace ProjectZ.Dev
                 StepShipFly(map);
                 return;
             }
+            if (stage.StartsWith("sp_"))
+            {
+                StepShipStairs(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -699,6 +708,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipfly")
                     {
                         stage = "sf_setup";
+                    }
+                    else if (mode == "shipstairs")
+                    {
+                        stage = "sp_setup";
                     }
                     else if (mode == "skydrop")
                     {

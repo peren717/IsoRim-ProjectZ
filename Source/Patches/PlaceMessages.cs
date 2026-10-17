@@ -52,6 +52,12 @@ namespace ProjectZ.Patches
                 }
                 return;
             }
+            // (ship stairs off the ship's deck: their own short reason, ShipStairs)
+            if (PZDefOf.PZ_ShipStairs != null && entDef == PZDefOf.PZ_ShipStairs)
+            {
+                __result = "PZ_ShipStairsOnDeck".Translate();
+                return;
+            }
             foreach (IntVec3 c in GenAdj.OccupiedRect(center, rot, entDef.Size))
             {
                 if (c.InBounds(map) && c.GetTerrain(map) == PZDefOf.PZ_OpenAir)
