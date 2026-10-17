@@ -188,6 +188,19 @@ namespace ProjectZ
 
         private static Vector3 MuzzleInner(Thing owner, ThingDef gun, Vector3 from, Vector3 dir) => IsoRim.Projectiles.Muzzle(owner, gun, from, dir);
 
+        // Where IsoRim draws a skyfaller now (tests): its ground point (ground-band x, z), height of its bottom over the
+        // ground and its landing floor's height; null without IsoRim, or when its floor is hidden.
+        public static Vector3[] SkyPose(RimWorld.Skyfaller s) => Present ? SkyPoseInner(s) : null;
+
+        private static Vector3[] SkyPoseInner(RimWorld.Skyfaller s)
+        {
+            if (!IsoRim.View3D.Ready || !IsoRim.Skyfallers.PoseOf(s, s.DrawPos, out IsoRim.Skyfallers.Pose p))
+            {
+                return null;
+            }
+            return new[] { p.ground, new Vector3(p.height, p.floorHeight, p.rowShift) };
+        }
+
         public static float AimHeight(Projectile p) => Present ? AimHeightInner(p) : 0f;
 
         private static float AimHeightInner(Projectile p) => IsoRim.Projectiles.AimHeight(p);

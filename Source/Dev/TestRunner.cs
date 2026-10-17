@@ -74,6 +74,10 @@ namespace ProjectZ.Dev
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=2 or more (TestLean)
     //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
     //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
+    //                                   shuttles: shuttles and transport pods on a floor-2 slab (landing checks, a permit shuttle,
+    //                                   a landing pad, boarding and take-off, pods built and launched, the Odyssey passenger
+    //                                   shuttle), filmed; -projectzfloors=2 (TestShuttles; -projectznoshuttlefix: without the
+    //                                   shuttle landing rule)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -133,6 +137,7 @@ namespace ProjectZ.Dev
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
             TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
+            DropRules.ShuttleFixOff = GenCommandLine.CommandLineArgPassed("projectznoshuttlefix");
             if (mode == "plain")
             {
                 FloorsOverride = 1;
@@ -462,6 +467,11 @@ namespace ProjectZ.Dev
                 StepRiser(map);
                 return;
             }
+            if (stage.StartsWith("sh_"))
+            {
+                StepShuttles(map);
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -588,6 +598,10 @@ namespace ProjectZ.Dev
                     else if (mode == "skydrop")
                     {
                         stage = "sk_setup";
+                    }
+                    else if (mode == "shuttles")
+                    {
+                        stage = "sh_setup";
                     }
                     else if (mode == "bulletpitch")
                     {

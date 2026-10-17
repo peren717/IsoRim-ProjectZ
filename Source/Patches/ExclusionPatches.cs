@@ -12,11 +12,16 @@ namespace ProjectZ.Patches
     // ground; it never comes down off the floors (void rows, open air) and never through a roof that never drops (a
     // floor's PZ_FloorRoof or the stairwell's, FloorRoof.Kept): no pod lands under a slab or falls from floor 2 into
     // floor 1. Those roofs stay thin otherwise (they collapse with their support). One rule, DropRules.Blocked, at the
-    // game's own drop checks: CanPhysicallyDropInto (every drop finder and IsGoodDropSpot go through it) and
-    // SkyfallerCanLandAt (shuttles and other big skyfallers). The roof-punch itself already skips kept roofs
-    // (FloorRoof.cs, DropRoofCells_Patch).
+    // game's own drop checks: CanPhysicallyDropInto (every drop finder and IsGoodDropSpot go through it),
+    // SkyfallerCanLandAt (big skyfallers) and ShuttleCanLandHere (every shuttle landing cell: the call-shuttle and
+    // call-laborers permits, a player shuttle's landing spot, shuttles arriving at a cell; it checks cells itself and only
+    // refuses natural and thick roofs, so a shuttle could come down under a slab). The roof-punch itself already skips
+    // kept roofs (FloorRoof.cs, DropRoofCells_Patch).
     public static class DropRules
     {
+        // Test only (-projectznoshuttlefix): ShuttleCanLandHere without the rule, to show the old behaviour.
+        public static bool ShuttleFixOff;
+
         public static bool Blocked(IntVec3 c, Map map)
         {
             if (ProjectZ.Annex(map) == null || !c.InBounds(map))
@@ -64,6 +69,43 @@ namespace ProjectZ.Patches
                 }
             }
             return true;
+        }
+    }
+
+    // The shuttle's own landing check, over the same cells it checks (footprint and interaction cell).
+    [HarmonyPatch(typeof(RoyalTitlePermitWorker_CallShuttle), nameof(RoyalTitlePermitWorker_CallShuttle.ShuttleCanLandHere))]
+    public static class ShuttleCanLandHere_Patch
+    {
+        public static void Postfix(LocalTargetInfo target, Map map, ThingDef shuttleDef, Rot4? rot, ref AcceptanceReport __result)
+        {
+            if (!__result.Accepted || DropRules.ShuttleFixOff || !target.IsValid || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            ThingDef def = shuttleDef ?? ThingDefOf.Shuttle;
+            Rot4 r = rot ?? def.defaultPlacingRot;
+            foreach (IntVec3 c in GenAdj.OccupiedRect(target.Cell, r, def.size))
+            {
+                if (DropRules.Blocked(c, map))
+                {
+                    __result = Refusal(c, map);
+                    return;
+                }
+            }
+            if (def.hasInteractionCell)
+            {
+                IntVec3 ic = ThingUtility.InteractionCellWhenAt(def, target.Cell, r, map);
+                if (DropRules.Blocked(ic, map))
+                {
+                    __result = Refusal(ic, map);
+                }
+            }
+        }
+
+        private static AcceptanceReport Refusal(IntVec3 c, Map map)
+        {
+            string why = FloorRoof.Kept(c, map) ? "BlockedByRoof".Translate().CapitalizeFirst() : "ShuttleCannotLand_Unwalkable".Translate().CapitalizeFirst();
+            return new AcceptanceReport("ShuttleCannotLand".Translate() + ": " + why);
         }
     }
 

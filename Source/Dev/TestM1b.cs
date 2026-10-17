@@ -354,7 +354,7 @@ namespace ProjectZ.Dev
         // Before every tick-watch check: who sleeps upstairs, how many colonists are up.
         private static void TickHook(Map map)
         {
-            if (mode == "m1c")
+            if (mode == "m1c" || mode == "shuttles")
             {
                 KeepFed(map);
                 return;
