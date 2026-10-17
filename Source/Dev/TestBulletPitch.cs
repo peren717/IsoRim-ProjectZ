@@ -104,7 +104,8 @@ namespace ProjectZ.Dev
                     IsoRimBridge.SetOption("freeYaw", iFrame == 2 ? 180f : 0f);
                     IntVec3 g = ProjectZ.GroundCellOf(iProj.Position, map);
                     Find.CameraDriver.config.sizeRange.min = 2f;
-                    ShotAt(map, 2, g, c.target == 'm' || c.name == "rocket_down" ? 7f : 4.5f);
+                    // (a mortar shell flies its arc high over the ground cell under it: framed wide enough to show it)
+                    ShotAt(map, 2, g, c.target == 'm' ? 14f : c.name == "rocket_down" ? 7f : 4.5f);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     Wait(30, "i_take");
                     return true;
@@ -275,6 +276,14 @@ namespace ProjectZ.Dev
                 return;
             }
             Result($"{c.name}: drawn leaving from the real {(c.target == 'm' ? "barrel" : "muzzle")} (within 0.05 cells)", startOff < 0.05f, detail);
+            if (p.def.projectile.flyOverhead)
+            {
+                // A lobbed shell (mortar, artillery) is drawn by IsoRim itself on its arc up into the sky and down onto the
+                // target, nose along the arc; it never asks for a pitched card (ProjectilePitch only tilts flat flights), so
+                // no pitch is recorded for it: that is the expected drawing, not a missing one.
+                Result($"{c.name}: drawn on its lobbed arc, not pitched as a straight flight", !drawn, detail);
+                return;
+            }
             bool sign = c.toFloor < c.fromFloor ? pitch < -1f : pitch > 1f;
             Result($"{c.name}: drawn pitched {(c.toFloor < c.fromFloor ? "down" : "up")} along its 3D flight (within 1 deg of expected)", drawn && cross && sign && Mathf.Abs(pitch - expected) < 1f && Mathf.Abs(pitch - drawnSlope) < 0.2f, detail);
         }
