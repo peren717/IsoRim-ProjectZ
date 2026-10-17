@@ -359,6 +359,11 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
+            if (mode == "lean")
+            {
+                LeanHook(map);
+                return;
+            }
             if (mode == "stairs" || mode == "floorui" || mode == "deadend" || mode == "slabremove" || mode == "slabstuff" || mode == "space" || mode == "power" || mode == "talltower")
             {
                 StairsHook(map);

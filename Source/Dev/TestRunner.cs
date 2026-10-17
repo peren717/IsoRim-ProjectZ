@@ -69,6 +69,9 @@ namespace ProjectZ.Dev
     //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
     //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
+    //                                   lean: shoot leaning round wall corners between floors (down from a slab edge, not
+    //                                   from further in, up from behind a ground corner, AI raiders, one-floor controls),
+    //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=2 or more (TestLean)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -467,6 +470,11 @@ namespace ProjectZ.Dev
                 StepRange(map);
                 return;
             }
+            if (stage.StartsWith("m_"))
+            {
+                StepLean(map);
+                return;
+            }
             if (stage.StartsWith("f_"))
             {
                 StepWorldFloors(map);
@@ -577,6 +585,10 @@ namespace ProjectZ.Dev
                     else if (mode == "range")
                     {
                         stage = "g_setup";
+                    }
+                    else if (mode == "lean")
+                    {
+                        stage = "m_setup";
                     }
                     else if (mode == "light")
                     {

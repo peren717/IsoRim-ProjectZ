@@ -457,6 +457,9 @@ namespace ProjectZ.Dev
             startInjuriesRaiders = raiders.Sum(r => r.health.hediffSet.hediffs.Count(h => h is Hediff_Injury));
             PZCombatStats.crossFloorShots = 0;
             PZCombatStats.shots.Clear();
+            MPatchLaunch();
+            mLaunchLog.Clear();
+            mLaunchRecs.Clear();
             FloorView.Set(1);
             Find.CameraDriver.SetRootPosAndSize(new Vector3(edgeCell.x + 0.5f, 0f, houseB.maxZ + 5.5f), 9f);
             TickUntil(3000, () => { FightLog(map); return MidFlight(map, true) != null; }, "c_shot_down", 1);
@@ -517,7 +520,11 @@ namespace ProjectZ.Dev
             Result("colonist upstairs fires at the raiders below (fire at will)", down > 0, $"{down} shots down; raider injuries +{injRaiders}, raiders down/dead {raiders.Count(r => r.Dead || r.Downed)}");
             Result("raiders on the ground fire at the colonist upstairs (their own AI)", up > 0, $"{up} shots up; colonist injuries +{injShooter}, colonist {(shooter.Dead ? "dead" : shooter.Downed ? "downed" : "standing")}");
             Result("shots between floors land (injuries)", injRaiders + injShooter > 0, $"raiders +{injRaiders}, colonist +{injShooter}; intercepts {PZCombatStats.intercepts}, passed over {PZCombatStats.passedOver}, slab stops {PZCombatStats.slabStops}");
-            Result("the raider in the room below never shot upstairs", !PZCombatStats.shots.Any(s => s.launcher == raiderInside?.ToString()), $"{raiderInside} job {raiderInside?.CurJobDef?.defName}");
+            // (an assault raider breaks out of the room; once outside it may shoot up legitimately: only shots up from
+            // inside the room count)
+            CellRect roomInside = houseB.ContractedBy(1);
+            bool shotUpFromInside = mLaunchRecs.Any(l => l.launcher == raiderInside && roomInside.Contains(l.at) && ProjectZ.FloorOf(l.target, map) != ProjectZ.FloorOf(l.at, map));
+            Result("the raider in the room below never shot upstairs from inside it", !shotUpFromInside, $"{raiderInside} at {raiderInside?.Position} job {raiderInside?.CurJobDef?.defName}; its shots: {string.Join("; ", PZCombatStats.shots.Where(s => s.launcher == raiderInside?.ToString()).Select(s => $"-> {s.target} floor {s.fromFloor + 1} -> {s.toFloor + 1}"))}; its launches: {string.Join(" | ", mLaunchLog.Where(l => raiderInside != null && l.StartsWith(raiderInside.ToString() + " ")).Take(6))}");
             stage = "c_save";
         }
 

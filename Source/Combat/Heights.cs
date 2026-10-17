@@ -136,6 +136,49 @@ namespace ProjectZ.Combat
             return Clear(gs, gt, hs, ht, map, an.floors);
         }
 
+        private static readonly List<IntVec3> seeDests = new List<IntVec3>();
+        private static readonly List<IntVec3> seeSources = new List<IntVec3>();
+
+        // A seer sees a thing on another floor: the game's AttackTargetFinder.CanSee (from its cell, then from its lean
+        // cells, to the target's cell and its lean cells) with the height line of sight for each pair.
+        public static bool CanSeeLeaning(Thing seer, Thing target)
+        {
+            Map map = seer.Map;
+            IntVec3 from = seer.Position;
+            try
+            {
+                ShootLeanUtility.CalcShootableCellsOf(seeDests, target, from);
+                for (int i = 0; i < seeDests.Count; i++)
+                {
+                    if (CanSee(from, seeDests[i], map))
+                    {
+                        return true;
+                    }
+                }
+                ShootLeanUtility.LeanShootingSourcesFromTo(from, target.Position, map, seeSources);
+                for (int j = 0; j < seeSources.Count; j++)
+                {
+                    if (!seeSources[j].CanBeSeenOver(map))
+                    {
+                        continue;
+                    }
+                    for (int i = 0; i < seeDests.Count; i++)
+                    {
+                        if (CanSee(seeSources[j], seeDests[i], map))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+            finally
+            {
+                seeDests.Clear();
+                seeSources.Clear();
+            }
+        }
+
         // Decision A: the end on floor k (ground cell g) looks over the edge of its slab toward the ground cell other.
         public static bool AtEdge(IntVec3 g, IntVec3 other, int k, Map map)
         {

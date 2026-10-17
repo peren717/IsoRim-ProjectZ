@@ -103,6 +103,48 @@ namespace ProjectZ.Combat
         }
     }
 
+    // Leaning out around a wall corner to shoot (the game's ShootLeanUtility, behind TryFindShootLineFromTo, the target's
+    // own lean cells and AttackTargetFinder.CanSee). The game picks the lean cells from the direction to the target in
+    // map rows, where another floor is a whole band of rows away (always "north" or "south"); between floors it gets
+    // the direction over the ground instead (the target's column on the shooter's floor). Lean cells off the shooter's
+    // floor (the void rows past a band's edge) are dropped. Each lean cell then goes through the height line of sight
+    // (Verb_CanHitCell_Patch, Heights.CanSee): an upper end must lean out at its slab's edge.
+    [HarmonyPatch(typeof(ShootLeanUtility), nameof(ShootLeanUtility.LeanShootingSourcesFromTo))]
+    public static class ShootLean_Patch
+    {
+        public static bool Off;   // test only: the game's own directions, to show the gap
+
+        public static bool Prepare() => CombatGate.Enabled;
+
+        public static void Prefix(IntVec3 shooterLoc, ref IntVec3 targetPos, Map map)
+        {
+            if (!Off && map != null && Heights.CrossFloor(shooterLoc, targetPos, map))
+            {
+                targetPos = Heights.OnFloorOf(targetPos, shooterLoc, map);
+            }
+        }
+
+        public static void Postfix(IntVec3 shooterLoc, Map map, List<IntVec3> listToFill)
+        {
+            if (Off || map == null || listToFill.Count == 0 || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            int k = ProjectZ.FloorOf(shooterLoc, map);
+            if (k < 0)
+            {
+                return;
+            }
+            for (int i = listToFill.Count - 1; i >= 0; i--)
+            {
+                if (ProjectZ.FloorOf(listToFill[i], map) != k)
+                {
+                    listToFill.RemoveAt(i);
+                }
+            }
+        }
+    }
+
     // Range between floors: the 3D rule with the high-ground bonus (Range3D). Behind CanHitTarget/CanHitTargetFrom,
     // TryFindShootLineFromTo, abilities (Verb_CastAbility) and drafted attack orders.
     [HarmonyPatch(typeof(Verb), nameof(Verb.OutOfRange))]
@@ -207,7 +249,7 @@ namespace ProjectZ.Combat
             {
                 return true;
             }
-            __result = Heights.CanSee(seer.Position, target.Position, map);
+            __result = Heights.CanSeeLeaning(seer, target);
             return false;
         }
     }
@@ -304,7 +346,7 @@ namespace ProjectZ.Combat
                     // from here counts when it can walk under it (to the target's column on its own floor), where the
                     // cast position search (CastSpots) finds it a spot within range. Only when the game found nothing.
                     if (__result == null && sp != null && (flags & TargetScanFlags.NeedReachableIfCantHitFromMyPos) != 0
-                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSee(s.Position, th.Position, map))
+                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSeeLeaning(s, th))
                         && CanWalkUnder(sp, th, ks, map))
                     {
                         float sn = Score(t, searcher, verb, s, th, d, map);
