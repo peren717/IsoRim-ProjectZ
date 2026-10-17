@@ -181,6 +181,17 @@ namespace ProjectZ.Dev
             PlaceIf("StandingLamp", W(8, 6), map, Rot4.North);
             PlaceIf("Bed", W(8, 0), map, Rot4.North, ThingDefOf.WoodLog);
             PlaceIf("Shelf", W(1, 1), map, Rot4.East, ThingDefOf.WoodLog);
+            // columns under the slab: drawn as tall as the walls, they meet it (and are not too tall for it)
+            PlaceIf("Column", W(4, 4), map, Rot4.North, blocks);
+            PlaceIf("Column", W(7, 2), map, Rot4.North, blocks);
+            ThingDef column = Def("Column");
+            if (column != null)
+            {
+                Designator_Build dColumn = new Designator_Build(column);
+                dColumn.SetStuffDef(blocks);
+                AcceptanceReport underSlab = dColumn.CanDesignateCell(W(2, 2));
+                Result("a column can be built under a floor", underSlab.Accepted, $"at {W(2, 2)}: '{underSlab.Reason}', model height {IsoRimBridge.ModelHeight(column):0.000}, clearance {HeightRule.Clearance:0.000}");
+            }
             // floor 2: a lamp
             PlaceIf("StandingLamp", ProjectZ.CellOnFloor(W(1, 6), 1, map), map, Rot4.North);
             // outdoor wall line east of the house
