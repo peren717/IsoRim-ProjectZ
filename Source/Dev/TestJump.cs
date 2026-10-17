@@ -16,6 +16,8 @@ namespace ProjectZ.Dev
     //   - targeting (Verb.ValidateTarget, what the targeter checks): a roofed floor-2 cell refused (accepted once its roof
     //     is lifted), a cell within the flat range but out of the 3D range refused (one just inside accepted), a cell on
     //     the slab straight over a pawn standing under it refused (no line through the slab), a void row refused;
+    //   - the flight's arc (JumpArc): a far jump lands 3 cells past the rim where a short steep one is refused; with
+    //     -projectzfloors=3 a jump up under a floor-3 slab overhang is refused (the straight line would pass under it);
     //   - real jumps ordered as the targeter does (Verb.OrderForceTarget) on real ticks: ground -> floor 2, floor 2 ->
     //     ground, floor 2 -> floor 2 across the gap; each lands where asked, unhurt; flights between floors filmed in
     //     bursts at yaw 45 and 225 with floor 2 viewed and hidden;
@@ -287,7 +289,7 @@ namespace ProjectZ.Dev
             float range = jpVerb.EffectiveRange;
             Info($"jumper {p} with {string.Join(",", p.apparel.WornApparel.Select(a => a.def.defName))}, jump range {range:0.00}, at {g}");
             // roofed landing: refused, accepted once the roof is lifted
-            IntVec3 roofed = JUp(11, 17, map);
+            IntVec3 roofed = JUp(10, 16, map);   // the roofed corner's outer cell (the arc into its inner cells passes under its roof)
             bool withRoof = jpVerb.ValidateTarget(roofed, false);
             RoofDef r = map.roofGrid.RoofAt(roofed);
             map.roofGrid.SetRoof(roofed, null);
@@ -331,6 +333,7 @@ namespace ProjectZ.Dev
             Teleport(p, under);
             IntVec3 above = JUp(8, 16, map);
             Result("refused: from under the slab to a cell on it (no line through the slab)", !jpVerb.ValidateTarget(above, false), $"{under} (roof {map.roofGrid.RoofAt(under)?.defName}) -> {above}, 3D {Range3D.Distance(under, above, map):0.00}");
+            JumpArc(map, p);
             // a void row
             AnnexMapComponent an = ProjectZ.Annex(map);
             IntVec3 v = new IntVec3(g.x, 0, an.groundZ + (an.stride - an.groundZ) / 2);
@@ -338,6 +341,76 @@ namespace ProjectZ.Dev
             Result("refused: a void row between floors", !jpVerb.ValidateTarget(v, false), $"{v} (floor {ProjectZ.FloorOf(v, map)})");
             // for comparison, the same cell as an up-jump on the ground's own rules would be: the row distance
             Info($"a floor-2 target {JUp(8, 11, map)} is {g.DistanceTo(JUp(8, 11, map)):0.0} rows away (the game's own measure), {Range3D.Distance(g, JUp(8, 11, map), map):0.0} in 3D");
+        }
+
+        // The flight's arc (user decision 2026-10-16): how far past P's south rim (ground row 10) a jump up may land follows
+        // from the jump's length; a high arc under a floor-3 slab overhang is stopped (with 3 floors).
+        private static void JumpArc(Map map, Pawn p)
+        {
+            AnnexMapComponent an = ProjectZ.Annex(map);
+            PawnFlyerProperties props = JumpRules.Props(JumpRules.FlyerOf(jpVerb));
+            Info($"arc: storey {IsoRimBridge.StoreyHeight:0.00}, body {JumpRules.Body:0.00}, flyer {JumpRules.FlyerOf(jpVerb).defName} heightFactor {props.heightFactor}");
+            bool Can(IntVec3 from, IntVec3 to)
+            {
+                Teleport(p, from);
+                return jpVerb.ValidateTarget(to, false);
+            }
+            bool Straight(IntVec3 from, IntVec3 to)
+            {
+                return Heights.Clear(ProjectZ.GroundCellOf(from, map), ProjectZ.GroundCellOf(to, map), ProjectZ.FloorOf(from, map) * Heights.Storey + Heights.Eye,
+                    ProjectZ.FloorOf(to, map) * Heights.Storey + Heights.Middle, map, an.floors);
+            }
+            int Deepest(IntVec3 from)
+            {
+                int d = 0;
+                for (int n = 1; n <= 9; n++)
+                {
+                    if (Can(from, JUp(8, 9 + n, map)))
+                    {
+                        d = n;
+                    }
+                }
+                return d;
+            }
+            IntVec3 near = JO(8, 9), mid = JO(8, 5), far = JO(8, 1);
+            int dn = Deepest(near), dm = Deepest(mid), df = Deepest(far);
+            Info($"arc: deepest landing past the rim from 1 cell out {dn}, from 5 out {dm}, from 9 out {df} (cells)");
+            IntVec3 deep = JUp(8, 12, map);
+            bool farOk = Can(far, deep);
+            bool nearOk = Can(near, deep);
+            bool nearEdge = Can(near, JUp(8, 10, map));
+            Result("arc: a far jump (11 cells) lands 3 cells past the slab's rim", farOk, $"{far} -> {deep}");
+            Result("arc: a short steep jump (3 cells) to the same depth is refused, onto the rim's first cell accepted", !nearOk && nearEdge,
+                $"{near} -> {deep}: {nearOk} (the old straight line: {Straight(near, deep)}); -> {JUp(8, 10, map)}: {nearEdge}");
+            Result("arc: the far jump lands deeper than the short one", df > dn, $"deepest from 9 out {df}, from 1 out {dn}");
+            Teleport(p, JO(8, 3));
+            if (an.floors < 3)
+            {
+                Info("arc: the slab-overhang case needs 3 floors (-projectzfloors=3)");
+                return;
+            }
+            // a floor-3 slab overhang (rows 6..8 over Q's columns, roofed on floor 2 under it) over the arc's top
+            IntVec3 from = JO(19, 3), to = JUp(19, 11, map);
+            CellRect over = new CellRect(jpO.x + 17, jpO.z + 6, 5, 3);
+            bool before = Can(from, to);
+            foreach (IntVec3 g in over)
+            {
+                map.roofGrid.SetRoof(ProjectZ.CellOnFloor(g, 1, map), RoofDefOf.RoofConstructed);
+                IntVec3 u = ProjectZ.CellOnFloor(g, 2, map);
+                map.terrainGrid.SetTerrain(u, PZDefOf.PZ_UpperFloor);
+                map.fogGrid.Unfog(u);
+            }
+            bool with = Can(from, to);
+            bool straight = Straight(from, to);
+            foreach (IntVec3 g in over)
+            {
+                map.terrainGrid.SetTerrain(ProjectZ.CellOnFloor(g, 2, map), PZDefOf.PZ_OpenAir);
+                map.roofGrid.SetRoof(ProjectZ.CellOnFloor(g, 1, map), null);
+            }
+            bool after = Can(from, to);
+            Result("arc: a jump up under a floor-3 slab overhang is refused (its arc hits the slab; the straight line passes under it)", before && !with && after && straight,
+                $"{from} -> {to}, overhang over rows {over.minZ}..{over.maxZ}: before {before}, with {with}, removed {after}; straight line {straight}");
+            Teleport(p, JO(8, 3));
         }
 
         private static void SetupJump(Map map)
@@ -448,6 +521,7 @@ namespace ProjectZ.Dev
                 new JumpCase { name = "down_view2_yaw45", from = JUp(8, 10, map), to = JO(8, 3), view = 1, yaw = 0f },
                 new JumpCase { name = "down_view1_yaw225", from = JUp(8, 10, map), to = JO(8, 3), view = 0, yaw = 180f },
                 new JumpCase { name = "down_deep", from = JUp(8, 13, map), to = JO(8, 1) },
+                new JumpCase { name = "up_far_deep", from = JO(8, 1), to = JUp(8, 14, map), view = 1, yaw = 0f },
                 new JumpCase { name = "across_gap", from = JUp(12, 14, map), to = JUp(17, 14, map), view = 1, yaw = 0f },
                 new JumpCase { name = "up_far", from = JO(8, 3), to = JUp(28, 15, map) },
                 new JumpCase { name = "sang_up", from = JO(10, 3), to = JUp(10, 11, map), who = "sang" },

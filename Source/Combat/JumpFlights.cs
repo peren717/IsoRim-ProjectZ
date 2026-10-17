@@ -17,31 +17,61 @@ namespace ProjectZ.Combat
     //   - range is the 3D distance (Range3D.Distance: over the ground plus the height between the floors; no bonus,
     //     nothing is shot);
     //   - the landing needs open sky (no roof over the landing cell; the stairwell's counts as open);
-    //   - the straight line from the take-off (eye height) to the landing (middle height) must not pass through a
-    //     slab, a roof or a wall (Heights.Clear, the shooting line of sight without the shooters' slab-edge rule: a
-    //     jump may land a little in from the edge, as far as the line clears the rim);
+    //   - the flight's own arc must be clear (user decision 2026-10-16, JumpRules.Arc): the path the flyer is drawn on
+    //     (over the ground between the two cells' centres, rising or falling between the floors, plus the game's arc for
+    //     its flyer) is followed column by column, and the pawn's body (its feet up to Body over them) must not pass
+    //     through a slab, a roof or a sight-blocking building (wall, closed door, rock) there. So how far in from a slab
+    //     edge a jump may land follows from its length: a long jump comes down over the rim steeply enough to land
+    //     further in, a short steep one doesn't; a high arc under a slab overhang is stopped;
     //   - nobody lands in the void rows between floors, and the flight's mid-air re-targeting stays on the landing's floor;
     //   - the flight lasts as long as its 3D length, and is drawn in 3D between the real floors (FloorLayout.ThingOffset),
     //     its shadow on the floor under the pawn;
     //   - the landing does no harm (a jump pack's landing, unlike falling off a slab edge).
-    // Jumps on one floor are left to the game. The game's own AI jumps (paramedic mech toward its rescue or fire,
-    // apocriton escape) go through the same rules; no new AI.
+    // Targeting (CanHitTargetFrom), the warm-up (TryFindShootLineFromTo), the game's AI jump, the mid-air re-targeting
+    // and the range rings all ask Arc. Jumps on one floor are left to the game. The game's own AI jumps (paramedic mech
+    // toward its rescue or fire, apocriton escape) go through the same rules; no new AI.
     public static class JumpRules
     {
+        // The pawn's body over its feet for the arc check (about head height: a little under a wall's top).
+        public static float Body => 0.9f * IsoRimBridge.WallHeight;
+
+        private const float Eps = 0.01f;   // the feet stand on their floor at the take-off and the landing
+        private const float Step = 0.1f;   // height samples within a column, in cells over the ground
+
         // A pawn's jump from root to cell lands on another floor.
         public static bool Cross(IntVec3 root, IntVec3 cell, Map map)
         {
             return map != null && Heights.CrossFloor(root, cell, map);
         }
 
-        // The cross-floor rule (both on floors of map): range, open sky, a clear line.
-        public static bool CanJump(IntVec3 root, IntVec3 cell, float range, Map map)
+        // The cross-floor rule (both on floors of map): range, open sky, a clear arc.
+        public static bool CanJump(IntVec3 root, IntVec3 cell, float range, Map map, ThingDef flyer = null)
         {
-            return Range3D.Distance(root, cell, map) <= range && Column.OpenAbove(cell, map) && Sight(root, cell, map);
+            return Range3D.Distance(root, cell, map) <= range && Column.OpenAbove(cell, map) && Arc(root, cell, map, flyer ?? CurrentFlyer);
         }
 
-        // The straight line from the take-off to the landing clears every slab, roof and wall between them.
-        public static bool Sight(IntVec3 root, IntVec3 cell, Map map)
+        // The arc for the jump being checked now (its flyer, else the game's PawnFlyer).
+        public static bool Sight(IntVec3 root, IntVec3 cell, Map map) => Arc(root, cell, map, CurrentFlyer);
+
+        // ---- the flight's path, shared with its drawing (JumpFlights.Recompute)
+
+        // Height of the path between floors ks and kd at progress u (0..1), without the arc.
+        public static float Path(int ks, int kd, float u)
+        {
+            float storey = IsoRimBridge.StoreyHeight;
+            return Mathf.Lerp(ks * storey, kd * storey, u);
+        }
+
+        // The game's arc over the path at progress u (PawnFlyer.RecomputePosition: heightFactor * Worker.GetHeight).
+        public static float Lift(PawnFlyerProperties props, float u) => props.heightFactor * props.Worker.GetHeight(u);
+
+        // The flyer's true height over the ground at progress u.
+        public static float FlightHeight(PawnFlyerProperties props, int ks, int kd, float u) => Path(ks, kd, u) + Lift(props, u);
+
+        public static PawnFlyerProperties Props(ThingDef flyer) => (flyer ?? ThingDefOf.PawnFlyer).pawnFlyer ?? ThingDefOf.PawnFlyer.pawnFlyer;
+
+        // The flight from root to cell (on two floors) flown by flyer clears every slab, roof and wall on its way.
+        public static bool Arc(IntVec3 root, IntVec3 cell, Map map, ThingDef flyer)
         {
             AnnexMapComponent an = ProjectZ.Annex(map);
             int ks = ProjectZ.FloorOf(root, map);
@@ -52,16 +82,125 @@ namespace ProjectZ.Combat
             {
                 return false;   // straight up or down: a slab is always between
             }
-            return Heights.Clear(gs, gt, ks * Heights.Storey + Heights.Eye, kt * Heights.Storey + Heights.Middle, map, an.floors);
+            PawnFlyerProperties props = Props(flyer);
+            float dx = gt.x - gs.x, dz = gt.z - gs.z;
+            float len = Mathf.Sqrt(dx * dx + dz * dz);
+            // the columns the ground path (centre to centre) crosses, each with its share [u0, u1] of the flight
+            int x = gs.x, z = gs.z;
+            int sx = dx > 0 ? 1 : -1, sz = dz > 0 ? 1 : -1;
+            float tdx = Mathf.Abs(dx) > 1e-6f ? 1f / Mathf.Abs(dx) : float.PositiveInfinity;
+            float tdz = Mathf.Abs(dz) > 1e-6f ? 1f / Mathf.Abs(dz) : float.PositiveInfinity;
+            float tmx = tdx * 0.5f, tmz = tdz * 0.5f;   // half a cell from the centre to the next column
+            float u0 = 0f;
+            for (int guard = 0; guard < 4096; guard++)
+            {
+                bool last = x == gt.x && z == gt.z;
+                float u1 = last ? 1f : Mathf.Min(1f, Mathf.Min(tmx, tmz));
+                if (u1 - u0 > 1e-4f && !ColumnClear(new IntVec3(x, 0, z), u0, u1, len, props, ks, kt, gs, gt, map, an.floors))
+                {
+                    return false;
+                }
+                if (last || u1 >= 1f)
+                {
+                    break;
+                }
+                if (Mathf.Abs(tmx - tmz) < 1e-5f)
+                {
+                    // exactly through a corner
+                    x += sx;
+                    z += sz;
+                    tmx += tdx;
+                    tmz += tdz;
+                }
+                else if (tmx < tmz)
+                {
+                    x += sx;
+                    tmx += tdx;
+                }
+                else
+                {
+                    z += sz;
+                    tmz += tdz;
+                }
+                u0 = u1;
+            }
+            return true;
         }
+
+        // Over ground column g the pawn's feet run between the lowest and highest point of the path in [u0, u1], its head
+        // Body higher. Blocked by a solid plane (slab, roof) strictly inside that span, or a sight-blocking building it
+        // overlaps (the take-off and landing cells themselves don't count).
+        private static bool ColumnClear(IntVec3 g, float u0, float u1, float len, PawnFlyerProperties props, int ks, int kt, IntVec3 gs, IntVec3 gt, Map map, int floors)
+        {
+            int m = Mathf.Max(1, Mathf.CeilToInt((u1 - u0) * len / Step));
+            float lo = float.MaxValue, hi = float.MinValue;
+            for (int j = 0; j <= m; j++)
+            {
+                float h = FlightHeight(props, ks, kt, Mathf.Lerp(u0, u1, (float)j / m));
+                lo = Mathf.Min(lo, h);
+                hi = Mathf.Max(hi, h);
+            }
+            float head = hi + Body;
+            float storey = IsoRimBridge.StoreyHeight;
+            float wall = IsoRimBridge.WallHeight;
+            for (int k = 1; k <= floors; k++)
+            {
+                float level = k * storey;
+                if (level > lo + Eps && level < head && Heights.Plane(g, k, map, floors))
+                {
+                    return false;
+                }
+            }
+            for (int k = 0; k < floors; k++)
+            {
+                if (g == gs && k == ks || g == gt && k == kt)
+                {
+                    continue;
+                }
+                float bottom = k * storey;
+                if (head <= bottom + Eps || lo >= bottom + wall)
+                {
+                    continue;
+                }
+                IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
+                if (c.IsValid && c.InBounds(map) && !c.CanBeSeenOverFast(map))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // ---- the flyer of the jump being checked (the arc's height): set around the jump verbs' CanHitTargetFrom and
+        // JumpUtility.OrderJump (Jump_VerbFlyer_Patch); the game's PawnFlyer otherwise.
+
+        [ThreadStatic] private static ThingDef flyerNow;
+
+        public static ThingDef CurrentFlyer => flyerNow ?? ThingDefOf.PawnFlyer;
+
+        public static ThingDef FlyerOf(Verb v) => v is Verb_CastAbilityJump j ? j.JumpFlyerDef : ThingDefOf.PawnFlyer;
+
+        public static ThingDef Push(ThingDef d)
+        {
+            ThingDef old = flyerNow;
+            flyerNow = d;
+            return old;
+        }
+
+        public static void Pop(ThingDef old) => flyerNow = old;
 
         public static bool IsJumpVerb(Verb v) => v is Verb_Jump || v is Verb_CastAbilityJump;
 
         // ---- the game's AI jumps (JobGiver_AIJumpToJobTarget): its raw row distance and line of sight
 
         [ThreadStatic] private static Map aiMap;
+        [ThreadStatic] private static ThingDef aiFlyer;
 
-        public static void SetAIMap(Map map) => aiMap = map;
+        public static void SetAI(Map map, ThingDef flyer)
+        {
+            aiMap = map;
+            aiFlyer = flyer;
+        }
 
         public static float AIDistance(IntVec3 a, IntVec3 b)
         {
@@ -71,8 +210,36 @@ namespace ProjectZ.Combat
 
         public static bool AISight(IntVec3 a, IntVec3 b, Map map)
         {
-            return Cross(a, b, map) ? Sight(a, b, map) : GenSight.LineOfSight(a, b, map);
+            return Cross(a, b, map) ? Arc(a, b, map, aiFlyer ?? ThingDefOf.PawnFlyer) : GenSight.LineOfSight(a, b, map);
         }
+    }
+
+    // The flyer of the jump checked: the jump verbs' own target checks (targeting, warm-up, AI validation) and the ordered
+    // jump's cell search.
+    [HarmonyPatch]
+    public static class Jump_VerbFlyer_Patch
+    {
+        public static bool Prepare() => CombatGate.Enabled;
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(Verb_Jump), nameof(Verb_Jump.CanHitTargetFrom));
+            yield return AccessTools.Method(typeof(Verb_CastAbilityJump), nameof(Verb_CastAbilityJump.CanHitTargetFrom));
+        }
+
+        public static void Prefix(Verb __instance, out ThingDef __state) => __state = JumpRules.Push(JumpRules.FlyerOf(__instance));
+
+        public static void Finalizer(ThingDef __state) => JumpRules.Pop(__state);
+    }
+
+    [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.OrderJump))]
+    public static class Jump_OrderFlyer_Patch
+    {
+        public static bool Prepare() => CombatGate.Enabled;
+
+        public static void Prefix(Verb verb, out ThingDef __state) => __state = JumpRules.Push(JumpRules.FlyerOf(verb));
+
+        public static void Finalizer(ThingDef __state) => JumpRules.Pop(__state);
     }
 
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.CanHitTargetFrom))]
@@ -138,7 +305,11 @@ namespace ProjectZ.Combat
 
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static void Prefix(Pawn pawn) => JumpRules.SetAIMap(pawn?.Map);
+        public static void Prefix(Pawn pawn, JobGiver_AIJumpToJobTarget __instance)
+        {
+            Verb v = pawn?.abilities?.GetAbility(__instance.ability)?.verb;
+            JumpRules.SetAI(pawn?.Map, v != null ? JumpRules.FlyerOf(v) : null);
+        }
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
@@ -196,6 +367,9 @@ namespace ProjectZ.Combat
 
         public static void Forget(PawnFlyer f) => poses.Remove(f.thingIDNumber);
 
+        // The cell the flight took off from.
+        public static IntVec3 StartCell(PawnFlyer f) => startVec(f).ToIntVec3();
+
         // Floors of the flight's two ends; false for a flight on one floor (or a map without floors).
         public static bool Ends(PawnFlyer f, Map map, out int ks, out int kd)
         {
@@ -239,7 +413,7 @@ namespace ProjectZ.Combat
             Vector3 gd = new Vector3(d.x, d.y, d.z - kd * an.stride);
             Vector3 g = Vector3.Lerp(gs, gd, t2);
             float storey = IsoRimBridge.StoreyHeight;
-            float path = Mathf.Lerp(ks * storey, kd * storey, t2);
+            float path = JumpRules.Path(ks, kd, t2);
             float lift = props.heightFactor * eh;
             float height = path + lift;
             int lo = Mathf.Min(ks, kd), hi = Mathf.Max(ks, kd);
@@ -338,7 +512,8 @@ namespace ProjectZ.Combat
     }
 
     // The flight's mid-air re-targeting (PawnFlyer.CheckDestination, every 15 ticks: the landing became invalid, try the
-    // cells round it): only cells on the landing's own floor, and for a flight between floors only under open sky.
+    // cells round it): only cells on the landing's own floor, and for a flight between floors only under open sky with a
+    // clear arc from the take-off (the flight is redrawn toward the new cell).
     [HarmonyPatch(typeof(PawnFlyer), "CheckDestination")]
     public static class PawnFlyer_CheckDestination_Patch
     {
@@ -360,7 +535,9 @@ namespace ProjectZ.Combat
             IntVec3 dest = destCell(__instance);
             int k = ProjectZ.FloorOf(dest, map);
             bool cross = JumpFlights.Ends(__instance, map, out _, out _);
-            if (Ok(flying, map, dest, k, cross))
+            IntVec3 start = JumpFlights.StartCell(__instance);
+            ThingDef def = __instance.def;
+            if (Ok(flying, map, dest, k, cross, start, def))
             {
                 return false;
             }
@@ -368,7 +545,7 @@ namespace ProjectZ.Combat
             for (int i = 0; i < num; i++)
             {
                 IntVec3 c = dest + GenRadial.RadialPattern[i];
-                if (Ok(flying, map, c, k, cross))
+                if (Ok(flying, map, c, k, cross, start, def))
                 {
                     destCell(__instance) = c;
                     break;
@@ -377,9 +554,9 @@ namespace ProjectZ.Combat
             return false;
         }
 
-        private static bool Ok(Thing flying, Map map, IntVec3 c, int k, bool cross)
+        private static bool Ok(Thing flying, Map map, IntVec3 c, int k, bool cross, IntVec3 start, ThingDef def)
         {
-            return c.InBounds(map) && ProjectZ.FloorOf(c, map) == k && JumpUtility.ValidJumpTarget(flying, map, c) && (!cross || Column.OpenAbove(c, map));
+            return c.InBounds(map) && ProjectZ.FloorOf(c, map) == k && JumpUtility.ValidJumpTarget(flying, map, c) && (!cross || Column.OpenAbove(c, map) && JumpRules.Arc(start, c, map, def));
         }
     }
 
@@ -440,7 +617,7 @@ namespace ProjectZ.Combat
             }
             Thing caster = verb.caster;
             GenDraw.DrawRadiusRing(c, Mathf.Min(r, GenRadial.MaxRadialPatternRadius - 0.5f), Color.white,
-                x => JumpUtility.ValidJumpTarget(caster, map, x) && JumpRules.CanJump(root, x, range, map));
+                x => JumpUtility.ValidJumpTarget(caster, map, x) && JumpRules.CanJump(root, x, range, map, JumpRules.FlyerOf(verb)));
         }
     }
 }
