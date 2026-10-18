@@ -14,7 +14,7 @@ using Verse.AI.Group;
 namespace ProjectZ.Dev
 {
     // M1c part 1 scripted test (mode m1c): roofs under upper floors (D6), heat between floors (D8) and shooting between
-    // floors (decision A, D7). Three houses side by side on the home map:
+    // floors (D7; line of sight Los3D). Three houses side by side on the home map:
     //   A: sealed ground room, upper floor over it with walls and a roof (a sealed upstairs room) and a powered heater
     //      upstairs (wood-fired generator, conduits): the two rooms' temperatures over time;
     //   C: the same ground room with only a roof (the reference for A's ground room); the idle colonists wait in it;
@@ -429,12 +429,18 @@ namespace ProjectZ.Dev
             ShotReport rp = ShotReport.HitReportFor(raider, raider.TryGetAttackVerb(shooter), shooter);
             Result("behind a parapet at the edge: both see, the parapet covers", parapetSees && rp.PassCoverChance < 0.99f, $"pass cover for the shot up {rp.PassCoverChance:P0}");
             Info("hit chance, raider -> colonist behind the parapet: " + Report(raider, shooter));
-            // Slab centre: sees nothing below, seen by nobody below.
+            // Slab centre (3 rows in, Los3D): sees the raider 10 cells out over the edge, both ways; not one 2 cells out
+            // (that line passes under the slab's edge).
             Teleport(shooter, centreCell);
-            Result("same colonist at the slab centre can't see the raider", !CanHit(shooter, raider) && !CanHit(raider, shooter) && !raider.CanSee(shooter),
+            Result("same colonist at the slab centre sees and shoots the raider 10 out, both ways", CanHit(shooter, raider) && CanHit(raider, shooter) && raider.CanSee(shooter) && shooter.CanSee(raider),
                 $"centre {centreCell}: colonist->raider {CanHit(shooter, raider)}, raider->colonist {CanHit(raider, shooter)}");
             Pawn cpick2 = AttackTargetFinder.BestShootTargetFromCurrentPosition(shooter, TargetScanFlags.NeedThreat | TargetScanFlags.NeedAutoTargetable)?.Thing as Pawn;
-            Result("colonist at the centre picks no target below", cpick2 == null || ProjectZ.FloorOf(cpick2.Position, map) == 1, $"picked {cpick2}");
+            Result("colonist at the centre picks the raider below", cpick2 == raider, $"picked {cpick2}");
+            IntVec3 close = new IntVec3(edgeCell.x, 0, houseB.maxZ + 2);
+            Teleport(raider, close);
+            Result("colonist at the centre can't see a raider 2 out from the edge, both ways", !CanHit(shooter, raider) && !CanHit(raider, shooter) && !raider.CanSee(shooter) && !shooter.CanSee(raider),
+                $"raider at {close}: colonist->raider {CanHit(shooter, raider)}, raider->colonist {CanHit(raider, shooter)}");
+            Teleport(raider, raiderCell);
             // The raider in the room below the terrace: can't target the colonist above, at the centre or at the edge.
             bool insideCentre = CanHit(raiderInside, shooter);
             Teleport(shooter, edgeCell);
@@ -534,8 +540,10 @@ namespace ProjectZ.Dev
             int floorRoofs = houseA.Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof);
             Result("after reload: floors' roofs kept", a != null && floorRoofs == houseA.Area && map.roofGrid.RoofAt(houseB.CenterCell) == PZDefOf.PZ_FloorRoof, $"{floorRoofs} of {houseA.Area}");
             bool seeEdge = Heights.CanSee(raiderCell, edgeCell, map) && Heights.CanSee(edgeCell, raiderCell, map);
-            bool seeCentre = Heights.CanSee(raiderCell, centreCell, map) || Heights.CanSee(centreCell, raiderCell, map);
-            Result("after reload: sight between floors the same", seeEdge && !seeCentre, $"edge {seeEdge}, centre {seeCentre}");
+            bool seeCentre = Heights.CanSee(raiderCell, centreCell, map) && Heights.CanSee(centreCell, raiderCell, map);
+            IntVec3 close = new IntVec3(edgeCell.x, 0, houseB.maxZ + 2);
+            bool seeClose = Heights.CanSee(close, centreCell, map) || Heights.CanSee(centreCell, close, map);
+            Result("after reload: sight between floors the same", seeEdge && seeCentre && !seeClose, $"edge {seeEdge}, centre {seeCentre}, centre vs 2 out {seeClose}");
             Room ga = houseA.CenterCell.GetRoom(map);
             Room gc = houseC.CenterCell.GetRoom(map);
             Result("after reload: temperatures kept", ga != null && gc != null && ga.Temperature > gc.Temperature, $"A ground {ga?.Temperature:0.0}, C {gc?.Temperature:0.0}");

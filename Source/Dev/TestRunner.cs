@@ -68,9 +68,11 @@ namespace ProjectZ.Dev
     //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
     //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
-    //                                   lean: shoot leaning round wall corners between floors (down from a slab edge, not
-    //                                   from further in, up from behind a ground corner, AI raiders, one-floor controls),
-    //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=2 or more (TestLean)
+    //                                   los3d: line of sight between floors (Los3D): the game's walk, same-floor parity on a
+    //                                   random layout, sealed rooms and doors, the plan's sheet cases and the user's case
+    //                                   as real ordered shots, facing at normal speed, AI, turrets, smoke, the "no line of
+    //                                   sight" preview and refusal, per-call and fight timings, shots frozen mid-flight;
+    //                                   run with -projectzfloors=3 -projectzseed=N (TestLos3D)
     //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
     //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
     //                                   shuttles: shuttles and transport pods on a floor-2 slab (landing checks, a permit shuttle,
@@ -123,6 +125,8 @@ namespace ProjectZ.Dev
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
+    //   -projectzseed=N     a fixed random seed: the same world, tile and colonists every run, and in los3d each check's
+    //                       own random state from N and the check's name
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
     public static partial class TestRunner
     {
@@ -215,9 +219,17 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
+            if (GenCommandLine.TryGetCommandLineArg("projectzseed", out string sd) && int.TryParse(sd, out int seed) && seed >= 0)
+            {
+                Seed = seed;
+            }
             if (mode == "wallheight")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
+            }
+            else if (Seed >= 0)
+            {
+                h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(SeedPrefix)));
             }
             if (mode == "worldfloors")
             {
@@ -320,9 +332,9 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "wallheight")
+            if (mode == "wallheight" || Seed >= 0)
             {
-                Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
+                Rand.PopState();   // pushed in WallHeightSeedPrefix / SeedPrefix: the same world, tile and colonists every run
             }
         }
 
@@ -397,6 +409,10 @@ namespace ProjectZ.Dev
 
         public static void OnGUI()
         {
+            if (Active)
+            {
+                LosGui();
+            }
             if (Active && guiAction != null && Event.current.type == EventType.Repaint)
             {
                 Action act = guiAction;
@@ -807,7 +823,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "g_setup";
                     }
-                    else if (mode == "lean")
+                    else if (mode == "los3d")
                     {
                         stage = "m_setup";
                     }
