@@ -152,26 +152,6 @@ namespace ProjectZ
             return SlabSupport.Gravship(below, map) && Stairwell.StairThingAt(below, map);
         }
 
-        // A deck built or planned right over the opening of these ship stairs (their opening holds its column).
-        public static bool DeckOverOpening(Thing stairs)
-        {
-            Map map = stairs.Map;
-            if (map == null || ProjectZ.Annex(map) == null)
-            {
-                return false;
-            }
-            foreach (IntVec3 c in stairs.OccupiedRect())
-            {
-                IntVec3 well = StairShape.Above(c, map);
-                IntVec3 up = well.IsValid ? StairShape.Above(well, map) : IntVec3.Invalid;
-                if (up.IsValid && map.terrainGrid.FoundationAt(well) == null && (ShipDeck.At(up, map) || ShipDeck.Planned(up, map)))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         // Ship stairs (or their site) came or went: their opening came or went, so a deck over it joins or leaves the ship
         // set (ShipSet: the game rebuilds it lazily after a substructure change).
         public static void ColumnChanged(Thing t, Map map)
@@ -183,7 +163,8 @@ namespace ProjectZ
         }
 
         // Ship stairs (or their site) gone for good (deconstructed, cancelled, destroyed): their opening is no ship column
-        // cell any more, so a deck over it falls as over removed substructure (ShipDeck.SupportLost). Not at a take-off
+        // cell any more, so a deck over it falls as over removed substructure (ShipDeck.SupportLost), like a roof losing its
+        // support (user decision 2026-10-17: the stairs may be taken down freely, nothing blocks it). Not at a take-off
         // (vanilla despawns with WillReplace), nor when a site turns into a frame or the frame into the stairs (the old
         // one goes with Vanish or FailConstruction before the next one spawns). A deck left over a lost opening by any
         // other way falls at the next load (ShipDeck.CheckAll).

@@ -17,7 +17,8 @@ namespace ProjectZ.Dev
     //      over it) and, placement only, the variant whose exit is over a floor-2 deck: both accepted; colonists build the
     //      first: its landing deck laid over the opening (the floor roof under it), part of the ship, the link usable;
     //   K3 a colonist walks from the ground up both stairs to floor 3; floor-3 decks planned over the rest of the opening
-    //      and built by colonists from up there; part of the ship; ship stairs 1 can't be taken down under them;
+    //      and built by colonists from up there; part of the ship; ship stairs 1 may still be designated for deconstruction
+    //      (user decision: nothing blocks it, the decks over the opening fall when they go);
     //   K4 save and reload: the decks over the opening stay (also after ticks: nothing falls), the load-time deck check
     //      finds none to drop;
     //   then the flight and landing turned of -projectzshipfresh (every deck flies and lands, both links usable, a walk up
@@ -25,8 +26,9 @@ namespace ProjectZ.Dev
     //   old site's opening;
     //   K5 a floor-3 deck over the opening is removed with the remove-foundation tool (a colonist's job; the roof under it
     //      stays as an ordinary roof, as for any deck), the other decks
-    //      stay; then ship stairs 1 are destroyed: their opening is gone, so the deck over it falls (the rule: no ship
-    //      column under it any more) and no deck may be planned there now.
+    //      stay; then colonists deconstruct ship stairs 1 (a real job): their opening is gone, so the decks over it fall
+    //      (no ship column under them any more; one is the landing of ship stairs 2, which then end in open air) and no
+    //      deck may be planned there now.
     public static partial class TestRunner
     {
         private static bool spStack;
@@ -67,6 +69,9 @@ namespace ProjectZ.Dev
                     return;
                 case "sp_k_removed":
                     SkRemoved(SfNew());
+                    return;
+                case "sp_k_deconned":
+                    SkDeconned(SfNew());
                     return;
                 case "sp_k_fell":
                     SkFell(SfNew());
@@ -228,7 +233,7 @@ namespace ProjectZ.Dev
                 string.Join(", ", over.Select(c => $"{SpCell(c, map)} in set {e.ValidSubstructure.Contains(c)}, roof below {map.roofGrid.RoofAt(FloorRoof.Below(c, map))?.defName ?? "none"}")));
             Building_Stairs s1 = SpShipStairs(map)[0];
             AcceptanceReport dec = new Designator_Deconstruct().CanDesignateThing(s1);
-            Result("K3 ship stairs 1 can't be taken down while decks stand over their opening", !dec.Accepted && dec.Reason == "PZ_DeckAboveFirst".Translate(), GlRep(dec));
+            Result("K3 ship stairs 1 may still be designated for deconstruction with decks over their opening", dec.Accepted, GlRep(dec));
             Result("K3 the load-time deck check finds no deck to drop", ShipDeck.CheckAll(map) == 0, "");
             GlShot(0, SP(2, 2), 6f, "sp_k1_stack_ground");
             GlShot(1, SP(2, 2), 6f, "sp_k1_stack_f2");
@@ -356,20 +361,50 @@ namespace ProjectZ.Dev
                 skRm.GetTerrain(map) == PZDefOf.PZ_OpenAir && !ShipDeck.At(skRm, map) && map.roofGrid.RoofAt(well) == RoofDefOf.RoofConstructed && ShipDeck.At(skKeep, map) && ShipDeck.At(skLanding2, map),
                 $"{SpCell(skRm, map)} {skRm.GetTerrain(map)?.defName}, roof below {map.roofGrid.RoofAt(well)?.defName ?? "none"}; kept {ShipDeck.At(skKeep, map)} landing 2 {ShipDeck.At(skLanding2, map)}; after {ticksTotal} ticks");
             // the rule for stairs that are gone: their opening is no ship column cell any more, the decks over it fall
-            Building_Stairs s1 = SpShipStairs(map)[0];
-            foreach (Pawn p in Colonists(map))
+            List<Building_Stairs> st = SpShipStairs(map);
+            Building_Stairs s1 = st[0];
+            skStairs2 = st[1].ThingID;
+            AcceptanceReport dec = new Designator_Deconstruct().CanDesignateThing(s1);
+            Result("K5 ship stairs 1 may be designated for deconstruction (decks still over their opening)", dec.Accepted, GlRep(dec));
+            map.designationManager.AddDesignation(new Designation(s1, DesignationDefOf.Deconstruct));
+            SpWork(map, construct: true);
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            TickUntil(30000, () =>
             {
-                Draft(p, true);
-            }
-            s1.Destroy(DestroyMode.KillFinalize);
-            TickUntil(300, () => false, "sp_k_fell", 60);
+                SpKeep(map);
+                return SpShipStairs(map).Count < 2;
+            }, "sp_k_deconned", 60);
+        }
+
+        private static string skStairs2;
+
+        private static void SkDeconned(Map map)
+        {
+            tickWatch = null;
+            Result("K5 colonists deconstructed ship stairs 1", SpShipStairs(map).Count == 1 && SpShipStairs(map)[0].ThingID == skStairs2, $"{SpShipStairs(map).Count} ship stairs left after {ticksTotal} ticks");
+            TickUntil(300, () =>
+            {
+                SpKeep(map);
+                return false;
+            }, "sp_k_fell", 60);
         }
 
         private static void SkFell(Map map)
         {
             tickWatch = null;
-            Result("K5 ship stairs 1 destroyed: the decks over their old opening fell (no ship column under them now)", !ShipDeck.At(skKeep, map) && !ShipDeck.At(skLanding2, map),
+            Result("K5 the decks over the old opening of ship stairs 1 fell (no ship column under them now)", !ShipDeck.At(skKeep, map) && !ShipDeck.At(skLanding2, map),
                 $"{SpCell(skKeep, map)} {skKeep.GetTerrain(map)?.defName}, {SpCell(skLanding2, map)} {skLanding2.GetTerrain(map)?.defName}");
+            // ship stairs 2 (their landing was one of those decks): reported as they are
+            Building_Stairs s2 = SpShipStairs(map).FirstOrDefault(s => s.ThingID == skStairs2);
+            StairGrid g = StairGrid.For(map);
+            bool usable = s2 != null && g != null && g.links.Any(l => l.stairs == s2 && g.Usable(l));
+            Info($"K5 ship stairs 2 after their landing fell: standing {s2 != null && s2.Spawned}, exit {(s2 == null ? "-" : SpCell(s2.TopCell, map) + " " + s2.TopCell.GetTerrain(map)?.defName + ", standable " + s2.TopCell.Standable(map))}, link usable {usable}; hit points {s2?.HitPoints}/{s2?.MaxHitPoints}");
+            foreach (Pawn p in Colonists(map))
+            {
+                Info($"K5 colonist {p.LabelShort} at {SpCell(p.Position, map)}, health {p.health.summaryHealth.SummaryHealthPercent:0.00}, downed {p.Downed}");
+            }
+            Result("K5 ship stairs 2 stand on, their exit open air now (the landing fell), their link not usable", s2 != null && s2.Spawned && s2.TopCell.GetTerrain(map) == PZDefOf.PZ_OpenAir && !usable,
+                $"standing {s2 != null}, link usable {usable}");
             AcceptanceReport r = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_ShipDeck, skKeep, Rot4.North, map);
             Result("K5 and no ship deck may be planned there now", !r.Accepted && r.Reason == "PZ_DeckNeedsShipBelow".Translate(), GlRep(r));
             Wait(10, "sp_end");

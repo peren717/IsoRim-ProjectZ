@@ -232,18 +232,6 @@ namespace ProjectZ
             map.GetComponent<StairGrid>()?.Register(this, HighCell, top);
         }
 
-        // Ship stairs with a ship deck built or planned over their opening hold its column (ShipColumn): they are taken
-        // down only after it, as substructure only after the deck above it (ShipDeck.Blocker).
-        public override AcceptanceReport DeconstructibleBy(Faction faction)
-        {
-            AcceptanceReport r = base.DeconstructibleBy(faction);
-            if (r.Accepted && ShipStairs.Is(def) && ShipStairs.DeckOverOpening(this))
-            {
-                return "PZ_DeckAboveFirst".Translate();
-            }
-            return r;
-        }
-
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
         {
             Map map = Map;
