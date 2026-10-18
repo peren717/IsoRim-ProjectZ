@@ -1252,6 +1252,50 @@ namespace ProjectZ.Dev
             }
             Result("F11 infestations per band: a dug level-1 hall near a band-1 colony building gets candidates, none on band 1 out of reach of a band-1 building",
                 band1 > 0 && far == 0, $"hall {hallC} (fogged {map.fogGrid.IsFogged(hallC)}, roof {map.roofGrid.RoofAt(hallC)?.defName}, temp {hallC.GetTemperature(map):0}); {found} finds, {band1} on band 1 ({inHall} in the hall), {far} far from band-1 buildings");
+            // InfestationBand's mountainousness row (kept in G3b): a band-1 cell near its band's south edge samples only its
+            // own band (BandRadial alone would fold the cells past the edge onto the void and count them as rockless samples)
+            MethodInfo mtn = AccessTools.Method(typeof(InfestationCellFinder), "GetMountainousnessScoreAt");
+            IntVec3 edge = IntVec3.Invalid;
+            float own = 0f;
+            int samples = 0, off = 0;
+            // (the first band-1 cell 2..10 rows from its band's south or north edge with rock round it, the game's minimum 0.17)
+            foreach (int gz in Enumerable.Range(2, 9).Concat(Enumerable.Range(a.groundZ - 11, 9)))
+            {
+                for (int gx = 0; gx < map.Size.x && !edge.IsValid; gx++)
+                {
+                    IntVec3 g = new IntVec3(gx, 0, gz);
+                    if (!g.InBounds(map))
+                    {
+                        continue;
+                    }
+                    IntVec3 cell = Levels.Cell(g, 1, map);
+                    own = 0f;
+                    samples = off = 0;
+                    for (int i = 0; i < 700; i += 10)
+                    {
+                        IntVec3 s = cell + GenRadial.RadialPattern[i];
+                        if (!s.InBounds(map))
+                        {
+                            continue;
+                        }
+                        if (!ProjectZ.SameBand(s, cell, map))
+                        {
+                            off++;
+                            continue;
+                        }
+                        Building e = s.GetEdifice(map);
+                        own += e != null && e.def.category == ThingCategory.Building && e.def.building.isNaturalRock ? 1f : s.Roofed(map) && s.GetRoof(map).isThickRoof ? 0.5f : 0f;
+                        samples++;
+                    }
+                    if (off > 0 && samples > 0 && own / samples > 0.17f)
+                    {
+                        edge = cell;
+                    }
+                }
+            }
+            float score = mtn != null && edge.IsValid ? (float)mtn.Invoke(null, new object[] { edge, map }) : -1f;
+            Result("F11 mountainousness at a band edge counts only its own band's cells (InfestationBand's row)", edge.IsValid && Mathf.Abs(score - own / samples) < 0.0001f,
+                $"cell {edge}: game {score:0.0000}, own band only {own / Mathf.Max(1, samples):0.0000} ({samples} samples on the band, {off} past its edge; counted as rockless void samples it would be {own / Mathf.Max(1, samples + off):0.0000})");
             // R23: a child hive's spot on another band is refused (CompSpawnerHives.CanSpawnHiveAt)
             MethodInfo can = AccessTools.Method(typeof(CompSpawnerHives), "CanSpawnHiveAt");
             // (a walkable thick-roofed cell on the ground, F10's dug cell, as the "other band" spot)

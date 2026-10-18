@@ -28,14 +28,24 @@ namespace ProjectZ.Dev
     //      the blast (Explosions3D) is fingerprinted (unchanged without the clip).
     //   R2 a short circuit (the incident) by grass on the ground's north rows, wood and hay on floor 2's south row: no fire
     //      there after 2,500 ticks.
-    //   R3 a toxifier on floor 2's south rows pollutes only floor 2; a pollution pump there unpollutes only floor 2 (the
-    //      BandScope rows G3 retires are off for R3 and R4: BandRadial alone).
-    //   R4 a tornado driving north on the ground: nothing on floor 2's south rows damaged, no roof lost.
+    //   R3 a toxifier on floor 2's south rows pollutes only floor 2; a pollution pump there unpollutes only floor 2.
+    //   R4 a tornado driving north on the ground: nothing on floor 2's south rows damaged, no roof lost (the damage is
+    //      BandRadial's alone; BandScope's Tornado.Tick row swaps only the tornado's own move).
     //   R5 a colonist on floor 2's south row walled in on its cell: it recovers onto floor 2, not onto the ground.
-    //   R6 a colonist on floor 2's south row drops its weapon, every cell next to it taken: it lands on floor 2 (the
-    //      same-floor placement patch off).
+    //   R6 a colonist on floor 2's south row drops its weapon, every cell next to it taken: it lands on floor 2.
     //   R7 Waterskip (Royalty) cast on floor 2's south row: floor 2's fires out, the ground's north row still burning.
     //   R8 a pyromaniac on floor 2's south row, a fire on the ground 2 raw rows away: no thought; control: a fire on floor 2.
+    //   R10..R15 the BandScope rows retired in G3b, each now BandRadial's alone (the game's comps, ticking): R10 a
+    //      smokeleaf aura (CompGiveHediffSeverity), R11 a proximity trigger (RadialTrigger), R12 a proximity letter
+    //      (Biotech exostrider remains), R13 a plant damager, R14 pollution over time (Biotech), R15 an archean tree's
+    //      terraforming (Odyssey): a source on the ground's north row does nothing on floor 2's south rows; controls on
+    //      the ground. (R10, R13, R14, R16: the comp on a 1x1 test host, its props sized for the strip.)
+    //   R16 a snow expander on the ground's north rows: snow on the ground, none on the void or floor 2, none in a ground
+    //      room open only to the void; R16b the same with BandScope's snow row off (test switch): the flood walks the
+    //      void into that room (why the row stays).
+    //   R17 drops at band edges on floors 1-3 (the ground's north row, floor 2's south and north rows, floor 3's south
+    //      row): a weapon dropped and a piece of apparel taken off, its band's cells within 2.9 taken: each lands on its
+    //      floor (the same-floor placement patch is retired: BandRadial alone).
     //   P1 startup cost of the list (resolve, patch) and P3 per-method counters (a clip seen as needed, 0 calls = inlined).
     // Mode radialn1 (-projectzfloors=1): N1, the ground-only variants of R1, R2, R5, R6, R7 fingerprinted (compared
     //   with and without the clip: identical). Mode radialperf (P2): ms per tick with 30 colonists (run with and without
@@ -71,6 +81,20 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(Game), nameof(Game.LoadGame)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(RdLoadedPostfix)));
             h.Patch(AccessTools.Method(typeof(Thing), nameof(Thing.TakeDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(RdDamagePrefix)));
             h.Patch(AccessTools.Method(typeof(Pawn_MindState), "Notify_DangerousExploderAboutToExplode"), postfix: new HarmonyMethod(typeof(TestRunner), nameof(RdWarnPostfix)));
+            h.Patch(AccessTools.PropertyGetter(typeof(MapTemperature), nameof(MapTemperature.OutdoorTemp)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(RdColdPrefix)));
+        }
+
+        // R16: a frost for the snow expander (test only, while the check runs)
+        private static bool rdCold;
+
+        private static bool RdColdPrefix(ref float __result)
+        {
+            if (!rdCold)
+            {
+                return true;
+            }
+            __result = -10f;
+            return false;
         }
 
         // The compared runs load one save: the game's rand fixed once it is loaded (the load itself draws from the
@@ -228,17 +252,12 @@ namespace ProjectZ.Dev
                 }
             }
             map.roofCollapseBuffer.Clear();
-            BandScope_Patch.RetirableOff = false;
-            Patches_TestOff(false);
+            BandScope_Patch.TestOff = false;
+            rdCold = false;
             BandRadial.Counting = false;
             Out($"  {rdFix.name}: cleaned up ({removed} things removed, strip x {rdFix.x0}..{rdFix.x1} restored)");
             rdFix = null;
             RdEndSeed();
-        }
-
-        private static void Patches_TestOff(bool on)
-        {
-            TryPlaceThing_SameFloor_Patch.TestOff = on;
         }
 
         // A fixed number of real ticks inside the check's own seed (one frame); stops early when cond holds.
@@ -546,6 +565,33 @@ namespace ProjectZ.Dev
                     return true;
                 case "rd_r8":
                     RdR8(map);
+                    Wait(5, "rd_r10");
+                    return true;
+                case "rd_r10":
+                    RdR10(map);
+                    RdR11(map);
+                    Wait(5, "rd_r12");
+                    return true;
+                case "rd_r12":
+                    RdR12(map);
+                    RdR13(map);
+                    Wait(5, "rd_r14");
+                    return true;
+                case "rd_r14":
+                    RdR14(map);
+                    RdR15(map);
+                    Wait(5, "rd_r16");
+                    return true;
+                case "rd_r16":
+                    RdR16(map, false);
+                    if (!RdOff)
+                    {
+                        RdR16(map, true);
+                    }
+                    Wait(5, "rd_r17");
+                    return true;
+                case "rd_r17":
+                    RdR17(map);
                     Wait(5, "rd_end");
                     return true;
                 case "rd_perf":
@@ -633,6 +679,9 @@ namespace ProjectZ.Dev
             Info($"P1 radius clip startup: {BandRadial.Listed} listed, {BandRadial.Patched} patched, {BandRadial.SitesSwapped} producers swapped, resolve {BandRadial.ResolveMs:0.0} ms, patch {BandRadial.PatchMs:0} ms");
             Dictionary<string, int> groups = BandRadial.Rows.GroupBy(r => r.group).ToDictionary(g => g.Key, g => g.Count());
             Info("R0 list by group: " + string.Join(", ", groups.OrderBy(kv => kv.Key).Select(kv => kv.Key + " " + kv.Value)));
+            Dictionary<string, int> scope = BandScope_Patch.PerMethod;
+            Result("R0 BandScope swaps only the tornado's move and the snow flood (no radius loop of BandRadial's)", BandScope_Patch.Missing.Count == 0 && scope.Count == 3 && scope.ContainsKey("Tornado.Tick") && scope.ContainsKey("CompSnowExpand.TryExpandSnow") && scope.Keys.Any(k => k.Contains("<TryExpandSnow>")),
+                string.Join(", ", scope.Select(kv => kv.Key + " " + kv.Value)));
             if (RdOff)
             {
                 Result("R0 clip off: nothing patched", BandRadial.Patched == 0, $"{BandRadial.Patched} patched");
@@ -752,10 +801,12 @@ namespace ProjectZ.Dev
             }
         }
 
-        // The cell and its 8 neighbours on its band hold one steel stack each (no room for a dropped weapon there).
-        private static void RdItemsAround(Map map, IntVec3 c)
+        // The cell and its 8 neighbours on its band (or every band cell within r) hold one steel stack each (no room for a
+        // dropped weapon there).
+        private static void RdItemsAround(Map map, IntVec3 c, float r = 0f)
         {
-            foreach (IntVec3 n in GenAdj.CellsAdjacent8Way(new TargetInfo(c, map)).Concat(new[] { c }))
+            IEnumerable<IntVec3> cells = r > 0f ? GenRadial.RadialCellsAround(c, r, true) : GenAdj.CellsAdjacent8Way(new TargetInfo(c, map)).Concat(new[] { c });
+            foreach (IntVec3 n in cells)
             {
                 if (n.InBounds(map) && ProjectZ.SameBand(n, c, map) && n.Standable(map))
                 {
@@ -916,7 +967,6 @@ namespace ProjectZ.Dev
         private static void RdR3(Map map)
         {
             RdBegin(map, 3, "R3 toxifier", 2);
-            BandScope_Patch.RetirableOff = true;
             if (!ModsConfig.BiotechActive)
             {
                 Info("R3 Biotech not active: skipped");
@@ -942,7 +992,7 @@ namespace ProjectZ.Dev
             List<IntVec3> all = RdColumn(map, rdFix.x0 - 27, rdFix.x1 + 27).Where(c => map.pollutionGrid.IsPolluted(c)).ToList();
             int onF2 = all.Count(c => Levels.LevelOf(c, map) == 1);
             int off = all.Count - onF2;
-            RdExpect("R3 a toxifier on floor 2's south rows (BandScope's rows off) pollutes only floor 2", all.Count >= 30 && off == 0, true,
+            RdExpect("R3 a toxifier on floor 2's south rows pollutes only floor 2", all.Count >= 30 && off == 0, true,
                 $"{all.Count} polluted, {onF2} on floor 2, {off} elsewhere {string.Join(" ", all.Where(c => Levels.LevelOf(c, map) != 1).Take(6).Select(c => RdCell(c, map)))}");
             RdInlineWatch("R3", "CompToxifier.UpdateNextPolluteCell", "CompToxifier.PolluteNextCell");
             RdEnd(map);
@@ -951,7 +1001,6 @@ namespace ProjectZ.Dev
         private static void RdR3b(Map map)
         {
             RdBegin(map, 4, "R3 pollution pump", 3);
-            BandScope_Patch.RetirableOff = true;
             if (!ModsConfig.BiotechActive)
             {
                 Info("R3 Biotech not active: pump skipped");
@@ -1003,7 +1052,6 @@ namespace ProjectZ.Dev
         private static void RdR4(Map map)
         {
             RdBegin(map, 5, "R4 tornado", 4);
-            BandScope_Patch.RetirableOff = true;
             RdSlab(map, new CellRect(rdFix.x0, 0, 11, 4));
             Dictionary<Thing, int> hp = new Dictionary<Thing, int>();
             for (int x = rdFix.x0 + 1; x <= rdFix.x1 - 1; x += 2)
@@ -1021,16 +1069,7 @@ namespace ProjectZ.Dev
             // a tornado on the ground's north row moving along it (west), then one driving north into the void
             Thing tornado = GenSpawn.Spawn(ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("Tornado")), RdG(rdFix.x0 + 5, RdNorth), map);
             Traverse.Create(tornado).Field("direction").SetValue(180f);
-            BandScope_Patch.AllOff = true;   // (BandRadial alone; Tornado.Tick's scope would cover the damage too)
-            int t1;
-            try
-            {
-                t1 = RdTicks(150, () => tornado.Destroyed || ProjectZ.IsAnnex(tornado.Position, map), 5);
-            }
-            finally
-            {
-                BandScope_Patch.AllOff = false;
-            }
+            int t1 = RdTicks(150, () => tornado.Destroyed || ProjectZ.IsAnnex(tornado.Position, map), 5);
             Out($"  R4 first tornado after {t1} ticks: {(tornado.Spawned ? RdCell(tornado.Position, map) : "gone")}");
             if (!tornado.Destroyed)
             {
@@ -1050,7 +1089,7 @@ namespace ProjectZ.Dev
             int damaged = hp.Count(kv => kv.Key.Destroyed || kv.Key.HitPoints < kv.Value);
             int roofs = roofCells.Count(c => map.roofGrid.Roofed(c));
             Result("R4 the tornado ends at the void (Tornado.Tick's row, kept)", tornado.Destroyed && maxZ < rdGz, $"destroyed {tornado.Destroyed} after {t} ticks, furthest row {maxZ}");
-            RdExpect("R4 a tornado along the ground's north row (BandScope off): nothing on floor 2's south rows damaged, no roof lost", damaged == 0 && roofs == roofCells.Count && !p.Dead && Injuries(p) == inj, true,
+            RdExpect("R4 a tornado along the ground's north row: nothing on floor 2's south rows damaged, no roof lost", damaged == 0 && roofs == roofCells.Count && !p.Dead && Injuries(p) == inj, true,
                 $"walls damaged {damaged} of {hp.Count} (on floor 2's south row), roofs {roofCells.Count} -> {roofs} (rows 2-4), colonist injuries {inj} -> {Injuries(p)}");
             RdInlineWatch("R4", "Tornado.DamageCloseThings", "Tornado.DamageFarThings", "Tornado.DestroyRoofs");
             if (!tornado.Destroyed)
@@ -1078,7 +1117,6 @@ namespace ProjectZ.Dev
         private static void RdR6(Map map)
         {
             RdBegin(map, 7, "R6 drop", 6);
-            Patches_TestOff(true);
             RdSlab(map, new CellRect(rdFix.x0, 0, 11, 8));
             IntVec3 c = RdF2(rdFix.x0 + 5, 0);
             Pawn p = RdPawn(map, c, "Gun_Revolver");
@@ -1086,7 +1124,7 @@ namespace ProjectZ.Dev
             RdItemsAround(map, c);
             p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.DropEquipment, gun), JobTag.DraftedOrder);
             RdTicks(120, () => gun.Spawned);
-            RdExpect("R6 a weapon dropped on floor 2's south row, its cell and neighbours taken (same-floor patch off): it lands on floor 2", gun.Spawned && Levels.LevelOf(gun.Position, map) == 1, false,
+            RdExpect("R6 a weapon dropped on floor 2's south row, its cell and neighbours taken: it lands on floor 2", gun.Spawned && Levels.LevelOf(gun.Position, map) == 1, false,
                 $"spawned {gun.Spawned} at {(gun.Spawned ? RdCell(gun.Position, map) : "-")}");
             RdInlineWatch("R6", "GenPlace.TryFindPlaceSpotNear");
             RdEnd(map);
@@ -1149,6 +1187,291 @@ namespace ProjectZ.Dev
             bool control = RdPyroThought(p);
             Result("R8 control: a fire on floor 2 near the pyromaniac gives the thought", control, $"thought {control}");
             RdInlineWatch("R8", "ThoughtWorker_PyromaniacNearFlames.NumFiresNear");
+            RdEnd(map);
+        }
+
+        // ==================================================================== R10..R17 (compat G3b: the retired rows)
+
+        // A 1x1 test host (a transport pod: a building ticking every tick) with the comp under test added, as a def's comp.
+        private static ThingWithComps RdHost(Map map, IntVec3 c, CompProperties props)
+        {
+            ThingWithComps host = (ThingWithComps)GenSpawn.Spawn(ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("TransportPod")), c, map);
+            ThingComp comp = (ThingComp)Activator.CreateInstance(props.compClass);
+            comp.parent = host;
+            host.AllComps.Add(comp);
+            comp.Initialize(props);
+            comp.PostSpawnSetup(false);
+            return host;
+        }
+
+        // ground cells (z on the ground) within r of c
+        private static List<IntVec3> RdGroundNear(Map map, IntVec3 c, float r) => GenRadial.RadialCellsAround(c, r, true).Where(x => x.InBounds(map) && x.z < rdGz).ToList();
+
+        private static void RdR10(Map map)
+        {
+            RdBegin(map, 10, "R10 smokeleaf aura", 1);
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            HediffDef high = DefDatabase<HediffDef>.GetNamed("SmokeleafHigh");
+            RdHost(map, RdG(rdFix.x0 + 5, RdNorth), new CompProperties_GiveHediffSeverity { hediff = high, range = 4.9f, severityPerSecond = 0.05f });
+            Pawn a = RdPawn(map, RdG(rdFix.x0 + 5, RdNorth - 3));
+            Pawn b = RdPawn(map, RdF2(rdFix.x0 + 5, 0));
+            RdTicks(400);
+            bool ha = a.health.hediffSet.HasHediff(high), hb = b.health.hediffSet.HasHediff(high);
+            Result("R10 control: a ground pawn 3 cells from a smokeleaf aura on the ground's north row gets it", ha, $"{a.LabelShort} {RdCell(a.Position, map)}: {ha}");
+            RdExpect("R10 a pawn on floor 2's south row (2 raw rows from the aura) does not", !hb, false, $"{b.LabelShort} {RdCell(b.Position, map)}: {hb}");
+            RdInlineWatch("R10", "CompGiveHediffSeverity.CompTick");
+            RdEnd(map);
+        }
+
+        private static void RdR11(Map map)
+        {
+            RdBegin(map, 11, "R11 proximity trigger", 2);
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            RadialTrigger trig = (RadialTrigger)ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("RadialTrigger"));
+            trig.maxRadius = 3;
+            trig.signalTag = "pz_r11";
+            GenSpawn.Spawn(trig, RdG(rdFix.x0 + 5, RdNorth), map);
+            Pawn b = RdPawn(map, RdF2(rdFix.x0 + 5, 0));
+            RdTicks(300);
+            bool kept = trig.Spawned;
+            Pawn a = RdPawn(map, RdG(rdFix.x0 + 5, RdNorth - 2));
+            int t = RdTicks(300, () => !trig.Spawned);
+            RdExpect("R11 a proximity trigger on the ground's north row: a colonist on floor 2's south row (2 raw rows away) does not set it off", kept, true, $"{b.LabelShort} {RdCell(b.Position, map)}; still there after 300 ticks {kept}");
+            Result("R11 control: a ground colonist 2 cells away sets it off", !trig.Spawned, $"{a.LabelShort} {RdCell(a.Position, map)}; gone {!trig.Spawned} after {t} ticks");
+            RdInlineWatch("R11", "RadialTrigger.Tick");
+            RdEnd(map);
+        }
+
+        private static void RdR12(Map map)
+        {
+            if (!ModsConfig.BiotechActive)
+            {
+                Info("R12 Biotech not active: skipped");
+                return;
+            }
+            RdBegin(map, 12, "R12 proximity letter", 3);
+            if (Find.Anomaly != null && Find.Anomaly.Level > 0)
+            {
+                Info("R12 anomaly level above 0 (the letter is off): skipped");
+                RdEnd(map);
+                return;
+            }
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            Thing remains = Place(DefDatabase<ThingDef>.GetNamed("AncientExostriderRemains"), null, RdG(rdFix.x0 + 5, RdNorth - 1), map);
+            CompProximityLetter comp = remains.TryGetComp<CompProximityLetter>();
+            int letters = Find.LetterStack.LettersListForReading.Count;
+            Pawn b = RdPawn(map, RdF2(rdFix.x0 + 5, 0));
+            RdTicks(300);
+            bool sentUp = comp.letterSent;
+            Pawn a = RdPawn(map, RdG(rdFix.x0 + 5, RdNorth - 4));
+            int t = RdTicks(300, () => comp.letterSent);
+            RdExpect("R12 exostrider remains on the ground's north rows: a colonist on floor 2's south row (3 raw rows away) sends no letter", !sentUp, false, $"{b.LabelShort} {RdCell(b.Position, map)}; letter {sentUp}");
+            Result("R12 control: a ground colonist 3 cells away sends it", comp.letterSent, $"{a.LabelShort} {RdCell(a.Position, map)}; letter {comp.letterSent} after {t} ticks");
+            RdInlineWatch("R12", "CompProximityLetter.CompTick");
+            while (Find.LetterStack.LettersListForReading.Count > letters)
+            {
+                Find.LetterStack.RemoveLetter(Find.LetterStack.LettersListForReading.Last());
+            }
+            if (!remains.Destroyed)
+            {
+                remains.Destroy();
+            }
+            RdEnd(map);
+        }
+
+        private static void RdR13(Map map)
+        {
+            RdBegin(map, 13, "R13 plant damager", 4);
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            RdGrass(map, new CellRect(rdFix.x0, RdNorth - 3, 11, 4).Cells);
+            RdGrass(map, new CellRect(rdFix.x0, 0, 11, 3).Cells.Select(g => RdF2(g.x, g.z)));
+            RdHost(map, RdG(rdFix.x0 + 5, RdNorth), new CompProperties_PlantDamager { ticksBetweenDamage = 60, radius = 4.9f, damagePerCycle = 20f, cycleCountOnSpawn = 0 });
+            List<Plant> down = new CellRect(rdFix.x0, RdNorth - 3, 11, 4).Cells.Select(c => c.GetPlant(map)).Where(p => p != null).ToList();
+            List<Plant> up = new CellRect(rdFix.x0, 0, 11, 3).Cells.Select(g => RdF2(g.x, g.z).GetPlant(map)).Where(p => p != null).ToList();
+            RdTicks(300);
+            int downHurt = down.Count(p => p.Destroyed || p.HitPoints < p.MaxHitPoints), upHurt = up.Count(p => p.Destroyed || p.HitPoints < p.MaxHitPoints);
+            Result("R13 control: a plant damager on the ground's north row hurts the ground's grass", downHurt > 5, $"{downHurt} of {down.Count} hurt");
+            RdExpect("R13 it hurts no grass on floor 2's south rows (2 raw rows on)", up.Count > 20 && upHurt == 0, true, $"{upHurt} of {up.Count} hurt");
+            RdInlineWatch("R13", "CompPlantDamager.DamageCycle");
+            RdEnd(map);
+        }
+
+        private static void RdR14(Map map)
+        {
+            if (!ModsConfig.BiotechActive)
+            {
+                Info("R14 Biotech not active: skipped");
+                return;
+            }
+            RdBegin(map, 14, "R14 pollute over time", 5);
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            IntVec3 c = RdG(rdFix.x0 + 5, RdNorth);
+            // the ground within 2.9 polluted already: the nearest clean cells are floor 2's (2 raw rows) and the ground's at 3
+            foreach (IntVec3 g in RdGroundNear(map, c, 2.9f))
+            {
+                map.pollutionGrid.SetPolluted(g, true);
+            }
+            HashSet<IntVec3> before = new HashSet<IntVec3>(RdColumn(map, rdFix.x0, rdFix.x1).Where(x => map.pollutionGrid.IsPolluted(x)));
+            RdHost(map, c, new CompProperties_PolluteOverTime { cellsToPollutePerDay = 1000 });
+            RdTicks(600);
+            List<IntVec3> added = RdColumn(map, rdFix.x0 - 10, rdFix.x1 + 10).Where(x => map.pollutionGrid.IsPolluted(x) && !before.Contains(x)).ToList();
+            int ground = added.Count(x => x.z < rdGz);
+            RdExpect("R14 pollution over time from the ground's north row: the next cells polluted are the ground's, none on floor 2", added.Count >= 6 && ground == added.Count, true,
+                $"{added.Count} polluted, {ground} on the ground; elsewhere {string.Join(" ", added.Where(x => x.z >= rdGz).Take(6).Select(x => RdCell(x, map)))}");
+            RdInlineWatch("R14", "CompPolluteOverTime.Pollute");
+            RdEnd(map);
+        }
+
+        private static void RdR15(Map map)
+        {
+            if (!ModsConfig.OdysseyActive)
+            {
+                Info("R15 Odyssey not active: skipped");
+                return;
+            }
+            RdBegin(map, 15, "R15 terraformer", 6);
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            ThingDef def = DefDatabase<ThingDef>.GetNamed("Plant_TreeArchean");
+            CompProperties_Terraformer props = def.GetCompProperties<CompProperties_Terraformer>();
+            TerrainDef rich = props.convertTerrainDef;
+            // floor 2's south rows soil (terraformable, as a planter floor could be); the ground within 3.9 converted already
+            List<IntVec3> up = new CellRect(rdFix.x0, 0, 11, 4).Cells.Select(g => RdF2(g.x, g.z)).ToList();
+            foreach (IntVec3 u in up)
+            {
+                map.terrainGrid.SetTerrain(u, TerrainDefOf.Soil);
+            }
+            IntVec3 c = RdG(rdFix.x0 + 5, RdNorth);
+            HashSet<IntVec3> pre = new HashSet<IntVec3>(RdGroundNear(map, c, 3.9f));
+            foreach (IntVec3 g in pre)
+            {
+                map.terrainGrid.SetTerrain(g, rich);
+            }
+            bool leakable = CompTerraformer.CanEverConvertCell(up[5], map, rich);
+            float keep = props.secondsPerConvert;
+            props.secondsPerConvert = 4f;   // (test only: a cell every 240 ticks instead of 20 s; put back below)
+            try
+            {
+                Plant tree = (Plant)ThingMaker.MakeThing(def);
+                tree.Growth = 1f;
+                GenSpawn.Spawn(tree, c, map);
+                RdTicks(2500);
+            }
+            finally
+            {
+                props.secondsPerConvert = keep;
+            }
+            int ground = RdGroundNear(map, c, 6.9f).Count(g => !pre.Contains(g) && g.GetTerrain(map) == rich);
+            int upRich = up.Count(u => u.GetTerrain(map) == rich);
+            Result("R15 control: an archean tree on the ground's north row turns soil round it to rich soil", ground + upRich >= 4, $"{ground} ground cells converted, {upRich} on floor 2");
+            RdExpect("R15 it converts no soil on floor 2's south rows (2 raw rows on)", leakable && upRich == 0, true, $"floor-2 soil convertible {leakable}; converted there {upRich} of {up.Count}");
+            RdInlineWatch("R15", "CompTerraformer.TryGetCellToCovert");
+            RdEnd(map);
+        }
+
+        // R16: a snow expander (the comp, no vanilla def has it) on the ground's north rows; a ground room open only to the
+        // void (walls west, south and east) next to it. off: BandScope's snow row off (test switch), to show why it stays.
+        private static void RdR16(Map map, bool off)
+        {
+            RdBegin(map, 16, off ? "R16b snow, row off" : "R16 snow", off ? 0 : 7);
+            BandScope_Patch.TestOff = off;
+            rdCold = true;
+            RdSlab(map, new CellRect(rdFix.x0, 0, 11, 6));
+            int x0 = rdFix.x0;
+            for (int z = RdNorth - 2; z <= RdNorth; z++)
+            {
+                Place(ThingDefOf.Wall, ThingDefOf.WoodLog, RdG(x0 + 6, z), map);
+                Place(ThingDefOf.Wall, ThingDefOf.WoodLog, RdG(x0 + 9, z), map);
+            }
+            for (int x = x0 + 6; x <= x0 + 9; x++)
+            {
+                Place(ThingDefOf.Wall, ThingDefOf.WoodLog, RdG(x, RdNorth - 3), map);
+            }
+            List<IntVec3> pocket = new CellRect(x0 + 7, RdNorth - 2, 2, 3).Cells.ToList();
+            ThingWithComps host = RdHost(map, RdG(x0 + 5, RdNorth - 1), new CompProperties_SnowExpand { expandInterval = 30, addAmount = 0.5f, maxRadius = 5.5f });
+            RdTicks(900);
+            float radius = Traverse.Create(host.AllComps.OfType<CompSnowExpand>().First()).Field("snowRadius").GetValue<float>();
+            float Depth(IEnumerable<IntVec3> cells) => cells.Sum(c => map.snowGrid.GetDepth(c));
+            List<IntVec3> strip = RdStrip(map).ToList();
+            float ground = Depth(strip.Where(c => c.z < rdGz && !pocket.Contains(c)));
+            float voidSnow = Depth(strip.Where(c => ProjectZ.IsVoid(c, map)));
+            float upper = Depth(strip.Where(c => c.z >= rdGz && !ProjectZ.IsVoid(c, map)));
+            float inPocket = Depth(pocket);
+            string d = $"radius {radius:0.0}; snow: ground {ground:0.00}, void {voidSnow:0.00}, floors above {upper:0.00}, the room open to the void {inPocket:0.00}";
+            if (!off)
+            {
+                Result("R16 control: a snow expander on the ground's north rows snows on the ground", ground > 1f, d);
+                RdExpect("R16 no snow on the void or floor 2, none in a ground room open only to the void", voidSnow == 0f && upper == 0f && inPocket == 0f, false, d);
+                RdInlineWatch("R16", "CompSnowExpand.TryExpandSnow");
+            }
+            else
+            {
+                Result("R16b without BandScope's snow row: still none on the void or floor 2 (BandRadial), but the flood walks the void into the room (why the row stays)", ground > 1f && voidSnow == 0f && upper == 0f && inPocket > 0f, d);
+            }
+            RdEnd(map);
+        }
+
+        // R17: drops at band edges on floors 1-3. Fixture a: the ground's north row and floor 2's north row; b: floor 2's
+        // south row and floor 3's south row (the edges of a fixture are far apart). Each colonist, every cell of its band
+        // within 2.9 taken (the next band's free cells are 2 raw rows away), drops its weapon and then takes off a piece of
+        // apparel. (G3b retired the same-floor placement patch: with the clip a candidate is a band cell or the void.)
+        private static void RdR17(Map map)
+        {
+            RdR17Fix(map, 17, 7, false);
+            RdR17Fix(map, 18, 1, true);
+        }
+
+        private static void RdR17Fix(Map map, int check, int slot, bool south)
+        {
+            RdBegin(map, check, $"R17{(south ? "b" : "a")} drops", slot);
+            int x0 = rdFix.x0;
+            RdSlab(map, new CellRect(x0, 0, 11, 7), 1);
+            RdSlab(map, new CellRect(x0, rdGz - 7, 11, 7), 1);
+            RdSlab(map, new CellRect(x0, 0, 11, 7), 2);
+            // (floor, ground row) of each edge
+            List<(int k, int z)> edges = south ? new List<(int, int)> { (1, 0), (2, 0) } : new List<(int, int)> { (0, RdNorth), (1, rdGz - 1) };
+            List<Pawn> ps = new List<Pawn>();
+            foreach ((int k, int z) in edges)
+            {
+                IntVec3 c = RdOn(x0 + 5, z, k, map);
+                Pawn p = RdPawn(map, c, "Gun_Revolver");
+                RdItemsAround(map, c, 2.9f);
+                ps.Add(p);
+            }
+            List<Thing> guns = ps.Select(p => (Thing)p.equipment.Primary).ToList();
+            for (int i = 0; i < ps.Count; i++)
+            {
+                ps[i].jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.DropEquipment, guns[i]), JobTag.DraftedOrder);
+            }
+            RdTicks(200, () => guns.All(g => g.Spawned));
+            List<Thing> worn = ps.Select(p => (Thing)p.apparel.WornApparel.OrderBy(ap => ap.def.defName).FirstOrDefault()).ToList();
+            for (int i = 0; i < ps.Count; i++)
+            {
+                if (worn[i] != null)
+                {
+                    ps[i].jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.RemoveApparel, worn[i]), JobTag.DraftedOrder);
+                }
+            }
+            RdTicks(600, () => worn.All(w => w == null || w.Spawned));
+            List<string> land = new List<string>();
+            bool ok = true;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                foreach (Thing t in new[] { guns[i], worn[i] })
+                {
+                    if (t == null)
+                    {
+                        land.Add("none");
+                        continue;
+                    }
+                    bool on = t.Spawned && Levels.LevelOf(t.Position, map) == edges[i].k;
+                    ok &= on;
+                    land.Add(t.Spawned ? $"{t.def.defName} lv {Levels.LevelOf(t.Position, map)} ({t.Position.x - x0},{ProjectZ.GroundCellOf(t.Position, map).z})" : t.def.defName + " not down");
+                }
+            }
+            string s = string.Join(", ", land);
+            string where = string.Join(" and ", edges.Select(e => e.k == 0 ? "the ground's north row" : $"floor {e.k + 1}'s {(e.z == 0 ? "south" : "north")} row"));
+            RdExpect($"R17{(south ? "b" : "a")} drops on {where}: each weapon and piece of apparel lands on its floor", ok && worn.All(w => w != null), false, s);
+            RdInlineWatch($"R17{(south ? "b" : "a")}", "GenPlace.TryFindPlaceSpotNear");
             RdEnd(map);
         }
 

@@ -246,7 +246,9 @@ namespace ProjectZ.Dev
                     Info($"void: field x {voO}..{voO + 91}, ground rows {voGz}, stride {an.stride} (void rows {an.stride - voGz}), rule {(Leak ? "OFF (-projectznovoidrule)" : "on")}; applied on load: {VoidRule.LastCells} void cells, {VoidRule.LastGasCleared} gas cleared, {VoidRule.LastApplyMs:0.0} ms");
                     // patches took effect (the small methods: through their effect, not by calling them)
                     Result("patched: GasGrid's own GasCanMoveTo calls swapped", GasGridCalls_Void_Patch.PerMethod.Count >= 4 && !GasGridCalls_Void_Patch.PerMethod.ContainsKey("Overflow") && GasGridCalls_Void_Patch.PerMethod.Values.All(v => v >= 1), string.Join(", ", GasGridCalls_Void_Patch.PerMethod.Select(kv => kv.Key + " " + kv.Value)));
-                    Result("patched: band scope rows", BandScope_Patch.Missing.Count == 0 && BandScope_Patch.PerMethod.Count >= 16 && BandScope_Patch.PerMethod.Values.All(v => v >= 1),
+                    Result("patched: band scope rows", BandScope_Patch.Missing.Count == 0 && BandScope_Patch.PerMethod.Values.All(v => v >= 1)
+                        // (only the tornado's move and the snow flood with its lambda; the radius loops are BandRadial's)
+                        && BandScope_Patch.PerMethod.Count == 3 && BandScope_Patch.PerMethod.ContainsKey("Tornado.Tick") && BandScope_Patch.PerMethod.ContainsKey("CompSnowExpand.TryExpandSnow") && BandScope_Patch.PerMethod.Keys.Any(k => k.Contains("<TryExpandSnow>")),
                         $"{BandScope_Patch.PerMethod.Count} methods: {string.Join(", ", BandScope_Patch.PerMethod.Select(kv => kv.Key + " " + kv.Value))}; missing {string.Join(", ", BandScope_Patch.Missing)}");
                     Result("patched: RadialDistinctThingsAround's iterator, the aura distance", RadialDistinctThings_Band_Patch.Swapped == 1 && CauseHediffAoE_3D_Patch.Swapped == 1, $"iterator {RadialDistinctThings_Band_Patch.Swapped}, aura {CauseHediffAoE_3D_Patch.Swapped}");
                     IntVec3 v = VG(10, voGz + 1);

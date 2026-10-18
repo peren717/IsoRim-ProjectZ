@@ -925,26 +925,4 @@ namespace ProjectZ
             return true;
         }
     }
-
-    // Anything put down "near" a cell stays on that cell's floor (leavings of a removed floor or slab, a building's
-    // leavings, drops, items moved off): the game's search radius reaches the floor below at a floor's south edge.
-    // Every near/radius placement goes through this overload (the other one and ThingOwner.TryDrop call it).
-    [HarmonyPatch(typeof(GenPlace), nameof(GenPlace.TryPlaceThing), new[] { typeof(Thing), typeof(IntVec3), typeof(Map), typeof(ThingPlaceMode), typeof(Thing), typeof(System.Action<Thing, int>), typeof(System.Predicate<IntVec3>), typeof(Rot4?), typeof(int) },
-        new[] { ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Out, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal })]
-    public static class TryPlaceThing_SameFloor_Patch
-    {
-        // Test only (mode radial, check R6): off, to show BandRadial alone keeps a near placement on its floor.
-        public static bool TestOff;
-
-        public static void Prefix(IntVec3 center, Map map, ThingPlaceMode mode, ref System.Predicate<IntVec3> extraValidator)
-        {
-            if (TestOff || mode == ThingPlaceMode.Direct || ProjectZ.Annex(map) == null || !center.InBounds(map))
-            {
-                return;
-            }
-            int k = ProjectZ.FloorOf(center, map);
-            System.Predicate<IntVec3> inner = extraValidator;
-            extraValidator = x => ProjectZ.FloorOf(x, map) == k && (inner == null || inner(x));
-        }
-    }
 }

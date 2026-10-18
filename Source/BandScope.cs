@@ -11,21 +11,26 @@ using Verse;
 
 namespace ProjectZ
 {
-    // Radius effects across the void (isorim-pz-void-barrier.md §3, phase 2 and the cheap part of phase 3). The virtual
-    // wall (VoidRule) stops floods and sight; an effect that just takes the cells or things within a radius of a source
-    // reaches across the void into another band's raw rows. One mechanism for those, a table of methods:
+    // Effects across the void that are not radius loops (isorim-pz-void-barrier.md §3). The game's radius loops (radial
+    // cells round a centre: tornado damage, triggers, auras, pollution, terraforming, plant damage, ...) are clipped
+    // centrally by BandRadial.cs (compat G3a; the rows this table had for them were retired in G3b after the parity
+    // checks of mode radial). What stays here is a cell check outside those loops, one row per method:
     //   - a prefix records the source's band (the instance's thing: a Thing, a comp's parent, a hediff's pawn);
-    //   - a transpiler swaps the method's cell checks for band-aware ones: InBounds is false, GetThingList is empty,
-    //     CanPollute/CanUnpollute/CanEverConvertCell are false and Filled is true for a cell in another band;
-    //   - compiler-generated lambdas and local functions of a listed method are swapped too (they run inside its scope).
-    // Adding an effect is one row. Outside a listed method nothing changes. Separate, per effect:
+    //   - a transpiler swaps the method's own InBounds / Filled calls for band-aware ones (false / true for a cell in
+    //     another band or the void); its compiler-generated lambdas are swapped too (they run inside its scope).
+    //   Rows:
+    //   - Tornado.Tick: the tornado's own move (InBounds of its next cell): it ends at the void like at the map edge.
+    //     Only Tick's own IL is swapped; the damage it calls (DamageCloseThings, DamageFarThings, DestroyRoofs) is not
+    //     in this table and is BandRadial's alone (the scope does nothing there).
+    //   - CompSnowExpand.TryExpandSnow: its flood fill (Filled, in a lambda) stays on the band. BandRadial keeps
+    //     the snow cells themselves on the band, but without this row the flood walks along the void row and brings snow
+    //     into a room of the band that is open only to the void (mode radial, R16b). (No vanilla def has the comp.)
+    // Separate, per effect:
     //   - GenRadial.RadialDistinctThingsAround (meditation and artificial-building listers, abilities' areas, Farskip,
     //     broadshield pack, overseer, holding platform, ...): its iterator keeps things on the centre's band;
-    //   - tornadoes end at the void like at the map edge (Tornado.Tick's InBounds, in the table);
     //   - auras (CompCauseHediff_AoE) and the mechanitor's command range: the true 3D distance between floors;
-    //   - shield bubbles: Combat/Shields3D.cs; flashstorm strikes: SkyStrikes (the centre's band).
-    // The game's own radius loops (radial cells round a centre, 126 listed vanilla methods) are clipped centrally by
-    // BandRadial.cs (compat G3a); the rows below that it makes redundant go in G3b after the parity tests.
+    //   - shield bubbles: Combat/Shields3D.cs; flashstorm strikes: SkyStrikes (the centre's band);
+    //   - infestations per band (InfestationBand_Patch below).
     public static class BandScope
     {
         private struct Frame
@@ -36,8 +41,6 @@ namespace ProjectZ
 
         [ThreadStatic]
         private static List<Frame> stack;
-
-        private static readonly List<Thing> Empty = new List<Thing>();
 
         public static void Push(Map map, IntVec3 src)
         {
@@ -71,15 +74,7 @@ namespace ProjectZ
 
         public static bool InBounds(IntVec3 c, Map map) => c.InBounds(map) && !OffBand(c, map);
 
-        public static List<Thing> GetThingList(IntVec3 c, Map map) => OffBand(c, map) ? Empty : c.GetThingList(map);
-
-        public static bool CanPollute(IntVec3 c, Map map) => !OffBand(c, map) && c.CanPollute(map);
-
-        public static bool CanUnpollute(IntVec3 c, Map map) => !OffBand(c, map) && c.CanUnpollute(map);
-
         public static bool Filled(IntVec3 c, Map map) => OffBand(c, map) || c.Filled(map);
-
-        public static bool CanEverConvertCell(IntVec3 c, Map map, TerrainDef skip) => !OffBand(c, map) && CompTerraformer.CanEverConvertCell(c, map, skip);
 
         // RadialDistinctThingsAround's iterator: the centre is its own source.
         public static bool InBoundsNear(IntVec3 c, Map map, IntVec3 centre) => c.InBounds(map) && (VoidRule.Off || ProjectZ.SameBand(c, centre, map));
@@ -87,11 +82,7 @@ namespace ProjectZ
         internal static readonly Dictionary<MethodInfo, MethodInfo> Swaps = new Dictionary<MethodInfo, MethodInfo>
         {
             { AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) }), AccessTools.Method(typeof(BandScope), nameof(InBounds)) },
-            { AccessTools.Method(typeof(GridsUtility), nameof(GridsUtility.GetThingList), new[] { typeof(IntVec3), typeof(Map) }), AccessTools.Method(typeof(BandScope), nameof(GetThingList)) },
-            { AccessTools.Method(typeof(GridsUtility), nameof(GridsUtility.CanPollute)), AccessTools.Method(typeof(BandScope), nameof(CanPollute)) },
-            { AccessTools.Method(typeof(GridsUtility), nameof(GridsUtility.CanUnpollute)), AccessTools.Method(typeof(BandScope), nameof(CanUnpollute)) },
             { AccessTools.Method(typeof(GridsUtility), nameof(GridsUtility.Filled)), AccessTools.Method(typeof(BandScope), nameof(Filled)) },
-            { AccessTools.Method(typeof(CompTerraformer), nameof(CompTerraformer.CanEverConvertCell)), AccessTools.Method(typeof(BandScope), nameof(CanEverConvertCell)) },
         };
 
         // The method's IL calls one of these.
@@ -130,15 +121,8 @@ namespace ProjectZ
     {
         private static readonly HashSet<MethodBase> scoped = new HashSet<MethodBase>();
 
-        // Test only (mode radial): the rows BandRadial (compat G3) makes redundant push no scope, so its clip works alone.
-        // Tornado.Tick (the tornado's own movement) and CompSnowExpand.TryExpandSnow (a flood fill) stay on.
-        public static bool RetirableOff;
-
-        // Test only (mode radial, R4's tornado along the band edge): every row off, the kept Tornado.Tick too (its scope
-        // also covers the damage methods it calls).
-        public static bool AllOff;
-
-        private static bool Retirable(MethodBase m) => !(m.DeclaringType == typeof(Tornado) && m.Name == "Tick") && m.DeclaringType != typeof(CompSnowExpand);
+        // Test only (mode radial, R16): no scope pushed (the snow row off, to show why it stays).
+        public static bool TestOff;
 
         // calls swapped per method (logged; the void test checks them)
         public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
@@ -174,21 +158,7 @@ namespace ProjectZ
         public static IEnumerable<MethodBase> TargetMethods()
         {
             IEnumerable<MethodBase> all = Enumerable.Empty<MethodBase>()
-                // phase 2: free movers and radius effects
                 .Concat(Row(typeof(Tornado), "Tick"))
-                .Concat(Row(typeof(Tornado), "DamageCloseThings"))
-                .Concat(Row(typeof(Tornado), "DamageFarThings"))
-                .Concat(Row(typeof(Tornado), "DestroyRoofs"))
-                .Concat(Row(typeof(CompGiveHediffSeverity), nameof(CompGiveHediffSeverity.CompTick)))
-                .Concat(Row(typeof(RadialTrigger), "Tick"))
-                .Concat(Row(typeof(CompProximityLetter), nameof(CompProximityLetter.CompTick)))
-                .Concat(Row(typeof(CompPlantDamager), nameof(CompPlantDamager.DamageCycle)))
-                // phase 3: pollution, terraforming and snow spreaders (same floor only)
-                .Concat(Row(typeof(CompToxifier), "UpdateNextPolluteCell"))
-                .Concat(Row(typeof(CompToxifier), "PolluteNextCell"))
-                .Concat(Row(typeof(CompPolluteOverTime), "Pollute"))
-                .Concat(Row(typeof(CompPollutionPump), "GetCellToUnpollute"))
-                .Concat(Row(typeof(CompTerraformer), "TryGetCellToCovert"))
                 .Concat(Row(typeof(CompSnowExpand), "TryExpandSnow"));
             MethodInfo[] swaps = BandScope.Swaps.Keys.ToArray();
             MethodBase row = null;
@@ -223,9 +193,9 @@ namespace ProjectZ
         public static void Prefix(object __instance, MethodBase __originalMethod, out bool __state)
         {
             __state = false;
-            if (AllOff || RetirableOff && Retirable(__originalMethod))
+            if (TestOff)
             {
-                return;   // test only: the rows compat G3 retires, off (BandRadial alone)
+                return;
             }
             if (__instance != null && scoped.Contains(__originalMethod) && BandScope.SourceOf(__instance, out Map map, out IntVec3 c) && ProjectZ.Annex(map) != null)
             {
@@ -381,7 +351,10 @@ namespace ProjectZ
     // Infestations per band (tall mountains only, Mountains.On; isorim-pz-mountains-design.md §2.1): a dug room in an
     // upper band is scored like one on the ground, from its own band. Rows:
     //   - InfestationCellFinder's mountainousness radial count, its straight lines to the open and its distance to a
-    //     blocker: cells of another band are off the map (BandScope, the cell argument is the source);
+    //     blocker: cells of another band are off the map (BandScope, the cell argument is the source). The radial count
+    //     is also BandRadial's, which folds a cell past the band onto the void; the void is in bounds and would count as
+    //     a sample without rock, so the score at a band edge would drop. This row keeps the map-edge rule: the void and
+    //     other bands are not sampled (tallmtn F11);
     //   - the 30-cell distance to colony buildings (CellFinderUtility's Dijkstra): neighbours stay in their band.
     [HarmonyPatch]
     public static class InfestationBand_Patch

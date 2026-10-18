@@ -21,6 +21,8 @@ namespace ProjectZ
     //   - GenRadial.ProcessEquidistantCells (blight): its own InBounds also asks for the centre's band.
     // The map is read once at the method's entry (a local) from the row's path. The area follows its centre cell's
     // floor (an effect aimed from the ground at floor 2 covers floor 2 only). Explosions keep Explosions3D's cells.
+    // This also keeps "near" placements on their floor (drops, leavings: GenPlace.TryFindPlaceSpotNear) and the radius
+    // loops BandScope had rows for (G3b retired those rows and the same-floor placement patch; mode radial R10-R17).
     // Without floors nothing changes: MapOf returns null (one static flag test) and the helpers give the game's own value
     // or iterator. Test flag -projectznoradialclip: nothing is patched (the game's cells, to show the old leaks).
     public static class BandRadial
