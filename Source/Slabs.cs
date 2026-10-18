@@ -566,6 +566,8 @@ namespace ProjectZ
             {
                 return;
             }
+            // IsoRim's collapse debris (visual): the slab and what stands on it, taken while still whole.
+            IsoRimBridge.Debris(map, u);
             List<Thing> list = u.GetThingList(map);
             List<Thing> built = new List<Thing>();
             for (int i = 0; i < list.Count; i++)

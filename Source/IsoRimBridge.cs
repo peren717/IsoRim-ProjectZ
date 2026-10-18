@@ -14,6 +14,9 @@ namespace ProjectZ
         // The IsoRim API version this ProjectZ needs (IsoRim.Api.Version).
         private const int NeedApi = 2;
 
+        // The IsoRim API version found (0 without IsoRim). Newer members are used only when it is new enough (Debris: 4).
+        public static int ApiVersion;
+
         public static void Init()
         {
             Present = AccessTools.TypeByName("IsoRim.Api") != null && AccessTools.TypeByName("IsoRim.IFloorLayout") != null;
@@ -24,6 +27,7 @@ namespace ProjectZ
             }
             System.Reflection.MethodInfo version = AccessTools.PropertyGetter("IsoRim.Api:Version");
             int have = version == null ? 1 : (int)version.Invoke(null, null);
+            ApiVersion = have;
             if (have < NeedApi)
             {
                 Present = false;
@@ -263,6 +267,66 @@ namespace ProjectZ
         }
 
         private static void DrawLitSolidInner(Mesh mesh, Matrix4x4 matrix) => IsoRim.Api.DrawLit(mesh, matrix);
+
+        // ---- collapse debris (IsoRim API 4; an older IsoRim: nothing)
+
+        // A slab cell is about to fall: what IsoRim draws there breaks into pieces that fall too. Before the cell's
+        // things and slab go (the pieces keep the intact look).
+        public static void Debris(Map map, IntVec3 c)
+        {
+            if (Present && ApiVersion >= 4)
+            {
+                DebrisInner(map, c);
+            }
+        }
+
+        private static void DebrisInner(Map map, IntVec3 c) => IsoRim.Api.Debris(map, new[] { c });
+
+        // Tests: the pieces stand still except when moved on (frame sheets), how many there are, IsoRim's counters.
+        public static bool DebrisHold
+        {
+            set
+            {
+                if (Present && ApiVersion >= 4)
+                {
+                    DebrisHoldInner(value);
+                }
+            }
+        }
+
+        private static void DebrisHoldInner(bool on) => IsoRim.Api.Dev.DebrisHold = on;
+
+        public static void DebrisAdvance(float seconds)
+        {
+            if (Present && ApiVersion >= 4)
+            {
+                DebrisAdvanceInner(seconds);
+            }
+        }
+
+        private static void DebrisAdvanceInner(float seconds) => IsoRim.Api.Dev.DebrisAdvance(seconds);
+
+        public static int DebrisLive => Present && ApiVersion >= 4 ? DebrisLiveInner() : 0;
+
+        public static int DebrisPending => Present && ApiVersion >= 4 ? DebrisPendingInner() : 0;
+
+        private static int DebrisPendingInner() => IsoRim.Api.Dev.DebrisPending;
+
+        private static int DebrisLiveInner() => IsoRim.Api.Dev.DebrisLive;
+
+        public static string DebrisStats => Present && ApiVersion >= 4 ? DebrisStatsInner() : "no IsoRim debris (API " + ApiVersion + ")";
+
+        private static string DebrisStatsInner() => IsoRim.Api.Dev.DebrisStats;
+
+        public static void DebrisClear()
+        {
+            if (Present && ApiVersion >= 4)
+            {
+                DebrisClearInner();
+            }
+        }
+
+        private static void DebrisClearInner() => IsoRim.Api.Dev.DebrisClear();
 
         // ---- dev tests only (IsoRim.Api.Dev)
 
