@@ -173,7 +173,8 @@ namespace ProjectZ
         }
     }
 
-    // After a load, once every map is loaded: decide the value of a save that has none.
+    // After a load or a new game, once every map is loaded: decide the value of a save that has none, and lock IsoRim's
+    // fog lid off for a game with tall mountains (unlocked for one without).
     [HarmonyPatch(typeof(Game), nameof(Game.FinalizeInit))]
     public static class Game_FinalizeInit_WorldFloors_Patch
     {
@@ -184,6 +185,17 @@ namespace ProjectZ
             {
                 WorldFloors.Migrate(c);
             }
+            IsoRimBridge.UpdateFogLid(WorldFloors.TallMountainsThisGame);
+        }
+    }
+
+    // Back at the main menu: no game, the player's own fog lid option.
+    [HarmonyPatch(typeof(RimWorld.MainMenuDrawer), nameof(RimWorld.MainMenuDrawer.Init))]
+    public static class MainMenuDrawer_Init_FogLid_Patch
+    {
+        public static void Postfix()
+        {
+            IsoRimBridge.UpdateFogLid(false);
         }
     }
 }

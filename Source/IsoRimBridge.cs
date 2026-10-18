@@ -14,6 +14,9 @@ namespace ProjectZ
         // The IsoRim API version this ProjectZ needs (IsoRim.Api.Version).
         private const int NeedApi = 2;
 
+        // The IsoRim API version found (0 without IsoRim). Optional members of later versions check it.
+        public static int ApiVersion;
+
         public static void Init()
         {
             Present = AccessTools.TypeByName("IsoRim.Api") != null && AccessTools.TypeByName("IsoRim.IFloorLayout") != null;
@@ -24,6 +27,7 @@ namespace ProjectZ
             }
             System.Reflection.MethodInfo version = AccessTools.PropertyGetter("IsoRim.Api:Version");
             int have = version == null ? 1 : (int)version.Invoke(null, null);
+            ApiVersion = have;
             if (have < NeedApi)
             {
                 Present = false;
@@ -116,6 +120,44 @@ namespace ProjectZ
         }
 
         private static object SetOptionInner(string field, object value) => IsoRim.Api.SetOption(field, value);
+
+        // ---- the fog lid (IsoRim API 3, optional): off in a game with tall mountains (user decision 2026-10-17), as the
+        // lid of the fogged rock under each mountain top lies at the top's height and hides it. IsoRim keeps the
+        // player's own option and greys it out while locked.
+        private const int FogLidApi = 3;
+
+        public static bool CanLockFogLid => Present && ApiVersion >= FogLidApi;
+
+        // The lock for the current game: off with tall mountains, the player's option otherwise.
+        public static void UpdateFogLid(bool tallMountains)
+        {
+            if (CanLockFogLid)
+            {
+                UpdateFogLidInner(tallMountains);
+            }
+        }
+
+        private static void UpdateFogLidInner(bool tallMountains)
+        {
+            if (tallMountains)
+            {
+                IsoRim.Api.LockFogLid("PZ_FogLidOff".Translate(), false);
+            }
+            else
+            {
+                IsoRim.Api.UnlockFogLid();
+            }
+        }
+
+        // IsoRim's fog lid lock (tests): its tooltip (null when not locked, or without IsoRim API 3) and whether the
+        // lid is drawn now.
+        public static string FogLidLockedBy => CanLockFogLid ? FogLidLockedByInner() : null;
+
+        private static string FogLidLockedByInner() => IsoRim.Api.FogLidLockedBy;
+
+        public static bool FogLidOn => CanLockFogLid && FogLidOnInner();
+
+        private static bool FogLidOnInner() => IsoRim.Api.FogLidOn;
 
         // The wall height IsoRim is locked to and who locked the view (tests); 0 and null without IsoRim.
         public static float LockedWallHeight => Present ? LockedWallHeightInner() : 0f;

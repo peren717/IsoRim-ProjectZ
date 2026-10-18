@@ -702,6 +702,7 @@ namespace ProjectZ.Dev
                 // ---- main / gen
                 case "gencheck":
                     GenCheck(map, "after generation");
+                    FogLidCheck("after generation");
                     FinderStats(map);
                     if (mode == "m1b")
                     {
