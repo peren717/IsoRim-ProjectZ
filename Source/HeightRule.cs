@@ -46,11 +46,22 @@ namespace ProjectZ
         }
 
         // A floor (built, or a blueprint or frame of one, or the landing of stairs still to be built) right over a cell.
+        // Under a natural rock floor (tall mountains, user decision Q7) only an open one counts (a top, or dug out):
+        // where the cell above is still solid rock, a tall thing fits as under vanilla's overhead mountain.
         public static bool FloorOver(IntVec3 c, Map map)
         {
             if (FloorRoof.FloorAbove(c, map))
             {
-                return true;
+                IntVec3 above = FloorRoof.Above(c, map);
+                if (Floors.KindAt(above, map) != FloorKind.NaturalRock)
+                {
+                    return true;
+                }
+                Building e = above.GetEdifice(map);
+                if (e == null || !(e.def.building?.isNaturalRock ?? false))
+                {
+                    return true;
+                }
             }
             IntVec3 up = StairShape.Above(c, map);
             return up.IsValid && up.InBounds(map) && (PlaceWorker_Stairs.FloorPlanned(up, map) || StairwellFloor.IsStairsExit(up, map));
