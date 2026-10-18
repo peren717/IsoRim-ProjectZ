@@ -24,6 +24,8 @@ namespace ProjectZ
     //   - tornadoes end at the void like at the map edge (Tornado.Tick's InBounds, in the table);
     //   - auras (CompCauseHediff_AoE) and the mechanitor's command range: the true 3D distance between floors;
     //   - shield bubbles: Combat/Shields3D.cs; flashstorm strikes: SkyStrikes (the centre's band).
+    // The game's own radius loops (radial cells round a centre, 126 listed vanilla methods) are clipped centrally by
+    // BandRadial.cs (compat G3a); the rows below that it makes redundant go in G3b after the parity tests.
     public static class BandScope
     {
         private struct Frame
@@ -128,6 +130,16 @@ namespace ProjectZ
     {
         private static readonly HashSet<MethodBase> scoped = new HashSet<MethodBase>();
 
+        // Test only (mode radial): the rows BandRadial (compat G3) makes redundant push no scope, so its clip works alone.
+        // Tornado.Tick (the tornado's own movement) and CompSnowExpand.TryExpandSnow (a flood fill) stay on.
+        public static bool RetirableOff;
+
+        // Test only (mode radial, R4's tornado along the band edge): every row off, the kept Tornado.Tick too (its scope
+        // also covers the damage methods it calls).
+        public static bool AllOff;
+
+        private static bool Retirable(MethodBase m) => !(m.DeclaringType == typeof(Tornado) && m.Name == "Tick") && m.DeclaringType != typeof(CompSnowExpand);
+
         // calls swapped per method (logged; the void test checks them)
         public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
         public static readonly List<string> Missing = new List<string>();
@@ -211,6 +223,10 @@ namespace ProjectZ
         public static void Prefix(object __instance, MethodBase __originalMethod, out bool __state)
         {
             __state = false;
+            if (AllOff || RetirableOff && Retirable(__originalMethod))
+            {
+                return;   // test only: the rows compat G3 retires, off (BandRadial alone)
+            }
             if (__instance != null && scoped.Contains(__originalMethod) && BandScope.SourceOf(__instance, out Map map, out IntVec3 c) && ProjectZ.Annex(map) != null)
             {
                 BandScope.Push(map, c);

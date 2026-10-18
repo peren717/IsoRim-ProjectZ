@@ -933,9 +933,12 @@ namespace ProjectZ
         new[] { ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Out, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal })]
     public static class TryPlaceThing_SameFloor_Patch
     {
+        // Test only (mode radial, check R6): off, to show BandRadial alone keeps a near placement on its floor.
+        public static bool TestOff;
+
         public static void Prefix(IntVec3 center, Map map, ThingPlaceMode mode, ref System.Predicate<IntVec3> extraValidator)
         {
-            if (mode == ThingPlaceMode.Direct || ProjectZ.Annex(map) == null || !center.InBounds(map))
+            if (TestOff || mode == ThingPlaceMode.Direct || ProjectZ.Annex(map) == null || !center.InBounds(map))
             {
                 return;
             }

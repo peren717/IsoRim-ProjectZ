@@ -302,6 +302,10 @@ namespace ProjectZ
                 return null; // components not built yet: don't cache
             }
             cache = new Entry { map = map, comp = comp.HasAnnex ? comp : null };
+            if (comp.HasAnnex)
+            {
+                BandRadial.AnyAnnex = true;   // (BandRadial.MapOf: a map with floors exists in this session)
+            }
             return comp.HasAnnex ? comp : null;
         }
 

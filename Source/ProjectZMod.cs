@@ -44,7 +44,10 @@ namespace ProjectZ
         {
             Settings = GetSettings<ProjectZSettings>();
             // Never the argument-less PatchAll(): on 1.7 CoreCLR it can patch nothing.
-            new Harmony("Peren.IsoRimProjectZ").PatchAll(typeof(ProjectZMod).Assembly);
+            Harmony harmony = new Harmony("Peren.IsoRimProjectZ");
+            harmony.PatchAll(typeof(ProjectZMod).Assembly);
+            // radius effects stay on their centre's floor (an explicit list of vanilla methods)
+            BandRadial.Patch(harmony);
             IsoRimBridge.Init();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, default floors for new worlds=" + Settings.floors + " (effective " + WorldFloors.Default + ")");

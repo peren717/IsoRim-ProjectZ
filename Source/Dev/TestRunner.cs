@@ -133,6 +133,10 @@ namespace ProjectZ.Dev
     //                                   centre, exits, edges, caravans, large structures) and real flows (visitors and
     //                                   thrumbos leaving, an edge raid, a pit gate); -projectzfloors=3 -projectzmapsize=120
     //                                   (-projectzfindersoff: the finders as vanilla) (TestFinders)
+    //                                   radial, radialn1, radialperf: radius effects stay on their centre's floor (compat G3a,
+    //                                   BandRadial: the list, leak checks at the band edge, N1/N2 fingerprints, costs);
+    //                                   -projectzfloors=3 -projectzmapsize=101 / -projectzfloors=1 (-projectznoradialclip:
+    //                                   nothing patched; -projectzradialref=<tag>: compare fingerprints) (TestRadial)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -238,7 +242,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -259,6 +263,10 @@ namespace ProjectZ.Dev
             if (mode == "range")
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GuardPrefix)));
+            }
+            if (mode.StartsWith("radial"))
+            {
+                PatchRadialProbe(h);
             }
             if (mode == "explode")
             {
@@ -360,7 +368,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -698,6 +706,11 @@ namespace ProjectZ.Dev
                 StepTallMtn(map);
                 return;
             }
+            if (stage.StartsWith("rd_"))
+            {
+                StepRadial(map);
+                return;
+            }
             if (stage.StartsWith("fd_"))
             {
                 StepFinders(map);
@@ -712,7 +725,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode.StartsWith("radial") ? "rd_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
