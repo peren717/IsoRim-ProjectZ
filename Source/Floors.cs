@@ -23,8 +23,9 @@ namespace ProjectZ
     {
         private static HashSet<TerrainDef> natural;
 
-        // Natural stone terrain: every natural rock's rough terrain and its smoothed one (vanilla's Granite_Rough,
-        // Granite_Smooth, ...), plus terrains with NaturalFloorExtension. Built once, when first asked.
+        // Natural stone terrain: every natural rock's rough terrain, the rough-hewn terrain mining it leaves, and their smoothed
+        // forms (vanilla's Granite_Rough, Granite_RoughHewn, Granite_Smooth, ...), plus terrains with NaturalFloorExtension.
+        // Built once, when first asked.
         public static bool IsNatural(TerrainDef t)
         {
             if (t == null)
@@ -36,13 +37,20 @@ namespace ProjectZ
                 HashSet<TerrainDef> s = new HashSet<TerrainDef>();
                 foreach (ThingDef d in DefDatabase<ThingDef>.AllDefsListForReading)
                 {
-                    TerrainDef rough = d.building != null && d.building.isNaturalRock ? d.building.naturalTerrain : null;
-                    if (rough != null)
+                    if (d.building == null || !d.building.isNaturalRock)
                     {
-                        s.Add(rough);
-                        if (rough.smoothedTerrain != null)
+                        continue;
+                    }
+                    // its rough floor, and what mining it leaves (rough-hewn), each with its smoothed form
+                    foreach (TerrainDef nt in new[] { d.building.naturalTerrain, d.building.leaveTerrain })
+                    {
+                        if (nt != null)
                         {
-                            s.Add(rough.smoothedTerrain);
+                            s.Add(nt);
+                            if (nt.smoothedTerrain != null)
+                            {
+                                s.Add(nt.smoothedTerrain);
+                            }
                         }
                     }
                 }
