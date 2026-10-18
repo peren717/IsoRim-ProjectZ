@@ -31,7 +31,8 @@ namespace ProjectZ.Dev
     //   F11 infestations per band: a dug level-1 room next to a colony building on that band gets candidates, all
     //      within reach of a band-1 building; a child hive never lands on another band (R23);
     //   F12 colonists put on a level-1 top with no way down (as by a transport pod) build stairs downward from the top
-    //      (the stairs are touched from the floor above, StairTouch) and walk down them to the ground.
+    //      (the stairs are touched from the floor above, StairTouch) and walk down them to the ground. A fresh, rested
+    //      crew with no hostiles or shells left over: F7's explosions and F8's raid can leave the old colonists hurt.
     public static partial class TestRunner
     {
         private static IntVec3 tfStairs, tfExitTop, tfWalkTo, tfWallAt, tfBedAt, tfMine1, tfMine2, tfJumpFrom, tfJumpTo, tfPackTo;
@@ -67,9 +68,34 @@ namespace ProjectZ.Dev
             return cols.Count == 0 ? new IntVec3(map.Size.x / 2, 0, ProjectZ.GroundZ(map) / 2) : new IntVec3((int)cols.Average(p => p.Position.x), 0, (int)cols.Average(p => Levels.GroundZLoose(map, p.Position.z)));
         }
 
+        // Every colonist injury, once, with the tick it came, the flow step whose ticks it fell in, its source and the
+        // colonist's place: what hurts the colonists, and when.
+        private static readonly HashSet<Hediff> tfHurtSeen = new HashSet<Hediff>();
+        private static readonly List<KeyValuePair<int, string>> tfStepTicks = new List<KeyValuePair<int, string>>();
+
+        private static void TfHurtLog(Map map)
+        {
+            bool first = tfStepTicks.Count == 0;
+            tfStepTicks.Add(new KeyValuePair<int, string>(Find.TickManager.TicksGame, stage));
+            foreach (Pawn p in map.mapPawns.AllPawns.Where(x => x.IsColonist))
+            {
+                foreach (Hediff_Injury h in p.health.hediffSet.hediffs.OfType<Hediff_Injury>())
+                {
+                    if (!tfHurtSeen.Add(h) || first)
+                    {
+                        continue;
+                    }
+                    KeyValuePair<int, string> st = tfStepTicks.LastOrDefault(e => e.Key <= h.tickAdded);
+                    string during = $"{st.Value ?? "?"} (from tick {st.Key})";
+                    Info($"HURT {p} {h.def.defName} {h.Severity:0.0} on {h.Part?.Label ?? "body"} at tick {h.tickAdded} during step {during} (source {h.sourceDef?.defName ?? h.sourceLabel ?? "none"}); seen at step {stage}, {p} at {(p.Spawned ? p.Position.ToString() : "unspawned")} level {(p.Spawned ? ProjectZ.FloorOf(p.Position, map) : -9)}{(p.Downed ? " downed" : "")}{(p.Dead ? " dead" : "")}");
+                }
+            }
+        }
+
         private static bool StepTallMtnFlows(Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
+            TfHurtLog(map);
             switch (stage)
             {
                 case "tm_f_setup":
@@ -123,24 +149,7 @@ namespace ProjectZ.Dev
                     Result("F1 a colonist walked up the stairs onto the mountain top", tfWalker.Position == tfWalkTo && TmTop(tfWalker.Position, map),
                         $"{tfWalker} at {tfWalker.Position} (level {ProjectZ.FloorOf(tfWalker.Position, map)}, {Floors.KindAt(tfWalker.Position, map)}), target {tfWalkTo}");
                     // F2: a wall and a bed on the top
-                    tfWallAt = IntVec3.Invalid;
-                    tfBedAt = IntVec3.Invalid;
-                    foreach (IntVec3 c in GenRadial.RadialCellsAround(tfWalkTo, 14f, false))
-                    {
-                        if (!c.InBounds(map) || !TmTop(c, map) || !map.reachability.CanReach(tfWalkTo, c, PathEndMode.Touch, TraverseParms.For(TraverseMode.PassDoors)))
-                        {
-                            continue;
-                        }
-                        if (!tfWallAt.IsValid && c.DistanceTo(tfWalkTo) >= 2f && GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Wall, c, Rot4.North, map, stuffDef: ThingDefOf.WoodLog).Accepted)
-                        {
-                            tfWallAt = c;
-                        }
-                        else if (!tfBedAt.IsValid && tfWallAt.IsValid && c.DistanceTo(tfWalkTo) >= 2f && c.DistanceTo(tfWallAt) >= 2.5f && GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Bed, c, Rot4.North, map, stuffDef: ThingDefOf.WoodLog).Accepted)
-                        {
-                            tfBedAt = c;
-                        }
-                    }
-                    if (!tfWallAt.IsValid || !tfBedAt.IsValid)
+                    if (!TfWallBed(map, tfWalkTo, tfExitTop, out tfWallAt, out tfBedAt))
                     {
                         Result("F2 places for a wall and a bed on the top", false, $"wall {tfWallAt}, bed {tfBedAt}");
                         stage = "tm_f_mine";
@@ -276,7 +285,7 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     Result("F7 a mortar shell aimed at mountain ground explodes on the mountain top (Column.Top)", lastExplosion.IsValid && lastExplosion == tfMortarTop,
-                        $"aimed {tfMortarG} (top level {TH(tfMortarG, map)}), exploded at {lastExplosion} (level {(lastExplosion.IsValid ? ProjectZ.FloorOf(lastExplosion, map) : -9)}), top {tfMortarTop}");
+                        $"aimed {tfMortarG} (top level {TH(tfMortarG, map)}), exploded at {lastExplosion} (level {(lastExplosion.IsValid ? ProjectZ.FloorOf(lastExplosion, map) : -9)}) at tick {Find.TickManager.TicksGame}, top {tfMortarTop}; colonists near it: {string.Join(", ", Colonists(map).Where(p => lastExplosion.IsValid && Range3D.Distance(lastExplosion, p.Position, map) < 6f).Select(p => $"{p} at {p.Position} 3D {Range3D.Distance(lastExplosion, p.Position, map):0.0}"))}");
                     stage = "tm_f_drops";
                     return true;
                 }
@@ -324,6 +333,38 @@ namespace ProjectZ.Dev
         }
 
         // ---------------------------------------------------------------- F1
+
+        // F2's places on the top the walker reaches: the bed first (it needs two cells), then a wall clear of it; both off
+        // the way in from the stairs exit.
+        private static bool TfWallBed(Map map, IntVec3 walk, IntVec3 exit, out IntVec3 wall, out IntVec3 bed)
+        {
+            wall = bed = IntVec3.Invalid;
+            TraverseParms tp = TraverseParms.For(TraverseMode.PassDoors);
+            List<IntVec3> cells = GenRadial.RadialCellsAround(walk, 14f, false).Where(c => c.InBounds(map) && TmTop(c, map) && c.DistanceTo(walk) >= 2f
+                && (!exit.IsValid || c.DistanceTo(exit) >= 2.5f) && map.reachability.CanReach(walk, c, PathEndMode.Touch, tp)).ToList();
+            foreach (IntVec3 c in cells)
+            {
+                if (GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Bed, c, Rot4.North, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                {
+                    bed = c;
+                    break;
+                }
+            }
+            if (!bed.IsValid)
+            {
+                return false;
+            }
+            CellRect bedRect = GenAdj.OccupiedRect(bed, Rot4.North, ThingDefOf.Bed.size);
+            foreach (IntVec3 c in cells)
+            {
+                if (!bedRect.ExpandedBy(1).Contains(c) && GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Wall, c, Rot4.North, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                {
+                    wall = c;
+                    break;
+                }
+            }
+            return wall.IsValid;
+        }
 
         private static bool TfStairsBuilt(Map map) => map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).Any(t => t.Position == tfStairs);
 
@@ -388,10 +429,15 @@ namespace ProjectZ.Dev
                     {
                         continue;
                     }
+                    if (!TfWallBed(map, walk, exit, out _, out _))
+                    {
+                        continue;   // (a top too small for F2's wall and bed)
+                    }
                     best = score;
                     tfStairs = p;
                     tfRot = rot;
                     tfWalkTo = walk;
+                    tfExitTop = exit;
                 }
             }
             return tfStairs.IsValid;
@@ -717,6 +763,7 @@ namespace ProjectZ.Dev
             tfHiddenBefore = Hurt(tfHidden);
             tfOpenBefore = Hurt(tfOpen);
             GenExplosion.DoExplosion(tfBlastAt, map, 3.9f, DamageDefOf.Bomb, null, 30);
+            Info($"F7 colonists near the explosion: {string.Join(", ", Colonists(map).Where(p => p.Position.DistanceTo(tfBlastAt) < 8f).Select(p => $"{p} at {p.Position} 3D {Range3D.Distance(tfBlastAt, p.Position, map):0.0}"))}; tick {Find.TickManager.TicksGame}");
             Info($"F7 explosion r3.9 at {tfBlastAt} (level {ProjectZ.FloorOf(tfBlastAt, map)}); behind the rim {hide} (level {ProjectZ.FloorOf(hide, map)}, 3D {Range3D.Distance(tfBlastAt, hide, map):0.0}), in the open {open} (3D {Range3D.Distance(tfBlastAt, open, map):0.0})");
             TickUntil(120, () => false, "tm_f_blasted", 30);
         }
@@ -947,6 +994,14 @@ namespace ProjectZ.Dev
                     {
                         continue;   // (a top with a way down already)
                     }
+                    // a rim the crew can work from: a walkable level-1 cell over the stairwell's ring that the top
+                    // reaches (as StairTouch.UpperCells); an exit over the lip with no top beside the stairwell has none
+                    IntVec3 topc = top;
+                    if (!StairShape.Footprint(p, rot).ExpandedBy(1).Cells.Any(c => c.InBounds(map) && ProjectZ.FloorOf(c, map) == 0
+                        && ProjectZ.CellOnFloor(c, 1, map) is IntVec3 u && u.IsValid && u.InBounds(map) && u.Walkable(map) && map.reachability.CanReach(topc, u, PathEndMode.OnCell, tp)))
+                    {
+                        continue;
+                    }
                     // room on the top for the crew and the wood
                     if (GenRadial.RadialCellsAround(top, 4f, true).Count(c => c.InBounds(map) && TmTop(c, map) && c.Standable(map) && map.reachability.CanReach(top, c, PathEndMode.OnCell, tp)) < 8)
                     {
@@ -967,22 +1022,45 @@ namespace ProjectZ.Dev
                 return;
             }
             List<IntVec3> room = GenRadial.RadialCellsAround(stand, 4f, true).Where(c => c.InBounds(map) && TmTop(c, map) && c.Standable(map) && map.reachability.CanReach(stand, c, PathEndMode.OnCell, tp)).ToList();
+            // Isolated from the earlier checks: their explosions (F7) and raid (F8) can leave the colonists hurt or
+            // downed. Nothing hostile left over (raiders, shells still in the air), the old colonists drafted out of it,
+            // and a fresh, rested crew of two put on the top (as by a transport pod).
+            int shells = 0, foes = 0;
+            foreach (Thing t in map.listerThings.ThingsInGroup(ThingRequestGroup.Projectile).ToList())
+            {
+                shells++;
+                t.Destroy();
+            }
+            foreach (Pawn h in map.mapPawns.AllPawnsSpawned.Where(h => h.HostileTo(Faction.OfPlayer)).ToList())
+            {
+                foes++;
+                h.Destroy();
+            }
             foreach (Pawn p in Colonists(map))
             {
-                if (tfDownCrew.Count < 2 && !p.Downed && !p.InMentalState && p.health.capacities.CapableOf(PawnCapacityDefOf.Moving) && !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction))
+                if (!p.Downed && p.drafter != null)
                 {
-                    tfDownCrew.Add(p);
-                    if (p.Drafted)
-                    {
-                        p.drafter.Drafted = false;
-                    }
-                    Teleport(p, room[tfDownCrew.Count - 1]);
-                }
-                else if (!p.Downed && p.drafter != null)
-                {
-                    p.drafter.Drafted = true;   // (the ground colonists stay out of it)
+                    p.drafter.Drafted = true;   // (the old colonists stay out of it)
                 }
             }
+            for (int i = 0; i < 20 && tfDownCrew.Count < 2; i++)
+            {
+                Pawn p = PawnGenerator.GeneratePawn(new PawnGenerationRequest(PawnKindDefOf.Colonist, Faction.OfPlayer, forceGenerateNewPawn: true));
+                if (p.WorkTypeIsDisabled(WorkTypeDefOf.Construction) || p.WorkTypeIsDisabled(WorkTypeDefOf.Hauling) || !p.health.capacities.CapableOf(PawnCapacityDefOf.Moving)
+                    || !p.health.capacities.CapableOf(PawnCapacityDefOf.Manipulation))
+                {
+                    Find.WorldPawns.PassToWorld(p, RimWorld.Planet.PawnDiscardDecideMode.Discard);
+                    continue;
+                }
+                GenSpawn.Spawn(p, room[tfDownCrew.Count], map);
+                foreach (Need n in p.needs.AllNeeds)
+                {
+                    n.CurLevel = n.MaxLevel;
+                }
+                tfDownCrew.Add(p);
+                tfHurtSeen.UnionWith(p.health.hediffSet.hediffs);   // (old wounds from generation: not news)
+            }
+            Info($"F12 isolated: {shells} projectiles and {foes} hostiles removed, a fresh crew of {tfDownCrew.Count}");
             for (int i = 0; i < 4; i++)
             {
                 Thing w = ThingMaker.MakeThing(ThingDefOf.WoodLog);
