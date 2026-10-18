@@ -51,6 +51,7 @@ namespace ProjectZ.Dev
                     Info("PERF fill parts: " + Mountains.LastTimes);
                     mtPerf.Add($"fill s {Mountains.LastSeconds:0.00}, rock {Mountains.LastRock}, ore {Mountains.LastOre}, tops {Mountains.LastTops}");
                     TmChecks(map, a);
+                    FogLidCheck("after generation");
                     MtPerfMap(map, "after generation");
                     MtTicks(map);
                     mtFrames = 0;
@@ -129,12 +130,31 @@ namespace ProjectZ.Dev
                     MtPerfMap(map, "after load");
                     int mineAfter = map.listerThings.AllThings.Count(t => t.def.mineable);
                     Result("save + load: same mineables, tall mountains flag kept", mineAfter == mtMine && Mountains.On(map), $"mineables {mtMine} -> {mineAfter}, flag {Mountains.On(map)}");
+                    FogLidCheck("after load");
                     Info("PERF SUMMARY | " + string.Join(" | ", mtPerf));
                     Finish();
                     return true;
                 }
             }
             return false;
+        }
+
+        // IsoRim's fog lid follows the world (user decision 2026-10-17): locked off with tall mountains, not locked
+        // without; the player's own option is never written (the harness checks the settings file on disk too).
+        private static void FogLidCheck(string when)
+        {
+            if (!IsoRimBridge.CanLockFogLid)
+            {
+                Info($"fog lid lock ({when}): skipped, IsoRim API {IsoRimBridge.ApiVersion}");
+                return;
+            }
+            bool tall = WorldFloors.TallMountainsThisGame;
+            string by = IsoRimBridge.FogLidLockedBy;
+            object own = IsoRimBridge.SetOption("fogLid", true);
+            IsoRimBridge.SetOption("fogLid", own);   // read back unchanged
+            bool ok = tall ? by == "PZ_FogLidOff".Translate().ToString() && !IsoRimBridge.FogLidOn : by == null && IsoRimBridge.FogLidOn == (own is bool b && b);
+            Result($"fog lid {(tall ? "locked off with tall mountains" : "not locked without tall mountains")} ({when})", ok,
+                $"tall mountains {tall}, locked by '{by ?? "null"}', lid drawn {IsoRimBridge.FogLidOn}, player's option {own}");
         }
 
         // Natural top level per ground cell.
