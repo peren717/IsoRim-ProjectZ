@@ -9,7 +9,7 @@ namespace ProjectZ
     // Tall mountains, phase 1 (isorim-pz-mountains-design.md §2.1, option A; world setting "Tall mountains", off by
     // default, new worlds only). On a map generated with it, the overhead-mountain (thick-roof) areas rise into the bands:
     //   - height H per ground column from the elevation captured at generation (NaturalElevation): 1 + one storey per
-    //     Step of elevation over the thick-roof threshold, cut flat at the top level (the top level stays free, so
+    //     Step of elevation over the thick-roof threshold (Step 0.10, user 2026-10-17), cut flat at the top level (the top level stays free, so
     //     every top is standable); edge rock (thin or no roof) gets no height: a one-storey lip as in vanilla;
     //   - per level a cleanup like vanilla's: features narrower than 3 cells and level groups under 20 cells go, and
     //     ledges narrower than Terrace cells are filled up (one sheer cliff instead of 1-2 cell steps);
@@ -23,7 +23,7 @@ namespace ProjectZ
     public static class Mountains
     {
         // Elevation per storey (tests: -projectzmtnstep=X).
-        public static float Step = 0.05f;
+        public static float Step = 0.10f;
         public const int MinGroup = 20;
         public const int Terrace = 3;
 
