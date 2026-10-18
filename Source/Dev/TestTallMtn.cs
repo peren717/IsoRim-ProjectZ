@@ -191,8 +191,9 @@ namespace ProjectZ.Dev
             string by = IsoRimBridge.FogLidLockedBy;
             object own = IsoRimBridge.SetOption("fogLid", true);
             IsoRimBridge.SetOption("fogLid", own);   // read back unchanged
-            bool ok = tall ? by == "PZ_FogLidOff".Translate().ToString() && !IsoRimBridge.FogLidOn : by == null && IsoRimBridge.FogLidOn == (own is bool b && b);
-            Result($"fog lid {(tall ? "locked off with tall mountains" : "not locked without tall mountains")} ({when})", ok,
+            // (user 2026-10-18: no lock with tall mountains either; the lid is the player's option in every game)
+            bool ok = by == null && IsoRimBridge.FogLidOn == (own is bool b && b);
+            Result($"fog lid not locked, the player's option (tall mountains {tall}) ({when})", ok,
                 $"tall mountains {tall}, locked by '{by ?? "null"}', lid drawn {IsoRimBridge.FogLidOn}, player's option {own}");
         }
 
