@@ -114,6 +114,9 @@ namespace ProjectZ.Dev
     //                                   (-projectzshipfresh: a fresh ship, the landing deck; -projectzshiproof: stairs in
     //                                   roofed rooms, the roof over a ship stairwell, TestShipRoof; -projectzshipstack:
     //                                   ship stairs stacked over the opening of the ones below, TestShipStack)
+    //                                   debris: IsoRim's collapse debris (a slab collapse and a roof drop filmed with the pieces
+    //                                   stepped, frame time with and without them, a colonist deconstructing a slab's column);
+    //                                   -projectzfloors=2 (TestDebris)
     //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
     //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
     //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)
@@ -617,6 +620,11 @@ namespace ProjectZ.Dev
                 StepSkyDrop(map);
                 return;
             }
+            if (stage.StartsWith("db_"))
+            {
+                StepDebris(map);
+                return;
+            }
             if (stage.StartsWith("sx_"))
             {
                 StepStrikes(map);
@@ -816,6 +824,10 @@ namespace ProjectZ.Dev
                     else if (mode == "skydrop")
                     {
                         stage = "sk_setup";
+                    }
+                    else if (mode == "debris")
+                    {
+                        stage = "db_setup";
                     }
                     else if (mode == "shuttles")
                     {
