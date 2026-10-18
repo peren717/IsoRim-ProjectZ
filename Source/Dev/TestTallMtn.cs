@@ -218,6 +218,7 @@ namespace ProjectZ.Dev
             int[] h = TmHeights(map, a);
             int[] hist = new int[cap + 1];
             int badRoof = 0, badRock = 0, badDef = 0, badThick = 0, narrow = 0, topsFogged = 0, rockFogged = 0, rockOpen = 0;
+            int lips = 0, lipRoofs = 0, badGroundRoof = 0, tallCols = 0, badTall = 0;
             string first = null;
             for (int z = 0; z < gz; z++)
             {
@@ -226,13 +227,45 @@ namespace ProjectZ.Dev
                     IntVec3 g = new IntVec3(x, 0, z);
                     int H = h[z * sx + x];
                     hist[H]++;
-                    bool thick = map.roofGrid.RoofAt(g)?.isThickRoof ?? false;
-                    if (H > 0 != thick)
+                    RoofDef gRoof = map.roofGrid.RoofAt(g);
+                    bool thick = gRoof?.isThickRoof ?? false;
+                    Building gr = g.GetEdifice(map);
+                    bool groundRock = gr != null && (gr.def.building?.isNaturalRock ?? false);
+                    // rock-top floors: a rise over thick roof (vanilla's overhead mountain) and over every ground rock
+                    if (H > 0 != (thick || groundRock))
                     {
                         badThick++;
-                        first = first ?? $"thick {g} H{H}";
+                        first = first ?? $"rise {g} H{H} roof {gRoof?.defName} rock {groundRock}";
                     }
-                    Building gr = g.GetEdifice(map);
+                    if (groundRock && !thick)
+                    {
+                        lips++;
+                    }
+                    if (H > 0 && gRoof == PZDefOf.PZ_FloorRoof)
+                    {
+                        lipRoofs++;
+                    }
+                    // the ground roof under a rise: vanilla's thick or thin kept, none became the floor roof
+                    if (H > 0 && gRoof != RoofDefOf.RoofRockThick && gRoof != RoofDefOf.RoofRockThin && gRoof != PZDefOf.PZ_FloorRoof)
+                    {
+                        badGroundRoof++;
+                        first = first ?? $"ground roof {g} H{H} {gRoof?.defName}";
+                    }
+                    // solid up to the top level (H cap + 1: no top, a 2-storey world's tall-thing column) reads as a top on cap
+                    if (H == cap && (Levels.Cell(g, cap, map).GetEdifice(map)?.def.building?.isNaturalRock ?? false))
+                    {
+                        H = cap + 1;
+                        h[z * sx + x] = H;
+                    }
+                    if (H > 0 && HeightRule.TallThingAt(g, map) != null)
+                    {
+                        tallCols++;
+                        if (H < 2)
+                        {
+                            badTall++;
+                            first = first ?? $"tall thing {g} under a level-1 top";
+                        }
+                    }
                     for (int L = 1; L <= cap; L++)
                     {
                         IntVec3 c = Levels.Cell(g, L, map);
@@ -314,9 +347,12 @@ namespace ProjectZ.Dev
                 Result("fill heights are what the map shows (NaturalTop)", mism == 0, $"{mism} differ{(firstM == null ? "" : ", first " + firstM)}");
             }
             Info("heights (cells per top level): " + string.Join(", ", Enumerable.Range(0, cap + 1).Select(L => $"L{L} {hist[L]}")));
-            Result("fill: a top only over thick roof, rock below every top, thick roof under every rock floor and none on tops, rough floor of the column's rock",
-                badThick == 0 && badRock == 0 && badRoof == 0 && badDef == 0 && hist.Skip(1).Sum() > 0,
-                $"thick {badThick}, rock {badRock}, roof {badRoof}, terrain {badDef}{(first == null ? "" : ", first " + first)}");
+            Result("fill: a top over thick roof and over every ground rock (lips, ore, outcrops), rock below every top, thick roof under every band rock and none on tops, ground roofs kept or the floor roof, rough floor of the column's rock, solid rock over tall things",
+                badThick == 0 && badRock == 0 && badRoof == 0 && badDef == 0 && badGroundRoof == 0 && badTall == 0 && hist.Skip(1).Sum() > 0,
+                $"rise {badThick}, rock {badRock}, roof {badRoof}, ground roof {badGroundRoof}, terrain {badDef}, tall-thing columns {tallCols} ({badTall} bad){(first == null ? "" : ", first " + first)}");
+            Result("fill counters equal the recount: lips (ground rock without a thick roof), lips given the floor roof",
+                lips == Mountains.LastLips && lipRoofs == Mountains.LastLipRoofs && lips > 0,
+                $"lips {lips} (fill {Mountains.LastLips}), floor roofs {lipRoofs} (fill {Mountains.LastLipRoofs}), cells raised over tall things {Mountains.LastTallRaised}");
             Info($"narrow ledges seen in straight lines (approximate): {narrow}");
             Info($"fog: tops fogged {topsFogged} of {hist.Skip(1).Sum()}, band rock fogged {rockFogged}, revealed faces {rockOpen}");
             // ore share: band vs ground
@@ -412,17 +448,14 @@ namespace ProjectZ.Dev
                             terrace = new IntVec3(x, 0, z);
                         }
                     }
-                    // the edge lip: a level-1 top next to ground rock with no top
+                    // the edge lip: ground rock without a thick roof (its level-1 top, rock-top floors)
                     if (!lip.IsValid && H(x, z) == 1)
                     {
-                        for (int d = 0; d < 4; d++)
+                        IntVec3 lc = new IntVec3(x, 0, z);
+                        Building b = lc.GetEdifice(map);
+                        if (b != null && b.def.building.isNaturalRock && !(map.roofGrid.RoofAt(lc)?.isThickRoof ?? false))
                         {
-                            IntVec3 n = new IntVec3(x, 0, z) + GenAdj.CardinalDirections[d] * 2;
-                            Building b = n.InBounds(map) ? n.GetEdifice(map) : null;
-                            if (H(n.x, n.z) == 0 && b != null && b.def.building.isNaturalRock)
-                            {
-                                lip = new IntVec3(x, 0, z);
-                            }
+                            lip = lc;
                         }
                     }
                 }

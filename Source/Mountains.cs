@@ -10,12 +10,15 @@ namespace ProjectZ
     // default, new worlds only). On a map generated with it, the overhead-mountain (thick-roof) areas rise into the bands:
     //   - height H per ground column from the elevation captured at generation (NaturalElevation): 1 + one storey per
     //     Step of elevation over the thick-roof threshold (Step 0.10, user 2026-10-17), cut flat at the top level (the top level stays free, so
-    //     every top is standable); edge rock (thin or no roof) gets no height: a one-storey lip as in vanilla;
+    //     every top is standable); every other ground natural rock (the edge lip with a thin roof or none, ore, lone
+    //     outcrops) gets height 1: a walkable level-1 top (rock-top floors, RockTops); a tall thing under a rise gets
+    //     solid rock over it (a small level-2 plateau);
     //   - per level a cleanup like vanilla's: features narrower than 3 cells and level groups under 20 cells go, and
     //     ledges narrower than Terrace cells are filled up (one sheer cliff instead of 1-2 cell steps);
     //   - levels 1..H-1 of a column hold the column's ground rock (the nearest non-ore natural rock) on its rough
-    //     floor, level H only the rough floor (the mountain top); the cell under every rock floor gets the thick rock
-    //     roof (the floor kind's ceiling, Floors.CeilingFor);
+    //     floor, level H only the rough floor (the mountain top); the cell under every band rock gets the thick rock
+    //     roof; ground roofs stay vanilla's (thick inside, thin at the edge), a ground rock without one gets the floor
+    //     roof (the support roof, as under a slab: Floors.CeilingFor);
     //   - fog as vanilla's flood from the open: open air is unfogged, tops reached from it (4-way) too, rock next to
     //     an unfogged non-rock cell (8-way) is a revealed face; the rest is fogged;
     //   - ore lumps per level: the ground's ore share of its rock, the ground's ore mix, vanilla lump sizes.
@@ -28,7 +31,7 @@ namespace ProjectZ
         public const int Terrace = 3;
 
         // last fill, for the test
-        public static int LastRock, LastTops, LastOre, LastFogged, LastMaxH;
+        public static int LastRock, LastTops, LastOre, LastFogged, LastMaxH, LastLips, LastLipRoofs, LastTallRaised;
         public static double LastSeconds;
         public static byte[] LastHeights;
         public static string LastTimes;
@@ -84,7 +87,59 @@ namespace ProjectZ
                     }
                 }
             }
+            RockTops(map, h, sx, gz);
             return h;
+        }
+
+        // Rock-top floors (isorim-pz-rocktop-floors-plan.md §3.2), after the cleanup (its level-2 ledge fill builds on
+        // level 1; lips raised before it would be pulled up into level 2):
+        //   - every ground natural rock (ore too, a lone outcrop too: user Q1) has at least a level-1 top: the edge lip
+        //     with a thin roof or none is walkable on top, like the rest of the mountain;
+        //   - a tall thing under a rise (ancient dangers; HeightRule.TallThingAt) gets solid rock on level 1 over it, raised
+        //     as a small plateau at least 3 cells wide (user Q2: the 3x3 round it, where the mountain rises): H 2, a top on
+        //     level 2. In a 2-storey world (cap 1) that H is cap + 1: level 1 is solid rock with its thick roof and no top
+        //     (decided 2026-10-18).
+        private static void RockTops(Map map, byte[] h, int sx, int gz)
+        {
+            int n = sx * gz;
+            LastLips = LastTallRaised = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (h[i] == 0 && (new IntVec3(i % sx, 0, i / sx).GetEdifice(map)?.def.building?.isNaturalRock ?? false))
+                {
+                    h[i] = 1;
+                    LastLips++;
+                }
+            }
+            List<int> tall = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (h[i] >= 1 && HeightRule.TallThingAt(new IntVec3(i % sx, 0, i / sx), map) != null)
+                {
+                    tall.Add(i);
+                }
+            }
+            foreach (int i in tall)
+            {
+                int x = i % sx, z = i / sx;
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, nz = z + dz;
+                        if (nx < 0 || nz < 0 || nx >= sx || nz >= gz)
+                        {
+                            continue;
+                        }
+                        int j = nz * sx + nx;
+                        if (h[j] == 1)
+                        {
+                            h[j] = 2;
+                            LastTallRaised++;
+                        }
+                    }
+                }
+            }
         }
 
         // 3x3 opening (erode, then dilate inside the set): parts narrower than 3 cells go. Off the map counts as set.
@@ -359,8 +414,8 @@ namespace ProjectZ
                 maxH = Mathf.Max(maxH, h[i]);
             }
             a.tallMountains = true;
-            LastRock = LastTops = LastOre = LastFogged = 0;
-            LastMaxH = maxH;
+            LastRock = LastTops = LastOre = LastFogged = LastLipRoofs = 0;
+            LastMaxH = Mathf.Min(maxH, cap);
             if (maxH == 0)
             {
                 ProjectZ.DebugLog($"map {map}: tall mountains, nothing to rise (no overhead mountain)");
@@ -478,9 +533,20 @@ namespace ProjectZ
                     LastRock++;
                 }
             }
+            // the ground cell under a new top without a natural rock roof gets the floor roof (the support roof, as under a
+            // slab); vanilla's thin and thick rock roofs stay
+            for (int i = 0; i < n; i++)
+            {
+                IntVec3 g = new IntVec3(i % sx, 0, i / sx);
+                if (h[i] >= 1 && !(map.roofGrid.RoofAt(g)?.isNatural ?? false))
+                {
+                    map.roofGrid.SetRoof(g, PZDefOf.PZ_FloorRoof);
+                    LastLipRoofs++;
+                }
+            }
             LastSeconds = sw.Elapsed.TotalSeconds;
             LastTimes = $"heights+fog {tPrep:0.00}, terrain {tFill - tPrep:0.00}, ore plan {tOre:0.00}, rock (spawn {tSpawn:0.00}, roof {tRoof:0.00})";
-            ProjectZ.DebugLog($"map {map}: tall mountains up to level {maxH} (cap {cap}, step {Step}): {LastRock} rock, {LastTops} tops, {LastOre} ore cells, {LastFogged} fogged band cells, {LastSeconds:0.00} s");
+            ProjectZ.DebugLog($"map {map}: tall mountains up to level {maxH} (cap {cap}, step {Step}): {LastRock} rock, {LastTops} tops, {LastOre} ore cells, {LastFogged} fogged band cells, lips {LastLips} ({LastLipRoofs} given the floor roof), {LastTallRaised} cells raised over tall things, {LastSeconds:0.00} s");
         }
 
         // Fog of level L's band (index over ground cells): vanilla's flood from the open (FloodFillerFog: 4-way through
