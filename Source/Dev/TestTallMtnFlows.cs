@@ -234,7 +234,7 @@ namespace ProjectZ.Dev
                         gone && t == tfRockDef.building.leaveTerrain && Floors.KindAt(tfMine1, map) == FloorKind.NaturalRock && r == RoofDefOf.RoofRockThick && revealed,
                         $"{tfMine1}: edifice gone {gone}, terrain {t?.defName} (leave {tfRockDef.building.leaveTerrain?.defName}), kind {Floors.KindAt(tfMine1, map)}, roof {r?.defName}, behind {tfMine2} revealed {revealed}; chunks near {chunks}");
                     // R40: the mined cell is a natural floor for stairs landing and for drops
-                    Result("R40 the mined cell counts as natural: stairs may land there, its roof is not kept like a slab's", SlabSupport.LandingBlocked(tfMine1, map) == null && !FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map),
+                    Result("R40 the mined cell counts as natural: stairs may land there, its roof kept against pods like any floor's (rock-top floors)", SlabSupport.LandingBlocked(tfMine1, map) == null && FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map),
                         $"landing {SlabSupport.LandingBlocked(tfMine1, map) ?? "allowed"}, kept below {FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map)}");
                     map.designationManager.AddDesignation(new Designation(tfMine2, DesignationDefOf.Mine));
                     TickUntil(20000, () => tfMine2.GetEdifice(map) == null, "tm_f_mined2", 60);
@@ -897,7 +897,7 @@ namespace ProjectZ.Dev
         private static void TfDropsCheck(Map map)
         {
             List<Pawn> hostiles = map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer) && p.RaceProps.Humanlike).ToList();
-            int hostTop = hostiles.Count(p => TmTop(p.Position, map) || ProjectZ.FloorOf(p.Position, map) >= 1 && p.Position.Roofed(map) == false && Mountains.NaturalFloor(p.Position, map));
+            int hostTop = hostiles.Count(p => TmTop(p.Position, map) || ProjectZ.FloorOf(p.Position, map) >= 1 && p.Position.Roofed(map) == false && Floors.UnbuiltNatural(p.Position, map));
             int hostUp = hostiles.Count(p => ProjectZ.FloorOf(p.Position, map) >= 1);
             Info($"F8 raiders 1200 ticks after landing (they may climb the stairs): {hostiles.Count}, {hostUp} on an upper level, {hostTop} on a natural top: {string.Join(" ", hostiles.Take(8).Select(h => h.Position.ToString()))}");
             bool aimedUp = tfAimed.Count == 0 || tfAimed.Any(t => t.Spawned && ProjectZ.FloorOf(t.Position, map) >= 1);

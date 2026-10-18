@@ -206,10 +206,9 @@ namespace ProjectZ
         //    a cell with a thick roof (or on a gravship) is refused: their roof would replace the rock roof (user
         //    decision 2026-10-16). Placement and construction ask (CoverOk, ThickRoofCheck, CanConstruct, ShipDeck,
         //    ShipStairs).
-        //  - USE (LandingBlocked): a floor that is already there is used as it is. A natural rock floor (a mountain top,
-        //    Floors.KindAt) has the thick roof under it as its own ceiling, so stairs may land on it. Drops and jumps
-        //    only ask the landing cell's own roof (Column.OpenAbove, DropRules), never the column under it, so they
-        //    already use any floor. No natural rock floors exist yet: today both rules give what ColumnBlocked gave.
+        //  - USE (LandingBlocked): a floor that is already there is used as it is (a mountain top over its thick or thin
+        //    rock roof, a slab over its floor roof), so stairs may land on it. Drops and jumps only ask the landing cell's
+        //    own roof (Column.OpenAbove, DropRules), never the column under it, so they already use any floor.
         //
         // Thick roof or gravship under a cell: the reason no floor or stairs may be built over it, or null. The ship is its
         // column (ShipColumn: a ship stairs opening too; over it only ship decks and ship stairs go).
@@ -236,16 +235,13 @@ namespace ProjectZ
             return key == "PZ_OverGravship" && PZDefOf.PZ_ShipStairs != null ? "PZ_OverGravshipUseStairs" : key;
         }
 
-        // USE: why ordinary stairs may not land on upper cell top (its column), or null. A natural rock floor is used as
-        // it is; anything else (open air: the landing is made with the stairs; a slab or deck already there) keeps the
-        // build rule for the cell under it.
+        // USE: why ordinary stairs may not land on upper cell top (its column), or null. A floor already there (natural
+        // or built) is used as it is: nothing is laid, so its roof stays and only the gravship rule applies; open air (the
+        // landing is made with the stairs) keeps the whole build rule for the cell under it.
         public static string LandingBlocked(IntVec3 top, Map map)
         {
-            if (Floors.KindAt(top, map) == FloorKind.NaturalRock)
-            {
-                return null;
-            }
-            return StairsColumnBlocked(FloorRoof.Below(top, map), map);
+            string key = StairsColumnBlocked(FloorRoof.Below(top, map), map);
+            return key == "PZ_ThickRoof" && ProjectZ.HasFloor(top, map) ? null : key;
         }
 
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();

@@ -841,24 +841,43 @@ namespace ProjectZ.Dev
                 deckOk = k == FloorKind.ShipDeck && under == PZDefOf.PZ_FloorRoof && Floors.KindAt(d, map) == FloorKind.None;
                 deck = $"deck {k}, its ceiling {under?.defName}, after removal {Floors.KindAt(d, map)}";
             }
-            // natural rock: rough and smooth granite on level 1 over open ground (its ceiling is the thick rock roof)
+            // natural rock (rock-top floors): rough granite on level 1 over unroofed ground takes the floor roof (the support
+            // roof, as under a slab); smooth granite over ground with a thin rock roof keeps that roof; a thick roof written
+            // under it stays thick, a constructed one asked for keeps the thin one
             TerrainDef rough = DefDatabase<TerrainDef>.GetNamedSilentFail("Granite_Rough");
             TerrainDef smooth = DefDatabase<TerrainDef>.GetNamedSilentFail("Granite_Smooth");
             IntVec3 r1 = Levels.Cell(MtC(8, 12), 1, map), r2 = Levels.Cell(MtC(9, 12), 1, map);
+            map.roofGrid.SetRoof(MtC(8, 12), null);
+            map.roofGrid.SetRoof(MtC(9, 12), RoofDefOf.RoofRockThin);
             map.terrainGrid.SetTerrain(r1, rough);
             map.terrainGrid.SetTerrain(r2, smooth);
             FloorKind k1 = Floors.KindAt(r1, map), k2 = Floors.KindAt(r2, map);
             RoofDef u1 = map.roofGrid.RoofAt(MtC(8, 12)), u2 = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(9, 12), RoofDefOf.RoofConstructed);
+            RoofDef u2c = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(9, 12), null);
+            RoofDef u2n = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(8, 12), RoofDefOf.RoofRockThick);
+            RoofDef u1t = map.roofGrid.RoofAt(MtC(8, 12));
+            map.roofGrid.SetRoof(MtC(8, 12), RoofDefOf.RoofConstructed);
+            RoofDef u1tc = map.roofGrid.RoofAt(MtC(8, 12));
+            bool rule = Floors.CeilingFor(FloorKind.NaturalRock) == PZDefOf.PZ_FloorRoof
+                && Floors.CeilingFor(FloorKind.NaturalRock, RoofDefOf.RoofRockThick, null) == RoofDefOf.RoofRockThick
+                && Floors.CeilingFor(FloorKind.NaturalRock, RoofDefOf.RoofConstructed, RoofDefOf.RoofRockThin) == RoofDefOf.RoofRockThin
+                && Floors.CeilingFor(FloorKind.NaturalRock, null, PZDefOf.PZ_FloorRoof) == PZDefOf.PZ_FloorRoof
+                && Floors.CeilingFor(FloorKind.Slab, RoofDefOf.RoofRockThin, RoofDefOf.RoofRockThin) == PZDefOf.PZ_FloorRoof;
             int top = Column.NaturalTop(MtC(8, 12), map), topNone = Column.NaturalTop(MtC(2, 14), map);
             bool natOk = rough != null && smooth != null && Floors.IsNatural(rough) && Floors.IsNatural(smooth) && !Floors.IsNatural(PZDefOf.PZ_UpperFloor)
-                && k1 == FloorKind.NaturalRock && k2 == FloorKind.NaturalRock && u1 == RoofDefOf.RoofRockThick && u2 == RoofDefOf.RoofRockThick && top == 1 && topNone == 0;
+                && k1 == FloorKind.NaturalRock && k2 == FloorKind.NaturalRock && u1 == PZDefOf.PZ_FloorRoof && u2 == RoofDefOf.RoofRockThin
+                && u2c == RoofDefOf.RoofRockThin && u2n == RoofDefOf.RoofRockThin && u1t == RoofDefOf.RoofRockThick && u1tc == RoofDefOf.RoofRockThick && rule && top == 1 && topNone == 0;
+            string natNote = $"thin kept on a constructed write {u2c?.defName}, on a removal {u2n?.defName}; thick written {u1t?.defName}, then constructed {u1tc?.defName}; rule {rule}";
             map.terrainGrid.SetTerrain(r1, PZDefOf.PZ_OpenAir);
             map.terrainGrid.SetTerrain(r2, PZDefOf.PZ_OpenAir);
             map.roofGrid.SetRoof(MtC(8, 12), null);
             map.roofGrid.SetRoof(MtC(9, 12), null);
-            Result("F3 floor kinds and their ceilings: slab (floor roof), none (open air, ground), ship deck, natural rock (rough and smooth: thick rock roof), NaturalTop",
+            Result("F3 floor kinds and their ceilings: slab (floor roof), none (open air, ground), ship deck, natural rock (keeps a natural rock roof, else the floor roof), NaturalTop",
                 slabOk && noneOk && deckOk && natOk,
-                $"slab {Floors.KindAt(slab, map)} roof under {map.roofGrid.RoofAt(FloorRoof.Below(slab, map))?.defName}; air {Floors.KindAt(air, map)}, ground {Floors.KindAt(ground, map)}; {deck}; rough {k1} roof under {u1?.defName}, smooth {k2} roof under {u2?.defName}; NaturalTop {top} (slab column {topNone})");
+                $"slab {Floors.KindAt(slab, map)} roof under {map.roofGrid.RoofAt(FloorRoof.Below(slab, map))?.defName}; air {Floors.KindAt(air, map)}, ground {Floors.KindAt(ground, map)}; {deck}; rough {k1} roof under {u1?.defName}, smooth {k2} roof under {u2?.defName}; {natNote}; NaturalTop {top} (slab column {topNone})");
         }
 
         // ---------------------------------------------------------------- F4
@@ -888,8 +907,10 @@ namespace ProjectZ.Dev
         private static void MtStairs(Map map, AnnexMapComponent a)
         {
             TerrainDef rough = DefDatabase<TerrainDef>.GetNamed("Granite_Rough");
-            // S3's landing: a natural rock floor (its thick roof below comes with it, F3); S4's landing column: thick first
+            // S3's landing: a natural rock floor over a thick rock roof (a mountain top; laid over open ground it would take
+            // the floor roof, F3); S4's landing column: thick first
             map.terrainGrid.SetTerrain(mtTop3, rough);
+            map.roofGrid.SetRoof(FloorRoof.Below(mtTop3, map), RoofDefOf.RoofRockThick);
             IntVec3 b4 = FloorRoof.Below(StairShape.Exit(mtS4, Rot4.North, map), map);
             map.roofGrid.SetRoof(b4, RoofDefOf.RoofRockThick);
             Designator_Build d = new Designator_Build(PZDefOf.PZ_Stairs);

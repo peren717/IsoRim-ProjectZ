@@ -36,9 +36,6 @@ namespace ProjectZ
         // The map has tall mountains (generated with them).
         public static bool On(Map map) => ProjectZ.Annex(map)?.tallMountains ?? false;
 
-        // A natural rock floor in a band (a mountain top, or the floor of a dug cell): Floors.KindAt.
-        public static bool NaturalFloor(IntVec3 c, Map map) => Floors.KindAt(c, map) == FloorKind.NaturalRock;
-
         // ---------------------------------------------------------------- heights
 
         // H per ground cell (index z * sx + x), 0 = no rise; cap = the highest level a top may have.
