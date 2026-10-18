@@ -126,6 +126,11 @@ namespace ProjectZ.Dev
     //                                   infestations), performance and shots; -projectztallmountains, -projectzfloors=4
     //                                   -projectzmapsize=250 (-projectzhilliness=Impassable, -projectzmtnstep=X,
     //                                   -projectztmnoflows: only the fill, performance and shots) (TestTallMtn*)
+    //                                   rocktop: rock-top floors (every natural rock gets a floor above): the fill's checks,
+    //                                   save + load, then per check a reload of pz_rocktop: a tunnel under a plateau, a hall
+    //                                   under a lip (its floor falls), stairs onto a lip top, a wall, a bed and a wood floor
+    //                                   up there, the drop finders, a jump pack off a lip top and back; the same arguments
+    //                                   as tallmtn (TestRockTop)
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
@@ -234,7 +239,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -328,7 +333,7 @@ namespace ProjectZ.Dev
                         continue;
                     }
                     // mode mtn: a mountainous tile (MtnTile picks one if no temperate forest has it)
-                    if (mode == "mtn" || mode == "tallmtn")
+                    if (mode == "mtn" || mode == "tallmtn" || mode == "rocktop")
                     {
                         continue;
                     }
@@ -348,11 +353,11 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "mtn" || mode == "tallmtn")
+            if (mode == "mtn" || mode == "tallmtn" || mode == "rocktop")
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop")
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -690,6 +695,11 @@ namespace ProjectZ.Dev
                 StepTallMtn(map);
                 return;
             }
+            if (stage.StartsWith("rt_"))
+            {
+                StepRockTop(map);
+                return;
+            }
             if (stage.StartsWith("mt_"))
             {
                 StepMtn(map);
@@ -699,7 +709,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
