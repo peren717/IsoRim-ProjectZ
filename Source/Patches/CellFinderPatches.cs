@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
+using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 
@@ -315,6 +319,176 @@ namespace ProjectZ.Patches
             {
                 __result = new IntVec3(__instance.Size.x / 2, 0, a.groundZ / 2);
             }
+        }
+    }
+
+    // The game's finders that size their search by the whole map (compat scan §4, G1): inside them the map means the
+    // ground, so exits and edges are the ground's edges (north = row groundZ - 1) and searches round the map centre stay
+    // on the ground. One swap set for all of them: map.Size -> the ground's size, CellRect.WholeMap -> the ground rect,
+    // ClipInsideMap -> the ground; the expanding search round a centre (TryFindRandomCellNearWith and every finder built
+    // on it) clips to the centre's band instead. Without floors every swap does what vanilla's call does.
+    //   TryFindBestExitSpot: its random cell near the pawn is taken down to the ground under it (a pawn upstairs leaves
+    //   by the ground edge nearest the column it stands over).
+    //   TryFindEdgeCellFromPositionAvoidingColony: an upper-floor start counts as the ground cell under it (prefix below).
+    //   MultipleCaravansCellFinder (two caravans meeting): its opposite spots near the ground's edges.
+    //   LargeBuildingCellFinder's candidate scan: the ground's rows (its cell rule: LargeBuildingGroundOnly_Patch).
+    [HarmonyPatch]
+    public static class GroundFinders_Patch
+    {
+        public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
+
+        private static MethodInfo M(Type t, string name) => AccessTools.Method(t, name);
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            yield return M(typeof(RCellFinder), nameof(RCellFinder.TryFindRandomCellNearWith));
+            yield return M(typeof(RCellFinder), nameof(RCellFinder.TryFindRandomCellOutsideColonyNearTheCenterOfTheMap));
+            yield return M(typeof(RCellFinder), nameof(RCellFinder.TryFindBestExitSpot));
+            yield return M(typeof(RCellFinder), nameof(RCellFinder.TryFindRandomExitSpot));
+            yield return M(typeof(RCellFinder), nameof(RCellFinder.TryFindEdgeCellFromPositionAvoidingColony));
+            yield return M(typeof(MultipleCaravansCellFinder), nameof(MultipleCaravansCellFinder.FindStartingCellsFor2Groups));
+            yield return M(typeof(MultipleCaravansCellFinder), "TryFindOppositeSpots");
+            yield return M(typeof(LargeBuildingCellFinder), "CalculateLocationCandidates");
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
+        {
+            MethodInfo size = AccessTools.PropertyGetter(typeof(Map), nameof(Map.Size));
+            MethodInfo wholeMap = M(typeof(CellRect), nameof(CellRect.WholeMap));
+            MethodInfo clip = M(typeof(CellRect), nameof(CellRect.ClipInsideMap));
+            MethodInfo near = M(typeof(CellFinder), nameof(CellFinder.TryFindRandomCellNear));
+            MethodInfo spotNearEdge = M(typeof(MultipleCaravansCellFinder), "RandomSpotNearEdge");
+            MethodInfo opposite = M(typeof(MultipleCaravansCellFinder), "OppositeSpot");
+            bool byCentre = original.Name == nameof(RCellFinder.TryFindRandomCellNearWith);
+            int n = 0;
+            foreach (CodeInstruction ci in instructions)
+            {
+                string with = null;
+                if (ci.Calls(size))
+                {
+                    with = nameof(GroundFinders.Size);
+                }
+                else if (ci.Calls(wholeMap))
+                {
+                    with = nameof(GroundFinders.GroundRect);
+                }
+                else if (ci.Calls(clip))
+                {
+                    if (byCentre && !GroundFinders.Off)
+                    {
+                        yield return new CodeInstruction(OpCodes.Ldarg_0); // near
+                    }
+                    with = byCentre ? nameof(GroundFinders.ClipInsideBand) : nameof(GroundFinders.ClipInsideGround);
+                }
+                else if (ci.Calls(near))
+                {
+                    with = nameof(GroundFinders.RandomCellNearOnGround);
+                }
+                else if (ci.Calls(spotNearEdge))
+                {
+                    with = nameof(GroundFinders.RandomSpotNearEdge);
+                }
+                else if (ci.Calls(opposite))
+                {
+                    with = nameof(GroundFinders.OppositeSpot);
+                }
+                if (with != null && !GroundFinders.Off)
+                {
+                    ci.opcode = OpCodes.Call;
+                    ci.operand = M(typeof(GroundFinders), with);
+                    n++;
+                }
+                yield return ci;
+            }
+            PerMethod[original.DeclaringType.Name + "." + original.Name] = n;
+            if (n == 0)
+            {
+                Log.Warning("[ProjectZ] ground finders: nothing swapped in " + original.DeclaringType.Name + "." + original.Name + " (left as vanilla)");
+            }
+        }
+    }
+
+    // TryFindEdgeCellFromPositionAvoidingColony walks from the position to the ground's edge: start on the ground.
+    [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.TryFindEdgeCellFromPositionAvoidingColony))]
+    public static class EdgeCellFromPosition_Ground_Patch
+    {
+        public static void Prefix(ref IntVec3 position, Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (a != null && position.z >= a.groundZ && !GroundFinders.Off)
+            {
+                position = GroundFinders.OnGround(position, map, a);
+            }
+        }
+    }
+
+    // The swaps (GroundFinders_Patch). Each is the vanilla call when the map has no floors.
+    public static class GroundFinders
+    {
+        // Test only (-projectzfindersoff): the finders as vanilla (no swaps, no ground-only large structures), to show
+        // the old behaviour.
+        public static readonly bool Off = GenCommandLine.CommandLineArgPassed("projectzfindersoff");
+
+        public static IntVec3 Size(Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            IntVec3 s = map.Size;
+            return a == null ? s : new IntVec3(s.x, s.y, a.groundZ);
+        }
+
+        public static CellRect GroundRect(Map map) => ProjectZ.GroundRect(map);
+
+        // (static stand-ins for the instance method: the rect comes by reference, as its 'this')
+        public static CellRect ClipInsideGround(ref CellRect rect, Map map)
+        {
+            return rect.ClipInsideRect(ProjectZ.GroundRect(map));
+        }
+
+        // The band of the search centre (a void row counts with the band below it).
+        public static CellRect ClipInsideBand(ref CellRect rect, Map map, IntVec3 centre)
+        {
+            if (ProjectZ.Annex(map) == null)
+            {
+                return rect.ClipInsideMap(map);
+            }
+            int L = Levels.LevelOfRowLoose(map, centre.z);
+            return rect.ClipInsideRect(CellRect.FromLimits(0, Levels.RowMin(map, L), map.Size.x - 1, Levels.RowMax(map, L)));
+        }
+
+        // A cell (any row) taken down to the ground under it; a void row to the ground's top row.
+        public static IntVec3 OnGround(IntVec3 c, Map map, AnnexMapComponent a)
+        {
+            IntVec3 g = Levels.Ground(c, map);
+            return g.IsValid ? g : new IntVec3(c.x, c.y, Mathf.Clamp(Mathf.FloorToInt(Levels.GroundZLoose(map, c.z)), 0, a.groundZ - 1));
+        }
+
+        public static bool RandomCellNearOnGround(IntVec3 root, Map map, int squareRadius, Predicate<IntVec3> validator, out IntVec3 result, int maxTries)
+        {
+            bool found = CellFinder.TryFindRandomCellNear(root, map, squareRadius, validator, out result, maxTries);
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (found && a != null && result.z >= a.groundZ)
+            {
+                result = OnGround(result, map, a);
+            }
+            return found;
+        }
+
+        // MultipleCaravansCellFinder's own two helpers, its lines with the ground's size.
+        public static IntVec3 RandomSpotNearEdge(Map map)
+        {
+            IntVec3 s = Size(map);
+            CellRect r = ProjectZ.GroundRect(map);
+            r.minX += Mathf.RoundToInt(s.x * 0.2f);
+            r.minZ += Mathf.RoundToInt(s.z * 0.2f);
+            r.maxX -= Mathf.RoundToInt(s.x * 0.2f);
+            r.maxZ -= Mathf.RoundToInt(s.z * 0.2f);
+            return r.EdgeCells.RandomElement();
+        }
+
+        public static IntVec3 OppositeSpot(IntVec3 spot, Map map)
+        {
+            IntVec3 s = Size(map);
+            return new IntVec3(s.x - spot.x, spot.y, s.z - spot.z);
         }
     }
 

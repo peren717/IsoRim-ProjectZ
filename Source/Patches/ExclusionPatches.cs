@@ -231,18 +231,35 @@ namespace ProjectZ.Patches
     }
 
     // Anomaly's large structures (pit gates, fleshbeast burrows, fleshmass hearts, the monolith's place; LargeBuildingCellFinder,
-    // user decision D2): ground only on a map with tall mountains (its scan runs over every row; one cell score for all).
+    // user decision D2, compat G1): ground only on every map with floors (one cell score for all its finders; its
+    // candidate scan also runs over the ground's rows only, GroundFinders_Patch).
     [HarmonyPatch(typeof(LargeBuildingCellFinder), "GetCellScore")]
     public static class LargeBuildingGroundOnly_Patch
     {
         public static bool Prefix(IntVec3 cell, Map map, ref float __result)
         {
-            if (ProjectZ.IsAnnex(cell, map) && Mountains.On(map))
+            if (ProjectZ.IsAnnex(cell, map) && !GroundFinders.Off)
             {
                 __result = 0f;
                 return false;
             }
             return true;
+        }
+    }
+
+    // Its candidates are scored over topLeft .. topLeft + size but spawned on OccupiedRect(topLeft + size / 2), one row
+    // further north for an even size: drop those that would reach past the ground's top row.
+    [HarmonyPatch(typeof(LargeBuildingCellFinder), "CalculateLocationCandidates")]
+    public static class LargeBuildingCandidatesGround_Patch
+    {
+        public static void Postfix(System.Collections.Generic.List<LocationCandidate> __result, Map map, LargeBuildingSpawnParms parms)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (a != null && __result != null && !GroundFinders.Off)
+            {
+                IntVec2 size = parms.Size;
+                __result.RemoveAll(x => GenAdj.OccupiedRect(x.cell, Rot4.North, size).maxZ >= a.groundZ);
+            }
         }
     }
 

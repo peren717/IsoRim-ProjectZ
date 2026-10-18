@@ -126,6 +126,10 @@ namespace ProjectZ.Dev
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
+    //                                   finders: the game's whole-map finders on a 3-floor map (expanding search round a
+    //                                   centre, exits, edges, caravans, large structures) and real flows (visitors and
+    //                                   thrumbos leaving, an edge raid, a pit gate); -projectzfloors=3 -projectzmapsize=120
+    //                                   (-projectzfindersoff: the finders as vanilla) (TestFinders)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -231,7 +235,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -245,6 +249,10 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
+            if (mode == "finders")
+            {
+                h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.ExitMap)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(FdExitPrefix)));
+            }
             if (mode == "range")
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GuardPrefix)));
@@ -349,7 +357,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders")
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -682,6 +690,11 @@ namespace ProjectZ.Dev
                 StepTallMtn(map);
                 return;
             }
+            if (stage.StartsWith("fd_"))
+            {
+                StepFinders(map);
+                return;
+            }
             if (stage.StartsWith("mt_"))
             {
                 StepMtn(map);
@@ -760,6 +773,10 @@ namespace ProjectZ.Dev
                     else if (mode == "drops")
                     {
                         stage = "a_setup";
+                    }
+                    else if (mode == "finders")
+                    {
+                        stage = "fd_setup";
                     }
                     else if (mode == "qol1")
                     {
