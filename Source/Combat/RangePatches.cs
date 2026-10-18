@@ -295,7 +295,7 @@ namespace ProjectZ.Combat
                         {
                             continue;
                         }
-                        if (Heights.CanSee(tur.Position, c, map))
+                        if (Los3D.CanSee(tur.Position, c, map))
                         {
                             increment(__instance, c, 45);
                         }
