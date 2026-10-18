@@ -217,11 +217,12 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            string outOfRange = "OutOfRange".Translate();
-            string tooClose = "TooClose".Translate();
-            string cannotHit = "CannotHitTarget".Translate();
+            // the game's reasons as it writes them (1.7 capitalizes the keyed text: "Out of range"); compared ignoring case
+            string outOfRange = "OutOfRange".Translate().CapitalizeFirst();
+            string tooClose = "TooClose".Translate().CapitalizeFirst();
+            string cannotHit = "CannotHitTarget".Translate().CapitalizeFirst();
             Map map = pawn.Map;
-            if (Heights.CrossFloor(pawn.Position, target.Cell, map) && (failStr == outOfRange || failStr == tooClose))
+            if (Heights.CrossFloor(pawn.Position, target.Cell, map) && (Same(failStr, outOfRange) || Same(failStr, tooClose)))
             {
                 if (Range3D.RangeDistance(pawn.Position, target.Cell, map) > v.EffectiveRange)
                 {
@@ -236,11 +237,13 @@ namespace ProjectZ.Combat
                     failStr = cannotHit;
                 }
             }
-            if (failStr == cannotHit && NoSight.Blocked(v, target))
+            if (Same(failStr, cannotHit) && NoSight.Blocked(v, target))
             {
                 failStr = "PZ_CannotHitNoLineOfSight".Translate();
             }
         }
+
+        private static bool Same(string a, string b) => string.Equals(a, b, System.StringComparison.OrdinalIgnoreCase);
     }
 
     // The AI's avoid grid round a turret (raiders keep out of its fire): the game marks only the turret's own floor.
