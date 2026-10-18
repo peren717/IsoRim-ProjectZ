@@ -630,6 +630,9 @@ namespace ProjectZ.Dev
         }
 
         private static IntVec3 tfBlastAt;
+        private static float tfHiddenBefore, tfOpenBefore;
+
+        private static float Hurt(Pawn p) => p.health.hediffSet.hediffs.OfType<Hediff_Injury>().Where(h => !h.IsPermanent()).Sum(h => h.Severity);
 
         private static void TfBlast(Map map, AnnexMapComponent a)
         {
@@ -683,6 +686,9 @@ namespace ProjectZ.Dev
             tfOpen = PawnGenerator.GeneratePawn(kind);
             GenSpawn.Spawn(tfHidden, hide, map);
             GenSpawn.Spawn(tfOpen, open, map);
+            // (fresh injuries only: a generated animal can come with old ones)
+            tfHiddenBefore = Hurt(tfHidden);
+            tfOpenBefore = Hurt(tfOpen);
             GenExplosion.DoExplosion(tfBlastAt, map, 3.9f, DamageDefOf.Bomb, null, 30);
             Info($"F7 explosion r3.9 at {tfBlastAt} (level {ProjectZ.FloorOf(tfBlastAt, map)}); behind the rim {hide} (level {ProjectZ.FloorOf(hide, map)}, 3D {Range3D.Distance(tfBlastAt, hide, map):0.0}), in the open {open} (3D {Range3D.Distance(tfBlastAt, open, map):0.0})");
             TickUntil(120, () => false, "tm_f_blasted", 30);
@@ -694,8 +700,8 @@ namespace ProjectZ.Dev
             {
                 return;
             }
-            bool hiddenHurt = tfHidden.health.hediffSet.hediffs.Any(h => h is Hediff_Injury) || tfHidden.Dead;
-            bool openHurt = tfOpen.health.hediffSet.hediffs.Any(h => h is Hediff_Injury) || tfOpen.Dead;
+            bool hiddenHurt = tfHidden.Dead || Hurt(tfHidden) > tfHiddenBefore;
+            bool openHurt = tfOpen.Dead || Hurt(tfOpen) > tfOpenBefore;
             Result("F7 an explosion on a top at the foot of a cliff hurts an animal in the open, not one on the higher top behind the rim", !hiddenHurt && openHurt, $"behind the rim hurt {hiddenHurt}, open hurt {openHurt}");
             foreach (Pawn p in new[] { tfHidden, tfOpen })
             {
