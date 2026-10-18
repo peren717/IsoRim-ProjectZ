@@ -137,6 +137,10 @@ namespace ProjectZ.Dev
     //                                   BandRadial: the list, leak checks at the band edge, N1/N2 fingerprints, costs);
     //                                   -projectzfloors=3 -projectzmapsize=101 / -projectzfloors=1 (-projectznoradialclip:
     //                                   nothing patched; -projectzradialref=<tag>: compare fingerprints) (TestRadial)
+    //                                   gravity, gravityn1, gravityperf: gravity at the spawn entry points (compat G2: falls,
+    //                                   roofs, refusals, filth, slab removal, N1/N2 fingerprints, costs); -projectzfloors=3
+    //                                   -projectzmapsize=101 -projectzsave=pz_radial3 / -projectzfloors=1 -projectzsave=pz_radial1
+    //                                   (-projectznogravity: no hook acts; -projectzgravityref=<tag>: compare fingerprints) (TestGravity)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -243,7 +247,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -268,6 +272,10 @@ namespace ProjectZ.Dev
             if (mode.StartsWith("radial"))
             {
                 PatchRadialProbe(h);
+            }
+            if (mode.StartsWith("gravity"))
+            {
+                PatchGravityProbe(h);
             }
             if (mode == "explode")
             {
@@ -369,7 +377,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -712,6 +720,11 @@ namespace ProjectZ.Dev
                 StepRadial(map);
                 return;
             }
+            if (stage.StartsWith("gv_"))
+            {
+                StepGravity(map);
+                return;
+            }
             if (stage.StartsWith("fd_"))
             {
                 StepFinders(map);
@@ -726,7 +739,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode.StartsWith("radial") ? "rd_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -1079,6 +1092,11 @@ namespace ProjectZ.Dev
         private static void Finish()
         {
             stage = "done";
+            if (BandRadial.AnyAnnex)
+            {
+                // (every mode on a map with floors: what gravity did, e.g. gravship landings in shipfly / shipstack)
+                results.Add("INFO gravity counters: " + Gravity.Counters);
+            }
             results.Add($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
             Out($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
             try
