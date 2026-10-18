@@ -12,8 +12,8 @@ namespace ProjectZ
     //   change per equalize interval (120 ticks) = sum over shared floor cells of (T_other - T)
     //                                              * 120 * 0.00017 (RoomTempTracker.WallEqualizeFactor) / room cells
     //
-    // i.e. each cell of floor between two rooms counts as one wall cell between them. A ceiling that is an upper floor
-    // (PZ_FloorRoof) no longer leaks to the outdoors as a thin roof does: that share of the thin-roof exchange
+    // i.e. each cell of floor between two rooms counts as one wall cell between them; only built floors pass heat (Passes:
+    // slabs and ship decks, never natural rock floors). A ceiling that is a built upper floor no longer leaks to the outdoors as a thin roof does: that share of the thin-roof exchange
     // (0.00005 * 120 per interval, by the share of the room's cells) is taken off again. Cells with a wall or nothing
     // walkable on the other side exchange with nothing. Patched in RoomTempTracker.EqualizeTemperature (postfix; the
     // game calls it for every room every 120 ticks); the shared cells of each room are cached and rebuilt after any
@@ -37,6 +37,21 @@ namespace ProjectZ
         public static void Dirty()
         {
             version++;
+        }
+
+        // The one rule for which floors pass heat (D8; user 2026-10-18 for rock-top floors): only a built floor (a slab or a
+        // ship deck) over cell 'below'. A natural rock floor never does (stone insulates), whatever roof is under it (the
+        // thick mountain roof, a lip's thin rock roof or the floor roof a roofless lip gets): the room under it keeps the
+        // game's own exchange for that roof.
+        public static bool Passes(IntVec3 below, Map map)
+        {
+            IntVec3 up = FloorRoof.Above(below, map);
+            if (!up.IsValid || !ProjectZ.HasFloor(up, map))
+            {
+                return false;
+            }
+            FloorKind k = Floors.KindAt(up, map);
+            return k == FloorKind.Slab || k == FloorKind.ShipDeck;
         }
 
         public static float Change(RoomTempTracker tracker, Room room)
@@ -81,7 +96,7 @@ namespace ProjectZ
             s.ceilingFloors = 0;
             foreach (IntVec3 c in room.Cells)
             {
-                if (FloorRoof.FloorAbove(c, map))
+                if (Passes(c, map))
                 {
                     s.ceilingFloors++;
                     IntVec3 up = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), ProjectZ.FloorOf(c, map) + 1, map);
@@ -93,7 +108,7 @@ namespace ProjectZ
                 if (ProjectZ.HasFloor(c, map))
                 {
                     IntVec3 below = FloorRoof.Below(c, map);
-                    if (below.IsValid && map.roofGrid.RoofAt(below) == PZDefOf.PZ_FloorRoof)
+                    if (below.IsValid && Passes(below, map))
                     {
                         s.others.Add(below);
                     }

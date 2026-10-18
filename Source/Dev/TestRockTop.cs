@@ -21,6 +21,8 @@ namespace ProjectZ.Dev
     //      T7 a wood floor laid on a top allows the game's drop finders there, an unbuilt top still refuses them, and
     //      ~440 finder calls never give an unbuilt top; walk down; the stairs deconstructed: the natural floor stays
     //   T8 a colonist with a jump pack on a lip top jumps down to the ground and back up
+    //   heat (D8, user 2026-10-18): a lip dug out by colonists and closed into a room, the lip top over it closed into a
+    //      room: no heat through the natural floor; a 3x3 house with a slab over it: the built floor still passes heat
     public static partial class TestRunner
     {
         private static int rtGenHash;
@@ -35,6 +37,10 @@ namespace ProjectZ.Dev
         private static int rtSteelLevel;
         private static readonly List<IntVec3> rtCells = new List<IntVec3>();
         private static readonly List<IntVec3> rtThick = new List<IntVec3>();
+        private static int rtT3Skip;
+
+        // Rock still to mine in T3's hall (collapsed rocks, vanilla's rubble in unsupported thick-roofed cells, are not).
+        private static bool RtRock(IntVec3 c, Map map) => c.GetEdifice(map) is Mineable m && m.def != ThingDefOf.CollapsedRocks;
         private static int rtRiderHurt;
         private static IntVec3 rtStairs, rtExit, rtWalk, rtFoot, rtBedAt, rtWallAt, rtFloorAt, rtJumpTo;
         private static Rot4 rtRot;
@@ -88,10 +94,16 @@ namespace ProjectZ.Dev
             return h;
         }
 
+        private static readonly HarmonyLib.AccessTools.FieldRef<Pawn_DraftController, AutoUndrafter> autoUndrafterRef = HarmonyLib.AccessTools.FieldRefAccess<Pawn_DraftController, AutoUndrafter>("autoUndrafter");
+
         private static void RtWork(Map map, WorkTypeDef w)
         {
             foreach (Pawn p in Colonists(map))
             {
+                if (p == rtRider && p.Drafted)
+                {
+                    continue;   // (T3's rider waits on the lip top)
+                }
                 p.workSettings?.EnableAndInitializeIfNotAlreadyInitialized();
                 foreach (WorkTypeDef d in DefDatabase<WorkTypeDef>.AllDefs)
                 {
@@ -158,10 +170,32 @@ namespace ProjectZ.Dev
             }
             if (rtRider != null && rtRider.Spawned && rtU.IsValid && rtRider.Position == rtU && rtU.GetTerrain(map) != PZDefOf.PZ_OpenAir)
             {
-                Draft(rtRider, false);
-                Draft(rtRider, true);
+                // (the game's auto-undraft counter put back, as drafting does: no undraft, no job in between)
+                if (rtRider.Drafted)
+                {
+                    autoUndrafterRef(rtRider.drafter)?.Notify_Drafted();
+                }
+                else
+                {
+                    Draft(rtRider, true);
+                }
             }
             return true;
+        }
+
+        private static IntVec3 rtSlabC;
+        private static float rtHeatT0, rtHeatSlab;
+        private static string rtHeatNat;
+
+        private static void RtWall(Map map, IntVec3 c)
+        {
+            foreach (Thing t in c.GetThingList(map).Where(t => t.def.category == ThingCategory.Plant || t.def.category == ThingCategory.Item).ToList())
+            {
+                t.Destroy();
+            }
+            Thing w = ThingMaker.MakeThing(ThingDefOf.Wall, ThingDefOf.WoodLog);
+            w.SetFaction(Faction.OfPlayer);
+            GenSpawn.Spawn(w, c, map);
         }
 
         private static IntVec3 RtHome(Map map)
@@ -274,6 +308,7 @@ namespace ProjectZ.Dev
                     Pawn any = Colonists(map).FirstOrDefault();
                     rtL = IntVec3.Invalid;
                     const float R = 9.5f;
+                    int skip = rtT3Skip;
                     foreach (IntVec3 g in Near(home, 110, map))
                     {
                         if (!RtLip(g, map) || !RtLip(g + IntVec3.East, map) || !RtLip(g + IntVec3.West, map) || !RtLip(g + IntVec3.East * 2, map))
@@ -303,7 +338,7 @@ namespace ProjectZ.Dev
                             }
                             rock += b is Mineable ? 1 : 0;
                         }
-                        if (ok && rock <= 220)
+                        if (ok && rock <= 220 && skip-- <= 0)
                         {
                             rtL = g;
                             break;
@@ -354,11 +389,27 @@ namespace ProjectZ.Dev
                     Info($"T3 lip {rtL} (roof {map.roofGrid.RoofAt(rtL)?.defName}), top {rtU}; {rtCells.Count} rock cells within {R} designated; rider {rtRider} drafted on the top, wall {rtWall}, stool {rtStool}, steel {rtSteel.Position}; a supported top {rtFar}");
                     rtThick.Clear();
                     rtThick.AddRange(rtCells.Where(c => map.roofGrid.RoofAt(c)?.isThickRoof ?? false));
-                    TickUntil(400000, () => RtKeep(map) && (rtU.GetTerrain(map) == PZDefOf.PZ_OpenAir || rtCells.All(c => !(c.GetEdifice(map) is Mineable))), "rt_t3_settle", 60);
+                    TickUntil(400000, () => RtKeep(map) && (rtU.GetTerrain(map) == PZDefOf.PZ_OpenAir || rtCells.All(c => !RtRock(c, map))), "rt_t3_settle", 60);
                     return true;
                 }
                 case "rt_t3_settle":
-                    Info($"T3 the lip top fell after {ticksTotal} ticks ({rtCells.Count(c => c.GetEdifice(map) is Mineable)} rock cells left): lip top {rtU.GetTerrain(map).defName}");
+                {
+                    string left = string.Join(" ", rtCells.Where(c => c.GetEdifice(map) is Mineable).Select(c => c + " desig " + (map.designationManager.DesignationAt(c, DesignationDefOf.Mine) != null)
+                        + " fog " + map.fogGrid.IsFogged(c) + " roof " + map.roofGrid.RoofAt(c)?.defName + " standable near " + GenAdj.CellsAdjacentCardinal(c, Rot4.North, IntVec2.One).Count(n => n.InBounds(map) && n.Standable(map))));
+                    Info($"T3 after {ticksTotal} ticks (rock cells left: {left}): lip top {rtU.GetTerrain(map).defName}");
+                    // all the rock mined and the lip still up: collapsed rocks (vanilla, in the hall's thick-roofed cells) hold
+                    // its roof; the next site (at most three)
+                    if (rtU.GetTerrain(map) != PZDefOf.PZ_OpenAir && rtT3Skip < 2)
+                    {
+                        int held = GenRadial.RadialCellsAround(rtL, 6.9f, true).Count(c => c.InBounds(map) && c.GetEdifice(map)?.def == ThingDefOf.CollapsedRocks);
+                        Info($"T3 the lip at {rtL} is held up ({held} collapsed rocks within 6.9): the next site");
+                        rtT3Skip++;
+                        tickWatch = null;
+                        stage = "rt_t3";
+                        pendingLoad = "pz_rocktop";
+                        return true;
+                    }
+                }
                     TickUntil(300, () => false, "rt_t3_fell", 60);
                     return true;
                 case "rt_t3_fell":
@@ -381,7 +432,7 @@ namespace ProjectZ.Dev
                         }
                         rtRider.workSettings?.DisableAll();
                     }
-                    TickUntil(400000, () => RtKeep(map) && rtCells.All(c => !(c.GetEdifice(map) is Mineable)), "rt_t3_settle2", 120);
+                    TickUntil(400000, () => RtKeep(map) && rtCells.All(c => !RtRock(c, map)), "rt_t3_settle2", 120);
                     return true;
                 }
                 case "rt_t3_settle2":
@@ -656,7 +707,125 @@ namespace ProjectZ.Dev
                 {
                     bool up = rtJumper.Spawned && ProjectZ.FloorOf(rtJumper.Position, map) == 1 && rtJumper.Position.DistanceTo(rtU) <= 2.5f;
                     Result("T8 a jump pack jump from the ground back onto the lip top", up, $"{rtJumper} at {rtJumper.Position} (level {ProjectZ.FloorOf(rtJumper.Position, map)}), aimed {rtU}");
-                    RtSiteEnd(map, "T8", null);
+                    RtSiteEnd(map, "T8", "rt_heat");
+                    return true;
+                }
+
+                // ------------------------------------------------------------ heat (D8): only built floors pass it
+                case "rt_heat":
+                {
+                    IntVec3 home = RtHome(map);
+                    Pawn any = Colonists(map).FirstOrDefault();
+                    rtL = rtSlabC = IntVec3.Invalid;
+                    foreach (IntVec3 g in Near(home, 110, map))
+                    {
+                        // an inner lip cell (lip rock to the south too, rock east, west and north, a top over the north one): dug
+                        // out it is a closed one-cell room, and its top a cell walls can close in on every side
+                        bool rockAround = new[] { IntVec3.East, IntVec3.West, IntVec3.North }.All(d => (g + d).GetEdifice(map) is Mineable) && RtLip(g + IntVec3.South, map);
+                        if (!RtLip(g, map) || !rockAround || !TmTop(Levels.Cell(g + IntVec3.East, 1, map), map) || !TmTop(Levels.Cell(g + IntVec3.West, 1, map), map)
+                            || !TmTop(Levels.Cell(g + IntVec3.North, 1, map), map))
+                        {
+                            continue;
+                        }
+                        IntVec3 s = g + IntVec3.South * 2;
+                        if (!s.Standable(map) || s.Roofed(map) || map.fogGrid.IsFogged(s) || any == null || !map.reachability.CanReach(any.Position, s, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
+                        {
+                            continue;
+                        }
+                        // a 3x3 patch of open ground (open air above) 5-14 cells away, for the built-floor pair
+                        IntVec3 slabC = Near(g, 14, map).FirstOrDefault(c => (c - g).LengthHorizontal >= 5f && CellRect.CenteredOn(c, 2).Cells.All(x => x.InBounds(map) && x.z < a.groundZ - 1
+                            && x.Standable(map) && !x.Roofed(map) && x.GetEdifice(map) == null && !map.fogGrid.IsFogged(x) && Levels.Cell(x, 1, map).GetTerrain(map) == PZDefOf.PZ_OpenAir
+                            && !x.GetThingList(map).Any(t => t is Pawn)));
+                        if (slabC.IsValid && slabC != IntVec3.Zero)
+                        {
+                            rtL = g;
+                            rtSlabC = slabC;
+                            break;
+                        }
+                    }
+                    if (!rtL.IsValid)
+                    {
+                        Result("heat: a lip and open ground beside it", false, "none found");
+                        Finish();
+                        return true;
+                    }
+                    CellRect site = CellRect.CenteredOn(rtL, 3).Encapsulate(CellRect.CenteredOn(rtSlabC, 3));
+                    RtSiteStart(map, site);
+                    map.designationManager.AddDesignation(new Designation(rtL, DesignationDefOf.Mine));
+                    RtWork(map, WorkTypeDefOf.Mining);
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    Info($"heat: lip {rtL} (roof {map.roofGrid.RoofAt(rtL)?.defName}) dug by colonists; built-floor pair at {rtSlabC}");
+                    TickUntil(30000, () => rtL.GetEdifice(map) == null, "rt_heat_dug", 60);
+                    return true;
+                }
+                case "rt_heat_dug":
+                {
+                    RtWork(map, null);
+                    IntVec3 away = CellFinder.StandableCellNear(rtL + IntVec3.South * 12 + IntVec3.West * 12, map, 8f);
+                    foreach (Pawn p in Colonists(map))
+                    {
+                        if (away.IsValid)
+                        {
+                            Teleport(p, away);
+                        }
+                    }
+                    // (fixture) the lip top over the dug cell closed into a room (walls on the four tops round it, a roof); the
+                    // built pair: a 3x3 house on the ground and one on a
+                    // slab right over it, each with a one-cell room in the middle
+                    IntVec3 u = Levels.Cell(rtL, 1, map);
+                    RtWall(map, Levels.Cell(rtL + IntVec3.South, 1, map));
+                    RtWall(map, Levels.Cell(rtL + IntVec3.West, 1, map));
+                    RtWall(map, Levels.Cell(rtL + IntVec3.East, 1, map));
+                    RtWall(map, Levels.Cell(rtL + IntVec3.North, 1, map));
+                    map.roofGrid.SetRoof(u, RoofDefOf.RoofConstructed);
+                    TerrainDef slab = DefDatabase<TerrainDef>.GetNamed("PZ_UpperFloor");
+                    foreach (IntVec3 c in CellRect.CenteredOn(rtSlabC, 1))
+                    {
+                        map.terrainGrid.SetTerrain(Levels.Cell(c, 1, map), slab);
+                    }
+                    foreach (IntVec3 c in CellRect.CenteredOn(rtSlabC, 1).EdgeCells)
+                    {
+                        RtWall(map, c);
+                        RtWall(map, Levels.Cell(c, 1, map));
+                    }
+                    map.roofGrid.SetRoof(rtSlabC, RoofDefOf.RoofConstructed);   // (becomes the slab's floor roof)
+                    map.roofGrid.SetRoof(Levels.Cell(rtSlabC, 1, map), RoofDefOf.RoofConstructed);
+                    TickUntil(240, () => false, "rt_heat_set", 60);
+                    return true;
+                }
+                case "rt_heat_set":
+                {
+                    Room nb = rtL.GetRoom(map), nu = Levels.Cell(rtL, 1, map).GetRoom(map), sb = rtSlabC.GetRoom(map), su = Levels.Cell(rtSlabC, 1, map).GetRoom(map);
+                    bool rooms = nb != null && nu != null && sb != null && su != null && nb != nu && sb != su && !nb.UsesOutdoorTemperature && !nu.UsesOutdoorTemperature
+                        && !sb.UsesOutdoorTemperature && !su.UsesOutdoorTemperature;
+                    Info($"heat rooms: dug {nb?.ID} ({nb?.CellCount} cells, roof {map.roofGrid.RoofAt(rtL)?.defName}), lip top {nu?.ID} ({nu?.CellCount}); built below {sb?.ID} ({sb?.CellCount}, roof {map.roofGrid.RoofAt(rtSlabC)?.defName}), above {su?.ID} ({su?.CellCount}); outdoor {map.mapTemperature.OutdoorTemp:0.0}");
+                    if (!rooms)
+                    {
+                        Result("heat: four sealed indoor rooms", false, "a room is missing, shared or outdoors");
+                        RtSiteEnd(map, "heat", null);
+                        return true;
+                    }
+                    float t0 = map.mapTemperature.OutdoorTemp;
+                    nb.Temperature = t0;
+                    sb.Temperature = t0;
+                    nu.Temperature = t0 + 40f;
+                    su.Temperature = t0 + 40f;
+                    rtHeatT0 = t0;
+                    rtHeatNat = FloorHeat.Change(nb.TempTracker, nb).ToString("0.###") + "/" + FloorHeat.Change(nu.TempTracker, nu).ToString("0.###");
+                    rtHeatSlab = FloorHeat.Change(sb.TempTracker, sb);
+                    TickUntil(1200, () => false, "rt_heat_done", 60);
+                    return true;
+                }
+                case "rt_heat_done":
+                {
+                    Room nb = rtL.GetRoom(map), nu = Levels.Cell(rtL, 1, map).GetRoom(map), sb = rtSlabC.GetRoom(map);
+                    bool natZero = rtHeatNat == "0/0";
+                    Result("heat: a dug room under a lip top and the room on the top pass no heat through the natural floor (no floor exchange, either side)",
+                        natZero, $"floor exchange per interval (below/above) {rtHeatNat}; after 1200 ticks dug room {nb?.Temperature - rtHeatT0:+0.00;-0.00} C, top room {nu?.Temperature - rtHeatT0:+0.00;-0.00} C from outdoor");
+                    float slabRise = (sb?.Temperature ?? rtHeatT0) - rtHeatT0, natRise = (nb?.Temperature ?? rtHeatT0) - rtHeatT0;
+                    Result("heat: a built slab between two rooms still passes heat (the room under the warm room warms faster than the dug one)",
+                        rtHeatSlab > 0f && slabRise > natRise + 0.5f, $"floor exchange of the room under the slab at the start {rtHeatSlab:+0.000;-0.000} C per interval; after 1200 ticks under the slab {slabRise:+0.00;-0.00} C, dug room {natRise:+0.00;-0.00} C");
+                    RtSiteEnd(map, "heat", null);
                     return true;
                 }
             }
