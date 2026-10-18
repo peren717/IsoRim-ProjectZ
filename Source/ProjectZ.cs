@@ -56,6 +56,21 @@ namespace ProjectZ
         // Tall mountains (Mountains.cs): this map was generated with its mountains risen into the bands (saved; the
         // rules that only matter where natural rock floors exist ask it).
         public bool tallMountains;
+        // Tall mountains: the levels the player's pawns have reached (MountainFog.Reveal; saved). Until then a level's
+        // natural rock floors don't count as used for the floor HUD (ShownLevels, user option 2). Null on a tall map
+        // saved before: every level counts as reached (old saves keep their revealed tops, user Q8).
+        public List<int> reachedLevels;
+
+        public bool Reached(int L) => reachedLevels == null || reachedLevels.Contains(L);
+
+        public void MarkReached(int L)
+        {
+            if (reachedLevels != null && !reachedLevels.Contains(L))
+            {
+                reachedLevels.Add(L);
+                ShownLevels.LevelReached(map, L);
+            }
+        }
 
         // F1, derived from bandLevel (not saved): level per band, band per level (index L - minLevel).
         private int[] levelOfBand;
@@ -217,6 +232,10 @@ namespace ProjectZ
             Scribe_Collections.Look(ref bandLevel, "bandLevel", LookMode.Value);
             DataExposeUtility.LookByteArray(ref elevation, "elevation");
             Scribe_Values.Look(ref tallMountains, "tallMountains", false);
+            if (tallMountains)
+            {
+                Scribe_Collections.Look(ref reachedLevels, "reachedLevels", LookMode.Value);
+            }
             if (Scribe.mode == LoadSaveMode.LoadingVars)
             {
                 if (layoutVersion < 2)

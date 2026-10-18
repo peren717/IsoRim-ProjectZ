@@ -6,7 +6,6 @@
   <PZ_WorldFloorsTip>Storeys including the ground, for every map in this game. Can't be changed later.</PZ_WorldFloorsTip>
   <PZ_TallMountains>Tall mountains</PZ_TallMountains>
   <PZ_TallMountainsTip>Mountains rise into the upper floors.</PZ_TallMountainsTip>
-  <PZ_FogLidOff>Off in worlds with tall mountains (IsoRim ProjectZ).</PZ_FogLidOff>
   <PZ_FloorsWarn3>Untested heights. Bring a parachute.</PZ_FloorsWarn3>
   <PZ_FloorsWarn6>Your colonists are drafting a petition for elevators.</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>Your PC is now a space heater.</PZ_FloorsWarn10>

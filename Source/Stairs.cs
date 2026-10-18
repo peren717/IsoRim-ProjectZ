@@ -230,6 +230,11 @@ namespace ProjectZ
                 }
             }
             map.GetComponent<StairGrid>()?.Register(this, HighCell, top);
+            if (!respawningAfterLoad)
+            {
+                // (a) the band the stairs lead onto: what pawns can walk to from the exit is revealed (tall mountains)
+                MountainFog.Reveal(top, map);
+            }
         }
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
@@ -437,6 +442,13 @@ namespace ProjectZ
             if (a == null || k < 0 || k + 1 > a.MaxLevel)
             {
                 return "PZ_NoFloorAbove".Translate();
+            }
+            // no landing in fog (vanilla: nothing is placed in undiscovered cells; the game checks only the ramp's
+            // centre); asked first, so no other reason tells what the fog hides
+            IntVec3 exit = StairShape.Exit(loc, rot, map);
+            if (exit.IsValid && exit.Fogged(map))
+            {
+                return "CannotPlaceInUndiscovered".Translate();
             }
             AcceptanceReport thick = ThickRoofCheck(loc, rot, map);
             if (!thick.Accepted)
