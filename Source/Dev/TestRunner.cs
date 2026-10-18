@@ -212,6 +212,7 @@ namespace ProjectZ.Dev
             Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
             VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
+            Gravity.Off = GenCommandLine.CommandLineArgPassed("projectznogravity");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {

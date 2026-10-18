@@ -18,7 +18,8 @@ namespace ProjectZ
     //     and when built; without one it collapses with the deck. Separately, a deck needs a ship column cell right
     //     below it (placement, and the fall below).
     //   - Removal: the vanilla remove-foundation tool; refused under a deck ("remove the deck above first"). What stands on
-    //     a removed deck moves off (Slab.MoveOff), what was laid on it goes.
+    //     a removed deck falls to the floor below (Slab.MoveOff, the gravity rule; the worker stands on a next cell,
+    //     WorkSpot), what was laid on it goes.
     //   - Falling: a deck whose cell below lost its substructure falls through the slab collapse (SlabCollapse): its roof
     //     cell is marked to collapse, the game's collapse buffer drops it with the deck (one hook there, S1). Decks above it
     //     follow. This runs on any foundation removal, after a gravship takes off (decks left out of the ship set stay
@@ -49,6 +50,34 @@ namespace ProjectZ
 
         // An upper floor cell with a ship deck (bare or under a floor laid on it).
         public static bool At(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && Is(map.terrainGrid.FoundationAt(c));
+
+        // A deck on an upper floor (the ground's substructure is vanilla's).
+        public static bool Upper(IntVec3 c, Map map) => ProjectZ.Annex(map) != null && At(c, map) && ProjectZ.FloorOf(c, map) >= 1;
+
+        // Where a worker stands to take deck c up (compat G2: what stands on a removed deck falls, so never on c itself):
+        // a cell next to it (4 ways) on its floor that the pawn can stand on and reach; one not marked for removal itself
+        // first, then the nearest to the pawn. Invalid: none.
+        public static IntVec3 WorkSpot(Pawn pawn, IntVec3 c)
+        {
+            Map map = pawn.Map;
+            IntVec3 best = IntVec3.Invalid;
+            int bestScore = int.MaxValue;
+            for (int i = 0; i < 4; i++)
+            {
+                IntVec3 x = c + GenAdj.CardinalDirections[i];
+                if (!x.InBounds(map) || !ProjectZ.SameBand(x, c, map) || !x.Standable(map) || !pawn.CanReach(x, PathEndMode.OnCell, Danger.Deadly))
+                {
+                    continue;
+                }
+                int score = (map.designationManager.DesignationAt(x, DesignationDefOf.RemoveFoundation) != null ? 1000000 : 0) + pawn.Position.DistanceToSquared(x);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = x;
+                }
+            }
+            return best;
+        }
 
         // A blueprint or frame of gravship substructure (vanilla's or a deck) on c.
         public static bool Planned(IntVec3 c, Map map)
@@ -234,7 +263,7 @@ namespace ProjectZ
     }
 
     // A substructure foundation removed (the remove tool, god mode, a destroyed foundation, a falling deck): a deck above
-    // it falls; a deck taken away leaves open air and moves off what stood on it.
+    // it falls; a deck taken away leaves open air and what stood on it falls (Slab.MoveOff).
     [HarmonyPatch(typeof(TerrainGrid), "DoTerrainChangedEffects")]
     public static class TerrainChanged_ShipDeck_Patch
     {
@@ -308,6 +337,20 @@ namespace ProjectZ
                 {
                     __result = why;
                 }
+            }
+        }
+    }
+
+    // An upper deck is taken up from a cell next to it (WorkSpot; the job's target B, Slabs.cs): none, no job.
+    [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.HasJobOnCell))]
+    public static class RemoveFoundationHasJob_ShipDeck_Patch
+    {
+        public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
+        {
+            if (__result && ShipDeck.Upper(c, pawn.Map) && !ShipDeck.WorkSpot(pawn, c).IsValid)
+            {
+                JobFailReason.Is("PZ_NoWorkSpot".Translate());
+                __result = false;
             }
         }
     }

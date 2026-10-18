@@ -294,9 +294,10 @@ namespace ProjectZ
                 GenLeaving.DoLeavingsFor(covering, top, map);
             }
             Slab.DropZoneCell(top, map);
-            Slab.MoveOff(top, map, s);
             map.designationManager.DesignationAt(top, DesignationDefOf.RemoveFoundation)?.Delete();
             map.terrainGrid.RemoveFoundation(top, doLeavings: false);
+            // (after the deck is gone, so what stood on it falls: compat G2; the terrain hook has done it already)
+            Slab.MoveOff(top, map, s);
             ProjectZ.DebugLog($"ship stairs landing deck at {top} taken with the stairs");
             return true;
         }

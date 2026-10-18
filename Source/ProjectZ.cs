@@ -78,6 +78,10 @@ namespace ProjectZ
             levelOfBand = null;
             shownLevels = null;
             ProjectZ.Invalidate();
+            if (HasAnnex)
+            {
+                BandRadial.AnyAnnex = true;   // (G2 gravity: set before the first spawn, not only by a later Annex() lookup)
+            }
         }
 
         public int MinLevel
@@ -241,6 +245,7 @@ namespace ProjectZ
             }
             else if (HasAnnex)
             {
+                BandRadial.AnyAnnex = true;
                 ProjectZ.DebugLog($"map {map}: size {map.Size}, ground z {groundZ}, stride {stride}, floors {floors}");
                 // D6: roofs under upper floors are the floors' own (saves from before M1c, or anything that slipped through).
                 FloorRoof.Normalize(map);

@@ -41,6 +41,7 @@
   <PZ_StairsLandHere>这里是楼梯的落脚处</PZ_StairsLandHere>
   <PZ_FloorAboveFirst>先拆上一层的楼板</PZ_FloorAboveFirst>
   <PZ_FartherFirst>先拆离楼梯更远的格子</PZ_FartherFirst>
+  <PZ_NoWorkSpot>旁边没有可站的地方</PZ_NoWorkSpot>
   <PZ_DamagedSlab>受损的{0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>开裂的楼板，不能在上面铺地板。用拆除工具拆掉后重铺。</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>楼板已受损：拆掉重铺</PZ_DamagedSlabNoFloor>

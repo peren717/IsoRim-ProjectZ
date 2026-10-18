@@ -54,8 +54,8 @@ namespace ProjectZ
         }
 
         // Takes the slab (and any floor still laid on it) down to open air: the roof below becomes a plain roof again
-        // (FloorRoof), the materials come back as from any removed floor (on this floor: GenPlace patch), pawns and
-        // items move off, the zone cell and the removal designation go.
+        // (FloorRoof), the materials come back as from any removed floor and, with pawns and items on it, fall to the
+        // floor below (gravity, MoveOff), the zone cell and the removal designation go.
         public static void Remove(IntVec3 c, Map map, bool doLeavings, Thing cause = null)
         {
             TerrainGrid tg = map.terrainGrid;
@@ -89,29 +89,48 @@ namespace ProjectZ
             }
         }
 
-        // Pawns and items on a cell that just became open air go to the nearest cell on the same floor that holds them
-        // (as the game's own recovery from an unwalkable cell); with none on the whole floor, to the nearest one on the
-        // floor below (Q7: stepping off, no fall).
+        // Pawns and items on a cell whose floor was just taken up (a slab or deck removed, a stairs landing going with its
+        // stairs): they FALL to the floor below by the gravity rule (compat G2, user 2026-10-18, reversing Q7's "step off,
+        // no fall"): Column.Landing, roofs passed break, pawns bruised from one floor up; a thick roof under it: the nearest
+        // cell on the same floor. (The worker taking a floor up stands on the next cell: SlabPeel / ShipDeck work spot.)
+        // With gravity switched off (-projectznogravity, or inside its Suspend scope) the old rule: the nearest cell on
+        // the same floor, else on the floors below.
         public static void MoveOff(IntVec3 c, Map map, Thing cause = null)
         {
+            bool fall = Gravity.On && Gravity.Air(c, map);
             List<Thing> list = c.GetThingList(map);
             for (int i = list.Count - 1; i >= 0; i--)
             {
                 Thing t = list[i];
                 if (t is Pawn p)
                 {
+                    // The pawn taking the floor up keeps its job (it is finishing), as does one taking down the thing
+                    // that takes this floor with it (the stairs and their landing); anyone else starts again.
+                    bool remover = p.CurJob != null && ((p.CurJob.def == JobDefOf.RemoveFoundation || p.CurJob.def == JobDefOf.RemoveFloor) && p.CurJob.targetA.Cell == c || cause != null && p.CurJob.targetA.Thing == cause);
+                    if (fall)
+                    {
+                        Gravity.FallPawn(p, c, remover);
+                        continue;
+                    }
                     IntVec3 to = NearestStandable(c, map, ProjectZ.FloorOf(c, map), true);
                     if (to.IsValid)
                     {
-                        // The pawn taking the floor up keeps its job (it is finishing), as does one taking down the thing
-                        // that takes this floor with it (the stairs and their landing); anyone else starts again.
-                        bool remover = p.CurJob != null && ((p.CurJob.def == JobDefOf.RemoveFoundation || p.CurJob.def == JobDefOf.RemoveFloor) && p.CurJob.targetA.Cell == c || cause != null && p.CurJob.targetA.Thing == cause);
                         p.Position = to;
                         p.Notify_Teleported(endCurrentJob: !remover, resetTweenedPos: false);
                     }
                 }
                 else if (t.def.category == ThingCategory.Item)
                 {
+                    if (fall)
+                    {
+                        // placed again where it is: the gravity hook moves it to its landing
+                        t.DeSpawn();
+                        if (!GenPlace.TryPlaceThing(t, c, map, ThingPlaceMode.Near))
+                        {
+                            PlaceDown(t, c, map, ProjectZ.FloorOf(c, map));
+                        }
+                        continue;
+                    }
                     PlaceDown(t, c, map, ProjectZ.FloorOf(c, map));
                 }
             }
@@ -584,8 +603,21 @@ namespace ProjectZ
 
         public static void ResolverExit() => resolving--;
 
-        // The slab over the roof cell 'below' falls.
+        // The slab over the roof cell 'below' falls (its own fall: outside the gravity hooks, Gravity.Suspend).
         public static void Collapse(IntVec3 below, Map map, List<Thing> crushed)
+        {
+            Gravity.Suspend();
+            try
+            {
+                CollapseInner(below, map, crushed);
+            }
+            finally
+            {
+                Gravity.Resume();
+            }
+        }
+
+        private static void CollapseInner(IntVec3 below, Map map, List<Thing> crushed)
         {
             IntVec3 u = StairShape.Above(below, map);
             if (!u.IsValid || !u.InBounds(map) || !ProjectZ.HasFloor(u, map))
@@ -673,30 +705,10 @@ namespace ProjectZ
 
         // Where things falling from upper floor cell u come down: the first floor below with ground or a slab there,
         // on that cell or the nearest standable one on that floor.
+        // (Column.Landing, the gravity rule's walk; the collapse's roofs are the game's collapse buffer's, so none broken here)
         public static IntVec3 FallTo(IntVec3 u, Map map, out int fallen)
         {
-            fallen = 0;
-            int k = ProjectZ.FloorOf(u, map);
-            IntVec3 g = ProjectZ.GroundCellOf(u, map);
-            for (int j = k - 1; j >= 0; j--)
-            {
-                IntVec3 cj = ProjectZ.CellOnFloor(g, j, map);
-                if (!cj.IsValid || !Column.FloorAt(g, j, map))
-                {
-                    continue;
-                }
-                fallen = k - j;
-                if (cj.Standable(map))
-                {
-                    return cj;
-                }
-                IntVec3 near = Slab.NearestStandable(cj, map, j, false);
-                if (near.IsValid)
-                {
-                    return near;
-                }
-            }
-            return IntVec3.Invalid;
+            return Column.Landing(u, map, true, false, out fallen, out _);
         }
     }
 
@@ -832,6 +844,15 @@ namespace ProjectZ
                     __result.targetB = from;
                 }
             }
+            else if (__result != null && ShipDeck.Upper(c, pawn.Map))
+            {
+                // (a deck has no peel order: the worker stands on a next cell, never on the deck it takes up; G2)
+                IntVec3 from = ShipDeck.WorkSpot(pawn, c);
+                if (from.IsValid)
+                {
+                    __result.targetB = from;
+                }
+            }
         }
     }
 
@@ -842,7 +863,7 @@ namespace ProjectZ
         public static IEnumerable<Toil> Postfix(IEnumerable<Toil> values, JobDriver_AffectFloor __instance)
         {
             Job job = __instance.job;
-            bool spot = job != null && job.targetB.IsValid && !job.targetB.HasThing && Slab.At(job.targetA.Cell, __instance.pawn.Map);
+            bool spot = job != null && job.targetB.IsValid && !job.targetB.HasThing && (Slab.At(job.targetA.Cell, __instance.pawn.Map) || ShipDeck.Upper(job.targetA.Cell, __instance.pawn.Map));
             bool first = true;
             foreach (Toil t in values)
             {
