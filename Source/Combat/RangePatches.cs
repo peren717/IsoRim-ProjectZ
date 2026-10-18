@@ -198,8 +198,9 @@ namespace ProjectZ.Combat
         }
     }
 
-    // The reason a drafted pawn can't shoot at a target on another floor: the game tells range from sight by the flat
-    // distance (InHorDistOf), which is a whole floor's rows away.
+    // The reason a drafted pawn can't shoot. Between floors the game tells range from sight by the flat distance
+    // (InHorDistOf), which is a whole floor's rows away: the range rule's reason instead. For every shot that is in range
+    // but has no line of sight (the game's own result on one floor, Los3D's between floors): "no line of sight".
     [HarmonyPatch(typeof(FloatMenuUtility), nameof(FloatMenuUtility.GetRangedAttackAction))]
     public static class FloatMenu_RangedReason_Patch
     {
@@ -207,13 +208,7 @@ namespace ProjectZ.Combat
 
         public static void Postfix(Pawn pawn, LocalTargetInfo target, ref string failStr)
         {
-            if (string.IsNullOrEmpty(failStr) || pawn?.Map == null || !target.IsValid || !Heights.CrossFloor(pawn.Position, target.Cell, pawn.Map))
-            {
-                return;
-            }
-            string outOfRange = "OutOfRange".Translate();
-            string tooClose = "TooClose".Translate();
-            if (failStr != outOfRange && failStr != tooClose)
+            if (string.IsNullOrEmpty(failStr) || pawn?.Map == null || !target.IsValid)
             {
                 return;
             }
@@ -222,18 +217,28 @@ namespace ProjectZ.Combat
             {
                 return;
             }
+            string outOfRange = "OutOfRange".Translate();
+            string tooClose = "TooClose".Translate();
+            string cannotHit = "CannotHitTarget".Translate();
             Map map = pawn.Map;
-            if (Range3D.RangeDistance(pawn.Position, target.Cell, map) > v.EffectiveRange)
+            if (Heights.CrossFloor(pawn.Position, target.Cell, map) && (failStr == outOfRange || failStr == tooClose))
             {
-                failStr = outOfRange;
+                if (Range3D.RangeDistance(pawn.Position, target.Cell, map) > v.EffectiveRange)
+                {
+                    failStr = outOfRange;
+                }
+                else if (Range3D.Distance(pawn.Position, target.Cell, map) < v.verbProps.EffectiveMinRange(target, pawn))
+                {
+                    failStr = tooClose;
+                }
+                else
+                {
+                    failStr = cannotHit;
+                }
             }
-            else if (Range3D.Distance(pawn.Position, target.Cell, map) < v.verbProps.EffectiveMinRange(target, pawn))
+            if (failStr == cannotHit && NoSight.Blocked(v, target))
             {
-                failStr = tooClose;
-            }
-            else
-            {
-                failStr = "CannotHitTarget".Translate();
+                failStr = "PZ_CannotHitNoLineOfSight".Translate();
             }
         }
     }
