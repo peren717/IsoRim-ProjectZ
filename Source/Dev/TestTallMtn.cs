@@ -120,8 +120,8 @@ namespace ProjectZ.Dev
                     }
                     ShownExpected(map, out int elo, out int ehi);
                     Info($"tall mountains: highest top level {top} of {Levels.Max(map)}");
-                    LvCheck(map, $"floor HUD on a tall-mountain map: the levels in use (tops up to level {top}) plus one", elo, ehi);
-                    Result("floor HUD shows every level with mountain tops and one more", ehi >= Mathf.Min(Levels.Max(map), top + 1), $"top {top}, shown up to {ehi}");
+                    LvCheck(map, $"floor HUD on a tall-mountain map: the levels in use (unbuilt tops only on levels reached; tops up to level {top}) plus one", elo, ehi);
+                    Info($"floor HUD: tops up to level {top}, levels reached [{string.Join(",", a.reachedLevels ?? new List<int>())}], shown up to {ehi}");
                     // cost: the cache built from nothing, a refresh (the things pass), a refresh with one empty level to rescan
                     AnnexMapComponent pa = ProjectZ.Annex(map);
                     pa.shownLevels = null;

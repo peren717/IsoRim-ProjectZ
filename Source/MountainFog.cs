@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
@@ -22,12 +23,21 @@ namespace ProjectZ
     {
         // last Reveal and totals, for the tests
         public static int LastWalked, LastFloods, Reveals, StepReveals;
-        public static double LastMs, MaxMs;
+        public static double LastMs, MaxMs, LastFloodMs, MaxWalkMs;
 
         private static int[] mark;
         private static int markGen;
         private static readonly Queue<IntVec3> queue = new Queue<IntVec3>();
         private static bool busy;
+        private static double floodMs;
+
+        // vanilla's flood (its cost: unfogging and remeshing what opens), timed apart from the walk
+        private static void Flood(IntVec3 c, Map map)
+        {
+            long t = System.Diagnostics.Stopwatch.GetTimestamp();
+            FloodFillerFog.FloodUnfog(c, map);
+            floodMs += (System.Diagnostics.Stopwatch.GetTimestamp() - t) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
 
         public static bool PlayerPawn(Pawn p) => p != null && (p.Faction == Faction.OfPlayer || p.IsPlayerControlled);
 
@@ -39,6 +49,7 @@ namespace ProjectZ
 
         // The band area the player can walk to from `from` (a cell of an upper band of a tall-mountain map) is revealed,
         // and its level counts as reached (the floor HUD, ShownLevels).
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]   // (rare calls with a hot loop: compiled optimised at once)
         public static void Reveal(IntVec3 from, Map map)
         {
             if (busy || map == null || !from.IsValid || !from.InBounds(map) || !Mountains.On(map) || Current.ProgramState != ProgramState.Playing)
@@ -55,13 +66,14 @@ namespace ProjectZ
             busy = true;
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             int walked = 0, floods = 0;
+            floodMs = 0;
             try
             {
                 FogGrid fog = map.fogGrid;
                 CellIndices ci = map.cellIndices;
                 if (fog.IsFogged(from) && !Blocker(from, map))
                 {
-                    FloodFillerFog.FloodUnfog(from, map);
+                    Flood(from, map);
                     floods++;
                 }
                 if (fog.IsFogged(from))
@@ -106,7 +118,7 @@ namespace ProjectZ
                             {
                                 continue;   // rock: a face, only unfogged by a flood next to it (vanilla)
                             }
-                            FloodFillerFog.FloodUnfog(nb, map);
+                            Flood(nb, map);
                             floods++;
                         }
                         if (nb.Walkable(map))
@@ -123,16 +135,19 @@ namespace ProjectZ
                 LastWalked = walked;
                 LastFloods = floods;
                 LastMs = sw.Elapsed.TotalMilliseconds;
+                LastFloodMs = floodMs;
+                MaxWalkMs = System.Math.Max(MaxWalkMs, LastMs - floodMs);
                 MaxMs = System.Math.Max(MaxMs, LastMs);
                 Reveals++;
                 if (floods > 0)
                 {
-                    ProjectZ.DebugLog($"mountain fog: revealed from {from} (level {L}): {walked} walkable cells, {floods} floods, {LastMs:0.00} ms");
+                    ProjectZ.DebugLog($"mountain fog: revealed from {from} (level {L}): {walked} walkable cells, {floods} floods, {LastMs:0.00} ms ({floodMs:0.00} ms in the floods)");
                 }
             }
         }
 
         // (c) A player pawn on an upper band of a tall-mountain map with fog next to it (4-way, not rock) or under it.
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
         public static void Stepped(Pawn pawn)
         {
             Map map = pawn.Map;
