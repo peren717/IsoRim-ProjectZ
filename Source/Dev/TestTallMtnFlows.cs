@@ -29,7 +29,9 @@ namespace ProjectZ.Dev
     //   F9 Anomaly large structures ground only (D2);
     //   F10 tall things (Q7): allowed in a dug ground cell under solid rock, refused under a top and under a dug cell;
     //   F11 infestations per band: a dug level-1 room next to a colony building on that band gets candidates, all
-    //      within reach of a band-1 building; a child hive never lands on another band (R23).
+    //      within reach of a band-1 building; a child hive never lands on another band (R23);
+    //   F12 colonists put on a level-1 top with no way down (as by a transport pod) build stairs downward from the top
+    //      (the stairs are touched from the floor above, StairTouch) and walk down them to the ground.
     public static partial class TestRunner
     {
         private static IntVec3 tfStairs, tfExitTop, tfWalkTo, tfWallAt, tfBedAt, tfMine1, tfMine2, tfJumpFrom, tfJumpTo, tfPackTo;
@@ -289,9 +291,34 @@ namespace ProjectZ.Dev
                     TfLarge(map);
                     TfTall(map, a);
                     TfInfest(map, a);
-                    Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    stage = "tm_shots";
+                    stage = "tm_f_down";
                     return true;
+                case "tm_f_down":
+                    TfDown(map, a);
+                    return true;
+                case "tm_f_down_built":
+                {
+                    bool built = tfDownStairs != null && TfDownBuilt(map);
+                    Result("F12 colonists on a level-1 top with no way down build stairs downward from the top (touch from above)", built,
+                        $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName}"))}");
+                    if (!built)
+                    {
+                        TfDownEnd(map);
+                        return true;
+                    }
+                    tfDownJumps = PZStats.jumps;
+                    tfDownCrew[0].jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, tfDownFoot), JobTag.Misc);
+                    TickUntil(6000, () => tfDownCrew[0].Position == tfDownFoot, "tm_f_down_walked", 30);
+                    return true;
+                }
+                case "tm_f_down_walked":
+                {
+                    Pawn w = tfDownCrew[0];
+                    Result("F12 a colonist walks down the new stairs from the top to the ground", w.Position == tfDownFoot && ProjectZ.FloorOf(w.Position, map) == 0 && PZStats.jumps == tfDownJumps,
+                        $"{w} at {w.Position} (level {ProjectZ.FloorOf(w.Position, map)}), target {tfDownFoot}; jumps {PZStats.jumps - tfDownJumps}");
+                    TfDownEnd(map);
+                    return true;
+                }
             }
             return false;
         }
@@ -859,6 +886,148 @@ namespace ProjectZ.Dev
                 }
             }
             Result("F9 Anomaly's large structures (pit gate, fleshmass heart, burrow) only on the ground (D2)", up == 0, $"{n} cells found, {up} in a band");
+        }
+
+        // ---------------------------------------------------------------- F12
+
+        private static IntVec3 tfDownAt, tfDownFoot, tfDownExit;
+        private static Rot4 tfDownRot;
+        private static Thing tfDownStairs;
+        private static readonly List<Pawn> tfDownCrew = new List<Pawn>();
+        private static int tfDownJumps;
+
+        private static bool TfDownBuilt(Map map) => map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).Any(t => t.Position == tfDownAt);
+
+        private static string TfDownThing(Map map) => string.Join(" ", tfDownAt.GetThingList(map).Select(t => t.def.defName));
+
+        // A ground stairs site whose exit is a level-1 top (or the lip next to one) that has no way down: colonists put
+        // there (as by a transport pod) build the stairs from the top, then walk down them.
+        private static void TfDown(Map map, AnnexMapComponent a)
+        {
+            tfDownCrew.Clear();
+            tfDownStairs = null;
+            IntVec3 home = Centroid(map);
+            TraverseParms tp = TraverseParms.For(TraverseMode.PassDoors);
+            int best = int.MaxValue;
+            tfDownAt = IntVec3.Invalid;
+            IntVec3 stand = IntVec3.Invalid;
+            foreach (IntVec3 p in Near(home, 70, map))
+            {
+                if (p.z >= a.groundZ - 3 || p.z < 3 || p.x < 3 || p.x >= map.Size.x - 3)
+                {
+                    continue;
+                }
+                for (int r = 0; r < 4; r++)
+                {
+                    Rot4 rot = new Rot4(r);
+                    IntVec3 exit = StairShape.Exit(p, rot, map);
+                    IntVec3 foot = p - rot.FacingCell * 2;
+                    if (!exit.IsValid || !foot.InBounds(map) || !foot.Standable(map) || foot.Roofed(map))
+                    {
+                        continue;
+                    }
+                    // where the crew stands: the exit itself (on a top) or the top just past the lip
+                    IntVec3 eg = ProjectZ.GroundCellOf(exit, map);
+                    bool onTop = TH(eg, map) == 1 && TmTop(exit, map);
+                    int score = (p - home).LengthManhattan + (onTop ? 0 : 1000);   // prefer an exit right on the top
+                    if (score >= best)
+                    {
+                        continue;
+                    }
+                    IntVec3 top = onTop ? exit : exit + rot.FacingCell;
+                    if (!top.InBounds(map) || !TmTop(top, map) || TH(ProjectZ.GroundCellOf(top, map), map) != 1 || map.fogGrid.IsFogged(top) || !top.Standable(map))
+                    {
+                        continue;
+                    }
+                    if (StairShape.Footprint(p, rot).Cells.Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map)))
+                    {
+                        continue;
+                    }
+                    if (map.reachability.CanReach(top, foot, PathEndMode.OnCell, tp) || !GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                    {
+                        continue;   // (a top with a way down already)
+                    }
+                    // room on the top for the crew and the wood
+                    if (GenRadial.RadialCellsAround(top, 4f, true).Count(c => c.InBounds(map) && TmTop(c, map) && c.Standable(map) && map.reachability.CanReach(top, c, PathEndMode.OnCell, tp)) < 8)
+                    {
+                        continue;
+                    }
+                    best = score;
+                    tfDownAt = p;
+                    tfDownRot = rot;
+                    tfDownFoot = foot;
+                    tfDownExit = exit;
+                    stand = top;
+                }
+            }
+            if (!tfDownAt.IsValid)
+            {
+                Result("F12 a stairs site down from a level-1 top with no way down", false, $"none within 70 of {home}");
+                TfDownEnd(map);
+                return;
+            }
+            List<IntVec3> room = GenRadial.RadialCellsAround(stand, 4f, true).Where(c => c.InBounds(map) && TmTop(c, map) && c.Standable(map) && map.reachability.CanReach(stand, c, PathEndMode.OnCell, tp)).ToList();
+            foreach (Pawn p in Colonists(map))
+            {
+                if (tfDownCrew.Count < 2 && !p.Downed && !p.InMentalState && p.health.capacities.CapableOf(PawnCapacityDefOf.Moving) && !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction))
+                {
+                    tfDownCrew.Add(p);
+                    if (p.Drafted)
+                    {
+                        p.drafter.Drafted = false;
+                    }
+                    Teleport(p, room[tfDownCrew.Count - 1]);
+                }
+                else if (!p.Downed && p.drafter != null)
+                {
+                    p.drafter.Drafted = true;   // (the ground colonists stay out of it)
+                }
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                Thing w = ThingMaker.MakeThing(ThingDefOf.WoodLog);
+                w.stackCount = 75;
+                GenSpawn.Spawn(w, room[room.Count - 1 - i], map);
+            }
+            bool fromTop = tfDownExit == stand;
+            GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, tfDownAt, map, tfDownRot, Faction.OfPlayer, ThingDefOf.WoodLog);
+            tfDownStairs = tfDownAt.GetThingList(map).FirstOrDefault(t => t.def.entityDefToBuild == PZDefOf.PZ_Stairs);
+            List<IntVec3> rim = new List<IntVec3>();
+            if (tfDownStairs != null)
+            {
+                StairTouch.UpperCells(tfDownStairs, rim);
+            }
+            Info($"F12 stairs down at {tfDownAt} facing {tfDownRot}, exit {tfDownExit} ({(fromTop ? "on the top" : "over the lip")}), crew {string.Join(", ", tfDownCrew)} on the top at {stand}, foot {tfDownFoot}; rim cells from the top {rim.Count} ({string.Join(" ", rim)}); top reaches the foot {map.reachability.CanReach(stand, tfDownFoot, PathEndMode.OnCell, tp)}");
+            if (tfDownCrew.Count == 0 || tfDownStairs == null)
+            {
+                Result("F12 a crew and a blueprint", false, $"crew {tfDownCrew.Count}, blueprint {tfDownStairs}");
+                TfDownEnd(map);
+                return;
+            }
+            SetWork(map, true);
+            foreach (Pawn p in tfDownCrew)
+            {
+                if (!p.WorkTypeIsDisabled(WorkTypeDefOf.Hauling))
+                {
+                    p.workSettings.SetPriority(WorkTypeDefOf.Hauling, 2);
+                }
+            }
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+            TickUntil(30000, () => TfDownBuilt(map), "tm_f_down_built", 120);
+        }
+
+        private static void TfDownEnd(Map map)
+        {
+            tickWatch = null;
+            foreach (Pawn p in Colonists(map))
+            {
+                if (p.Drafted)
+                {
+                    p.drafter.Drafted = false;
+                }
+            }
+            Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+            stage = "tm_shots";
         }
 
         // ---------------------------------------------------------------- F10

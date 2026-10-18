@@ -79,12 +79,17 @@ namespace ProjectZ.Dev
                 }
             }
             gRaiders.Clear();
+            gJobs.Clear();
             PZCombatStats.shots.Clear();
             PZCombatStats.crossFloorShots = 0;
         }
 
         private static void GPlaceA(int k, string gun, bool fire)
         {
+            if (gA.Dead || gA.Destroyed || !gA.Spawned)
+            {
+                Info($"DIAG GPlaceA: shooter {gA} dead {gA.Dead} destroyed {gA.Destroyed} spawned {gA.Spawned} downed {gA.Downed}");
+            }
             if (gun != null)
             {
                 gA.equipment.DestroyAllEquipment();
@@ -99,7 +104,38 @@ namespace ProjectZ.Dev
         {
             if (gA.needs?.food != null) gA.needs.food.CurLevel = gA.needs.food.MaxLevel;
             if (gA.needs?.rest != null) gA.needs.rest.CurLevel = 1f;
+            // The flake (a raider "never fires"): the raiders fought an animal instead (the colony's pets, a wild one
+            // wandering in, a manhunter), or the shotguns downed or killed the colonist (a downed colonist is no threat
+            // to shoot at). Animals are kept off the map and the colonist takes no damage (GuardPrefix).
+            GNoAnimals(gA.Map);
             if (!gA.Drafted && !gA.Downed && !gA.Dead) gA.drafter.Drafted = true;
+        }
+
+        private static int gHits, gAnimalsRemoved;
+
+        // (mode range only, Pawn.PreApplyDamage) The range shooter absorbs every hit: the shots are counted at launch.
+        internal static bool GuardPrefix(Pawn __instance, ref bool absorbed)
+        {
+            if (__instance != gA || gA == null)
+            {
+                return true;
+            }
+            absorbed = true;
+            gHits++;
+            return false;
+        }
+
+        private static void GNoAnimals(Map map)
+        {
+            if (map == null)
+            {
+                return;
+            }
+            foreach (Pawn p in map.mapPawns.AllPawnsSpawned.Where(p => p.RaceProps.Animal).ToList())
+            {
+                p.Destroy();
+                gAnimalsRemoved++;
+            }
         }
 
         private static string GWhere(Pawn p, Map map) => p == null ? "-" : $"{p} at {p.Position} (floor {ProjectZ.FloorOf(p.Position, map) + 1}, d {ProjectZ.GroundCellOf(p.Position, map).z - gEz})";
@@ -134,13 +170,13 @@ namespace ProjectZ.Dev
                     PZCombatStats.shots.Clear();
                     Info($"P2a: colonist {GWhere(gA, map)}; 3D to the raiders {Range3D.Distance(gRaiders[0].Position, gA.Position, map):0.0}, {Range3D.Distance(gRaiders[1].Position, gA.Position, map):0.0}");
                     Result("P2a game check: the shotguns can hit floor 2 at d 3 and 8", CanHit(gRaiders[0], gA) && CanHit(gRaiders[1], gA), $"d3 {CanHit(gRaiders[0], gA)}, d8 {CanHit(gRaiders[1], gA)}");
-                    TickUntil(2000, () => { GKeepA(); return gRaiders.All(r => GShotsFrom(r) > 0); }, "g_p2a_check", 10);
+                    TickUntil(2000, () => { GKeepA(); gRaiders.ForEach(GTrack); return gRaiders.All(r => GShotsFrom(r) > 0); }, "g_p2a_check", 10);
                     return true;
                 }
                 case "g_p2a_check":
                 {
                     tickWatch = null;
-                    Result("P2a real fight: shotgun raiders fire at the colonist on floor 2", gRaiders.All(r => GShotsFrom(r) > 0), $"shots: d3 {GShotsFrom(gRaiders[0])}, d8 {GShotsFrom(gRaiders[1])} after {ticksTotal} ticks; colonist {(gA.Downed ? "downed" : "standing")}");
+                    Result("P2a real fight: shotgun raiders fire at the colonist on floor 2", gRaiders.All(r => GShotsFrom(r) > 0), $"shots: d3 {GShotsFrom(gRaiders[0])}, d8 {GShotsFrom(gRaiders[1])} after {ticksTotal} ticks; colonist {(gA.Downed ? "downed" : "standing")}" + (gRaiders.All(r => GShotsFrom(r) > 0) ? "" : " DIAG " + string.Join(" ", gRaiders.Select(GDiag))));
                     GClearRaiders();
                     HealA();
                     // ---- 2b: floor 5, d 14 (3D 15.5) vs d 15 (3D 16.4)
@@ -148,14 +184,14 @@ namespace ProjectZ.Dev
                     Pawn r14 = GRaider(map, 14, "Gun_PumpShotgun"), r15 = GRaider(map, 15, "Gun_PumpShotgun");
                     Info($"P2b: colonist {GWhere(gA, map)}; 3D d14 {Range3D.Distance(r14.Position, gA.Position, map):0.00}, d15 {Range3D.Distance(r15.Position, gA.Position, map):0.00} (flat 14, 15; shotgun 15.9)");
                     Result("P2b game check: d14 can hit floor 5, d15 can't (in range flat, out in 3D)", CanHit(r14, gA) && !CanHit(r15, gA), $"d14 {CanHit(r14, gA)}, d15 {CanHit(r15, gA)}");
-                    TickUntil(2000, () => { GKeepA(); return GShotsFrom(r14) >= 3; }, "g_p2b_check", 10);
+                    TickUntil(2000, () => { GKeepA(); GTrack(r14); GTrack(r15); return GShotsFrom(r14) >= 3; }, "g_p2b_check", 10);
                     return true;
                 }
                 case "g_p2b_check":
                 {
                     tickWatch = null;
                     Pawn r14 = gRaiders[0], r15 = gRaiders[1];
-                    Result("P2b real fight: the d14 raider fires at floor 5, the d15 raider never does", GShotsFrom(r14) > 0 && GShotsFrom(r15) == 0, $"shots d14 {GShotsFrom(r14)} ({GWhere(r14, map)}), d15 {GShotsFrom(r15)} ({GWhere(r15, map)}) after {ticksTotal} ticks");
+                    Result("P2b real fight: the d14 raider fires at floor 5, the d15 raider never does", GShotsFrom(r14) > 0 && GShotsFrom(r15) == 0, $"shots d14 {GShotsFrom(r14)} ({GWhere(r14, map)}), d15 {GShotsFrom(r15)} ({GWhere(r15, map)}) after {ticksTotal} ticks" + (GShotsFrom(r14) > 0 && GShotsFrom(r15) == 0 ? "" : " DIAG " + GDiag(r14) + " " + GDiag(r15)));
                     GClearRaiders();
                     HealA();
                     // ---- 3: sniper on floor 5
@@ -230,6 +266,7 @@ namespace ProjectZ.Dev
                     TickUntil(5000, () =>
                     {
                         GKeepA();
+                        GTrack(ra);
                         Job j = ra.CurJob;
                         string mv = j == null ? "none" : j.def == JobDefOf.Goto ? $"Goto {j.targetA.Cell} (d {j.targetA.Cell.z - gEz})" : j.def.defName;
                         mv += $" [target {ra.mindState.enemyTarget?.ToString() ?? "none"}]";
@@ -255,7 +292,7 @@ namespace ProjectZ.Dev
                     int dz = gFirstShotFrom.IsValid ? gFirstShotFrom.z - gEz : -1;
                     Info("P5 raider jobs: " + string.Join(" > ", gMoves));
                     Result("P5 real: the raider walks in and fires from within the 3D range, not from the tower's foot", gFirstShotFrom.IsValid && d3 <= rv.EffectiveRange + 0.01f && dz >= 28,
-                        $"first shot after {gFirstShotTick} ticks from {gFirstShotFrom} (d {dz}, 3D {d3:0.00}, range {rv.EffectiveRange:0.0}); shots {GShotsFrom(ra)}");
+                        $"first shot after {gFirstShotTick} ticks from {gFirstShotFrom} (d {dz}, 3D {d3:0.00}, range {rv.EffectiveRange:0.0}); shots {GShotsFrom(ra)}" + (gFirstShotFrom.IsValid ? "" : " DIAG " + GDiag(ra)));
                     GClearRaiders();
                     HealA();
                     // ---- 6: mortar
@@ -311,7 +348,7 @@ namespace ProjectZ.Dev
                     return true;
                 case "g_end":
                     WatchCheck(map, "range end");
-                    Info($"combat stats: cross-floor shots {PZCombatStats.crossFloorShots}, intercepts {PZCombatStats.intercepts}, slab stops {PZCombatStats.slabStops}");
+                    Info($"combat stats: cross-floor shots {PZCombatStats.crossFloorShots}, intercepts {PZCombatStats.intercepts}, slab stops {PZCombatStats.slabStops}; hits absorbed by the colonist {gHits}, animals removed {gAnimalsRemoved}");
                     Finish();
                     return true;
             }
@@ -428,6 +465,8 @@ namespace ProjectZ.Dev
             }
             Info($"field picked with {bestBad} cells fixed (water, rock, roofs, buildings)");
             DebugSettings.enableRandomMentalStates = false;
+            gHits = gAnimalsRemoved = 0;
+            GNoAnimals(map);
             gcx = found.CenterCell.x;
             gTower = new CellRect(gcx - 2, found.minZ, 5, 5);
             gEz = gTower.maxZ;
@@ -452,8 +491,16 @@ namespace ProjectZ.Dev
             gA = cols.Where(p => !p.WorkTagIsDisabled(WorkTags.Violent)).OrderByDescending(p => p.skills?.GetSkill(SkillDefOf.Shooting)?.Level ?? 0).FirstOrDefault() ?? cols.First();
             List<Pawn> others = cols.Where(p => p != gA).ToList();
             IntVec3 hut = IntVec3.Invalid;
-            foreach (IntVec3 c in GenRadial.RadialCellsAround(new IntVec3(Mathf.Clamp(found.CenterCell.x > map.Size.x / 2 ? 6 : map.Size.x - 7, 3, map.Size.x - 4), 0, Mathf.Clamp(found.CenterCell.z > an.groundZ / 2 ? 6 : an.groundZ - 7, 3, an.groundZ - 4)), 30f, true))
+            // (around the map corner farthest from the field first, then the other corners: with no hut the others stay
+            // near the field and the raiders shoot at them instead)
+            IEnumerable<IntVec3> corners = new[] { new IntVec3(6, 0, 6), new IntVec3(map.Size.x - 7, 0, 6), new IntVec3(6, 0, an.groundZ - 7), new IntVec3(map.Size.x - 7, 0, an.groundZ - 7) }
+                .OrderByDescending(k => (k - found.CenterCell).LengthHorizontalSquared);
+            foreach (IntVec3 c in corners.SelectMany(k => GenRadial.RadialCellsAround(k, 30f, true)))
             {
+                if (!c.InBounds(map))
+                {
+                    continue;
+                }
                 CellRect h = new CellRect(c.x - 2, c.z - 2, 5, 5);
                 if (h.InBounds(map) && h.maxZ < an.groundZ && !h.Overlaps(found.ExpandedBy(8)) && h.Cells.All(x => x.Standable(map) && x.GetFirstBuilding(map) == null))
                 {

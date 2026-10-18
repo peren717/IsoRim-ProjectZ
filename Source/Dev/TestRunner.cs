@@ -227,7 +227,7 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -241,6 +241,10 @@ namespace ProjectZ.Dev
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
+            if (mode == "range")
+            {
+                h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GuardPrefix)));
+            }
             if (mode == "explode")
             {
                 PatchExplodeProbe(h);
@@ -341,7 +345,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn")
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -349,7 +353,7 @@ namespace ProjectZ.Dev
 
         private static void WallHeightSeedPrefix()
         {
-            Rand.PushState(717);
+            Rand.PushState(SeedArg ?? 717);
         }
 
         public static void Out(string s)
