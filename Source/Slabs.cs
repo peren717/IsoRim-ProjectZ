@@ -201,14 +201,15 @@ namespace ProjectZ
         // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.)
         public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.terrainGrid.FoundationAt(c)?.IsSubstructure ?? false);
 
-        // Thick roof or gravship under a cell: the reason no floor or stairs may use it, or null.
+        // Thick roof or gravship under a cell: the reason no floor or stairs may use it, or null. The ship is its column
+        // (ShipColumn: a ship stairs opening too; over it only ship decks and ship stairs go).
         public static string ColumnBlocked(IntVec3 c, Map map)
         {
             if (ThickRoof(c, map))
             {
                 return "PZ_ThickRoof";
             }
-            return Gravship(c, map) ? "PZ_OverGravship" : null;
+            return ShipColumn.Cell(c, map) ? "PZ_OverGravship" : null;
         }
 
         // The same for a slab (or a stairs landing): over a gravship it points to the ship upper deck (Odyssey).

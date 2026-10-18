@@ -16,7 +16,9 @@ namespace ProjectZ
     //   - Which cells are the ship (GravshipUtility.GetConnectedSubstructure, replaced on maps with floors): the engine's
     //     ground column first, then vanilla's own ground flood fill from there, then floor by floor upwards. A cell on a
     //     floor counts only when the cell right below it counts, so the ship is the ground ship plus its stacked deck
-    //     columns, and no accepted cell ever floats. The limit (SubstructureSupport) cuts the order: over it, the top floors
+    //     columns, and no accepted cell ever floats. The opening of ship stairs is a column cell too (ShipColumn): not in the
+    //     set itself (no foundation; its roof flies with ShipStairs.TakeOpeningRoofs), but the column goes on through it,
+    //     so a deck over it is aboard. The limit (SubstructureSupport) cuts the order: over it, the top floors
     //     drop out first. An engine standing on a deck is always aboard (its own columns up to its floor come right after
     //     the ground cell it starts from; the ground flood keeps room for them).
     //   - The engine and extender footprint is a true 3D sphere: ground distance plus the height between the floors
@@ -92,7 +94,12 @@ namespace ProjectZ
                 {
                     break;
                 }
-                if (cells.Contains(FloorRoof.Below(u, map)))
+                IntVec3 b = FloorRoof.Below(u, map);
+                if (!cells.Contains(b) && ShipStairs.Opening(b, map))
+                {
+                    b = FloorRoof.Below(b, map);   // (through a ship stairs opening)
+                }
+                if (cells.Contains(b))
                 {
                     cells.Add(u);
                 }
@@ -123,6 +130,10 @@ namespace ProjectZ
                     {
                         cells.Add(u);
                         tmpCur.Add(u);
+                    }
+                    else if (ShipStairs.Opening(u, map))
+                    {
+                        tmpCur.Add(u);   // (a ship stairs opening: the column goes on, the cell itself is no substructure)
                     }
                 }
                 tmpPrev.Clear();
