@@ -42,7 +42,8 @@ namespace ProjectZ.Dev
     //   G11 stairs built in an open field and onto a slab edge: gravity untouched.
     //   G13 fires at the ground's north row and floor 2's south row: no fire on air or in the void.
     //   G14 a colonist takes up a slab with a pawn and steel on it (user 2026-10-18: they fall, reversing Q7), working from
-    //      the next cell; G14d the same for a ship deck (Odyssey).
+    //      the next cell; no materials back (user 2026-10-18), a bare slab's roof below stays; G14d the same for a ship
+    //      deck (Odyssey).
     //   G15 save and reload after falls, with one stray item left on open air under Gravity.Suspend (an old save's): every
     //      thing where it was saved, the stray stays, nothing moved during the load.
     //   P2 micro cost of Gravity.Air and Column.Landing.
@@ -1122,8 +1123,17 @@ namespace ProjectZ.Dev
             GvExpect("G14 the pawn on it fell to the ground, bruised (user 2026-10-18: no more stepping off)", !Slab.At(slab, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Gravity.PawnsBruised >= 1 && Injuries(v) > inj, true,
                 $"removed after {t} ticks; pawn {GvAt(v, map)}, injuries {inj} -> {Injuries(v)}");
             GvExpect("G14 the steel on it fell to the ground", steel.Spawned && Levels.LevelOf(steel.Position, map) == 0, true, GvAt(steel, map));
-            GvExpect("G14 the slab's materials (half its 4 wood) fell to the ground", wood >= 2, true, $"wood on the ground {wood}");
-            GvExpect("G14 the ceiling below (an ordinary roof once the slab went) broke under the falls", !map.roofGrid.Roofed(under) && Gravity.RoofsBroken == 1, true, $"{under}: {map.roofGrid.RoofAt(under)?.defName ?? "none"}; {Gravity.Counters}");
+            Result("G14 the slab returns no materials (user 2026-10-18)", wood == 0 && RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).All(x => x.def != ThingDefOf.WoodLog), $"wood on the ground {wood}");
+            GvExpect("G14 the ceiling below (an ordinary roof once the slab went) broke under the pawn and the steel falling", !map.roofGrid.Roofed(under) && Gravity.RoofsBroken == 1, true, $"{under}: {map.roofGrid.RoofAt(under)?.defName ?? "none"}; {Gravity.Counters}");
+            // a bare slab next to it taken up: nothing falls, the roof under it stays
+            IntVec3 bare = RdOn(x0 + 7, zc + 1, 1, map);
+            IntVec3 bareUnder = FloorRoof.Below(bare, map);
+            int broken0 = Gravity.RoofsBroken;
+            new Designator_RemoveFoundation().DesignateSingleCell(bare);
+            int t2 = RdTicks(5000, () => !Slab.At(bare, map), 10);
+            RdTicks(10);
+            Result("G14 a bare slab taken up: nothing falls, the ordinary roof under it stays", !Slab.At(bare, map) && map.roofGrid.RoofAt(bareUnder) == RoofDefOf.RoofConstructed && Gravity.RoofsBroken == broken0 && bareUnder.GetThingList(map).All(x => x.def.category != ThingCategory.Item),
+                $"after {t2} ticks: {GvCell(bare, map)}; roof under it {map.roofGrid.RoofAt(bareUnder)?.defName ?? "none"}; things under it {GvList(bareUnder.GetThingList(map), map)}");
             GvExpect("G14 nothing on air", GvOnAir(map).Count == 0, true, GvList(GvOnAir(map), map));
             GvEnd(map);
         }
@@ -1154,6 +1164,7 @@ namespace ProjectZ.Dev
             Pawn w = RdPawn(map, RdOn(x0 + 3, zc + 1, 1, map), draft: false);
             GvWorker(w, WorkTypeDefOf.Construction);
             int inj = Injuries(v);
+            int refund0 = RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).Where(x => x.def == ThingDefOf.Steel || x.def == ThingDefOf.GravlitePanel).Sum(x => x.stackCount);
             new Designator_RemoveFoundation().DesignateSingleCell(deck);
             bool designated = map.designationManager.DesignationAt(deck, DesignationDefOf.RemoveFoundation) != null;
             int checks = 0, bad = 0;
@@ -1181,6 +1192,8 @@ namespace ProjectZ.Dev
             Result("G14d the remover worked from the next deck cell, never on the deck it took up", designated && checks > 0 && bad == 0, $"designated {designated}; {checks} work ticks, {bad} bad {badLine}; deck now {deck.GetTerrain(map).defName} after {t} ticks");
             GvExpect("G14d the pawn on it fell to the ground floor (the substructure), bruised", !ShipDeck.At(deck, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Injuries(v) > inj, true, $"pawn {GvAt(v, map)}, injuries {inj} -> {Injuries(v)}; {Gravity.Counters}");
             GvExpect("G14d nothing on air", GvOnAir(map).Count == 0, true, GvList(GvOnAir(map), map));
+            int refund = RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).Where(x => x.def == ThingDefOf.Steel || x.def == ThingDefOf.GravlitePanel).Sum(x => x.stackCount);
+            Result("G14d the deck returns no materials (user 2026-10-18)", refund == refund0, $"steel and gravlite in the strip {refund0} -> {refund}");
             GvEnd(map);
         }
 

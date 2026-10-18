@@ -43,7 +43,7 @@
   <TerrainDef>
     <defName>PZ_UpperFloor</defName>
     <label>upper floor</label>
-    <description>A grid of beams for the storey above. View the floor above, then lay it where a roof could go: near walls, columns or stairs below.</description>
+    <description>A grid of beams for the storey above. View the floor above, then lay it where a roof could go: near walls, columns or stairs below. Removing it returns no materials.</description>
     <texturePath>ProjectZ/Terrain/SlabLattice</texturePath>
     <uiIconPath>ProjectZ/UpperFloor_MenuIcon</uiIconPath>
     <cropIcon>false</cropIcon>

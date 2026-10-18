@@ -43,7 +43,7 @@
   <PZ_FartherFirst>Cells farther from the stairs go first</PZ_FartherFirst>
   <PZ_NoWorkSpot>Nowhere to stand next to it</PZ_NoWorkSpot>
   <PZ_DamagedSlab>damaged {0}</PZ_DamagedSlab>
-  <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Take it up with the remove tool and lay a new one.</PZ_DamagedSlabDesc>
+  <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Take it up with the remove tool and lay a new one. Removing it returns no materials.</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>Damaged upper floor: take it up and lay it again</PZ_DamagedSlabNoFloor>
   <PZ_DeckNeedsShipBelow>Must be built directly above gravship substructure or a ship upper deck</PZ_DeckNeedsShipBelow>
   <PZ_DeckAboveFirst>Remove the ship upper deck above first</PZ_DeckAboveFirst>

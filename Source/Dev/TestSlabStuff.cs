@@ -17,7 +17,7 @@ namespace ProjectZ.Dev
     //   P3 a carpet laid by colonists over part of the steel and granite slabs (the slab stays under it).
     //   P4 shots: the four stuffs partly carpeted, two turns, close / play / zoomed out, the ground view; the architect
     //      menu with the slab and stairs icons and the dropdown open.
-    //   P5 a granite slab taken up by a colonist: granite blocks back, fallen to the ground (compat G2; -projectznogravity: on floor 2).
+    //   P5 a granite slab taken up by a colonist: no materials back (user 2026-10-18).
     //   P6 steel stairs built by colonists in the open field: their landing is a steel slab.
     //   P7 a column holding steel and granite slabs deconstructed by a colonist: the slabs collapse.
     // Mode slabold (-projectzsave=<save made before the redesign>): its PZ_UpperFloor slabs load as wood slabs.
@@ -265,9 +265,9 @@ namespace ProjectZ.Dev
                     SetWork(map, false);
                     int back = CountOn(map, pGranite, 1) - pRemoveBefore;
                     int down = CountOn(map, pGranite, 0) - pRemoveBeforeLow;
-                    // (compat G2, user 2026-10-18: a removed slab's materials fall to the floor below; -projectznogravity: on floor 2)
-                    Result(Gravity.Off ? "a colonist takes the granite slab up: granite blocks back on floor 2 (half of 4)" : "a colonist takes the granite slab up: granite blocks back, fallen to the ground (half of 4)",
-                        pRemove.GetTerrain(map) == PZDefOf.PZ_OpenAir && (Gravity.Off ? back == 2 : back == 0 && down == 2) && !OnOpenAir(map),
+                    // (user 2026-10-18: taking up a slab returns no materials)
+                    Result("a colonist takes the granite slab up: no granite blocks back (user 2026-10-18), the roof below an ordinary roof",
+                        pRemove.GetTerrain(map) == PZDefOf.PZ_OpenAir && back == 0 && down == 0 && !OnOpenAir(map) && map.roofGrid.RoofAt(FloorRoof.Below(pRemove, map)) == RoofDefOf.RoofConstructed,
                         $"{pRemove} now {pRemove.GetTerrain(map).defName} after {ticksTotal} ticks; {pGranite.label} on floor 2 +{back}, on the ground +{down}; roof below {map.roofGrid.RoofAt(FloorRoof.Below(pRemove, map))?.defName ?? "none"}");
                     // P6: steel stairs in the open field
                     pSteelSite = GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, pSteelStairs, map, Rot4.North, Faction.OfPlayer, ThingDefOf.Steel);

@@ -341,6 +341,22 @@ namespace ProjectZ
         }
     }
 
+    // Taking up an upper deck returns no materials on any path (user 2026-10-18; the remove tool, a stairwell, ship stairs'
+    // landing, god mode): nothing falls from the removal, no roof below breaks. (Collapse and launch paths unchanged.)
+    [HarmonyPatch(typeof(TerrainGrid), nameof(TerrainGrid.RemoveFoundation))]
+    public static class RemoveFoundation_ShipDeckNoLeavings_Patch
+    {
+        private static readonly AccessTools.FieldRef<TerrainGrid, Map> mapRef = AccessTools.FieldRefAccess<TerrainGrid, Map>("map");
+
+        public static void Prefix(TerrainGrid __instance, IntVec3 c, ref bool doLeavings)
+        {
+            if (doLeavings && ShipDeck.Upper(c, mapRef(__instance)))
+            {
+                doLeavings = false;
+            }
+        }
+    }
+
     // An upper deck is taken up from a cell next to it (WorkSpot; the job's target B, Slabs.cs): none, no job.
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.HasJobOnCell))]
     public static class RemoveFoundationHasJob_ShipDeck_Patch

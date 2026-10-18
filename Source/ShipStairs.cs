@@ -288,11 +288,7 @@ namespace ProjectZ
                     return false;
                 }
             }
-            TerrainDef covering = map.terrainGrid.TopTerrainAt(top);
-            if (covering != null && covering != PZDefOf.PZ_OpenAir)
-            {
-                GenLeaving.DoLeavingsFor(covering, top, map);
-            }
+            // (no materials back, a floor laid on it included: user 2026-10-18, RemoveFoundation_ShipDeckNoLeavings_Patch)
             Slab.DropZoneCell(top, map);
             map.designationManager.DesignationAt(top, DesignationDefOf.RemoveFoundation)?.Delete();
             map.terrainGrid.RemoveFoundation(top, doLeavings: false);

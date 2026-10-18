@@ -16,7 +16,7 @@ namespace ProjectZ.Dev
     //      blueprint waits (inspect line, CanConstruct reason); a drafted colonist and an item on the stairwell;
     //   W3 stairs C placed in house B (turned east) and cancelled with the cancel designator: its designations go, the
     //      floor stays;
-    //   W4 colonists take the floor up (materials back, nobody and nothing left on open air, stairwell roof below), then
+    //   W4 colonists take the floor up (no materials back, nobody and nothing left on open air, stairwell roof below), then
     //      build W; a colonist walks up W;
     //   X1 a wall appears on W's exit while a colonist is on W's ramp heading up: it re-paths over the old stairs;
     //   X2 forbidden doors on both exits: "can't reach" (no enabled goto option, CanReach false); unforbidden, the
@@ -259,8 +259,8 @@ namespace ProjectZ.Dev
                     List<IntVec3> well = WellUp(map, wCenter, Rot4.North);
                     int wood = WoodTotal(map) - wWoodBefore;
                     bool roofs = StairShape.Footprint(wCenter, Rot4.North).Cells.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
-                    Result("colonists take the floor up: open air over the stairs, stairwell roof below, materials back, no frame before",
-                        well.All(c => c.GetTerrain(map) == PZDefOf.PZ_OpenAir) && roofs && wood > 0 && !wFrameEarly,
+                    Result("colonists take the floor up: open air over the stairs, stairwell roof below, no materials back (user 2026-10-18), no frame before",
+                        well.All(c => c.GetTerrain(map) == PZDefOf.PZ_OpenAir) && roofs && wood <= 0 && !wFrameEarly,
                         $"after {ticksTotal} ticks; terrain {string.Join(",", well.Select(c => c.GetTerrain(map).defName))}; roofs below {string.Join(",", StairShape.Footprint(wCenter, Rot4.North).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}; wood +{wood}; frame early {wFrameEarly}");
                     // (compat G2, user 2026-10-18: what stands on a floor taken up falls; -projectznogravity: it steps off)
                     Result(Gravity.Off ? "nobody and nothing left on open air; the drafted colonist stepped to a floor next to it" : "nobody and nothing left on open air; the drafted colonist fell into the stairwell, the steel came down or was hauled",

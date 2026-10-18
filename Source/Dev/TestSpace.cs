@@ -255,9 +255,9 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     IntVec3 u = UpS(eRemove, map);
-                    // (compat G2, user 2026-10-18: the slab's materials fall and break the ordinary roof under it; -projectznogravity: it stays)
-                    Result(Gravity.Off ? "E4 a colonist took the slab up: open air, the roof under it an ordinary roof" : "E4 a colonist took the slab up: open air, its materials fell through the roof under it (broken)",
-                        u.GetTerrain(map) == PZDefOf.PZ_OpenAir && (Gravity.Off ? map.roofGrid.RoofAt(eRemove) == RoofDefOf.RoofConstructed : !map.roofGrid.Roofed(eRemove) && CountOn(map, ThingDefOf.WoodLog, 1) == 0),
+                    // (user 2026-10-18: no materials back, so nothing falls through the ordinary roof left under it)
+                    Result("E4 a colonist took the slab up: open air, the roof under it an ordinary roof, no materials back",
+                        u.GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(eRemove) == RoofDefOf.RoofConstructed && CountOn(map, ThingDefOf.WoodLog, 1) == 0,
                         $"{u} {u.GetTerrain(map)?.defName}; under it {map.roofGrid.RoofAt(eRemove)?.defName ?? "no roof"}; wood on floor 2 {CountOn(map, ThingDefOf.WoodLog, 1)}");
                     Info("E5 under the removed slab: " + Vac(map, eRemove));
                     List<Pawn> cols = Colonists(map);

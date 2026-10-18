@@ -8,7 +8,7 @@
   <TerrainDef ParentName="FloorBase" MayRequire="Ludeon.RimWorld.Odyssey">
     <defName>PZ_ShipDeck</defName>
     <label>ship upper deck</label>
-    <description>Gravship substructure for an upper floor. It flies with the ship, and gravship parts can be built on it. View the floor above, then build it directly over gravship substructure or another ship upper deck, near walls or columns below and within range of a grav engine.\n\nShip upper decks can be removed from the top down using the 'remove foundation' designator.</description>
+    <description>Gravship substructure for an upper floor. It flies with the ship, and gravship parts can be built on it. View the floor above, then build it directly over gravship substructure or another ship upper deck, near walls or columns below and within range of a grav engine.\n\nShip upper decks can be removed from the top down using the 'remove foundation' designator. Removing it returns no materials.</description>
     <texturePath>ProjectZ/Terrain/ShipDeck</texturePath>
     <uiIconPath>ProjectZ/ShipDeck_MenuIcon</uiIconPath>
     <fertility>0</fertility>

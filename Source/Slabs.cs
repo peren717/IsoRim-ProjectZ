@@ -54,8 +54,8 @@ namespace ProjectZ
         }
 
         // Takes the slab (and any floor still laid on it) down to open air: the roof below becomes a plain roof again
-        // (FloorRoof), the materials come back as from any removed floor and, with pawns and items on it, fall to the
-        // floor below (gravity, MoveOff), the zone cell and the removal designation go.
+        // (FloorRoof), no materials come back (user 2026-10-18), pawns and items on it fall to the floor below (gravity,
+        // MoveOff), the zone cell and the removal designation go.
         public static void Remove(IntVec3 c, Map map, bool doLeavings, Thing cause = null)
         {
             TerrainGrid tg = map.terrainGrid;
@@ -63,14 +63,8 @@ namespace ProjectZ
             TerrainDef under = tg.UnderTerrainAt(c);
             DropZoneCell(c, map);
             tg.SetTerrain(c, PZDefOf.PZ_OpenAir);
-            if (doLeavings)
-            {
-                GenLeaving.DoLeavingsFor(top, c, map);
-                if (under != null && under != PZDefOf.PZ_OpenAir)
-                {
-                    GenLeaving.DoLeavingsFor(under, c, map);
-                }
-            }
+            // (user 2026-10-18: taking up a slab returns no materials on any path, doLeavings or not, a floor laid on it
+            // included: nothing falls from a removal, no roof below breaks; the slab and deck descriptions say so)
             map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation)?.Delete();
             MoveOff(c, map, cause);
             ProjectZ.DebugLog($"slab at {c} removed ({top.defName}{(under != null ? " on " + under.defName : "")})");

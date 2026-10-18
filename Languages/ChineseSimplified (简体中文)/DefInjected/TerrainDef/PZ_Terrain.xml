@@ -3,7 +3,7 @@
   <PZ_OpenAir.label>空中</PZ_OpenAir.label>
   <PZ_OpenAir.description>楼上的空处。可以在下层的墙或柱子附近铺楼板。</PZ_OpenAir.description>
   <PZ_UpperFloor.label>楼板</PZ_UpperFloor.label>
-  <PZ_UpperFloor.description>一层梁格，作为上一层的地面。切换到上一层，铺在能盖屋顶的地方：下层的墙、柱子或楼梯附近。</PZ_UpperFloor.description>
+  <PZ_UpperFloor.description>一层梁格，作为上一层的地面。切换到上一层，铺在能盖屋顶的地方：下层的墙、柱子或楼梯附近。拆除时不返还材料。</PZ_UpperFloor.description>
   <PZ_ShipDeck.label>飞船上层甲板</PZ_ShipDeck.label>
-  <PZ_ShipDeck.description>用于上层的逆重飞船基架。它会随飞船一起飞行，上面可以建造逆重飞船部件。切换到上一层，建在逆重飞船基架或另一层飞船上层甲板的正上方，靠近下层的墙或柱子，并在逆重引擎的作用范围内。\n\n你可以使用“移除地基”指令从上往下拆除飞船上层甲板。</PZ_ShipDeck.description>
+  <PZ_ShipDeck.description>用于上层的逆重飞船基架。它会随飞船一起飞行，上面可以建造逆重飞船部件。切换到上一层，建在逆重飞船基架或另一层飞船上层甲板的正上方，靠近下层的墙或柱子，并在逆重引擎的作用范围内。\n\n你可以使用“移除地基”指令从上往下拆除飞船上层甲板。拆除时不返还材料。</PZ_ShipDeck.description>
 </LanguageData>

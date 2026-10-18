@@ -43,7 +43,7 @@
   <PZ_FartherFirst>先拆离楼梯更远的格子</PZ_FartherFirst>
   <PZ_NoWorkSpot>旁边没有可站的地方</PZ_NoWorkSpot>
   <PZ_DamagedSlab>受损的{0}</PZ_DamagedSlab>
-  <PZ_DamagedSlabDesc>开裂的楼板，不能在上面铺地板。用拆除工具拆掉后重铺。</PZ_DamagedSlabDesc>
+  <PZ_DamagedSlabDesc>开裂的楼板，不能在上面铺地板。用拆除工具拆掉后重铺。拆除时不返还材料。</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>楼板已受损：拆掉重铺</PZ_DamagedSlabNoFloor>
   <PZ_DeckNeedsShipBelow>必须建在逆重飞船基架或飞船上层甲板的正上方</PZ_DeckNeedsShipBelow>
   <PZ_DeckAboveFirst>先拆除上方的飞船上层甲板</PZ_DeckAboveFirst>

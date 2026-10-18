@@ -17,7 +17,7 @@ namespace ProjectZ.Dev
     //   Y2 floors on a stairs landing: two open-field stairs (landings laid with them); a carpet and a wood floor are
     //      placed on the landings with the real designators through the UI pointer on floor 2, colonists build them
     //      (ticks); the landing stays a slab that can't be taken up alone; shots of the carpeted landing; then the
-    //      carpeted stairs are deconstructed by colonists: what happens to the landing, the carpet and its cloth.
+    //      carpeted stairs are deconstructed by colonists: the landing goes with its carpet, no cloth back (user 2026-10-18).
     public static partial class TestRunner
     {
         private static IntVec3 yO, yBlock, yTable, yTree, yStairsS, yT1, yT2, yL1, yL2;
@@ -189,8 +189,9 @@ namespace ProjectZ.Dev
                     Info($"REPORT stairs with a carpeted landing deconstructed after {ticksTotal} ticks: landing {yL1} now {yL1.GetTerrain(map).defName} (under {map.terrainGrid.UnderTerrainAt(yL1)?.defName ?? "-"}), roof under it {map.roofGrid.RoofAt(below)?.defName ?? "none"}; cloth on the map {yClothBefore2} -> {cloth} (ground {yClothBefore0} -> {CountOn(map, ThingDefOf.Cloth, 0)}, floor 2 {yClothBefore1} -> {CountOn(map, ThingDefOf.Cloth, 1)})");
                     int refund = cloth - yClothBefore2;
                     int down = CountOn(map, ThingDefOf.Cloth, 0) - yClothBefore0;
-                    Result("deconstructed: the landing goes, the carpet's cloth comes back (nearest floor cell on this floor, else the floor below)",
-                        yL1.GetTerrain(map) == PZDefOf.PZ_OpenAir && refund > 0 && !OnOpenAir(map),
+                    // (user 2026-10-18: taking up a floor returns no materials, a floor laid on it included)
+                    Result("deconstructed: the landing goes with its carpet, no materials back",
+                        yL1.GetTerrain(map) == PZDefOf.PZ_OpenAir && refund == 0 && !OnOpenAir(map),
                         $"landing {yL1.GetTerrain(map).defName}; cloth +{refund} (ground +{down}, floor 2 {CountOn(map, ThingDefOf.Cloth, 1) - yClothBefore1}); carpet cost {yCarpet.CostList?.FirstOrDefault()?.count}; at {string.Join(",", map.listerThings.ThingsOfDef(ThingDefOf.Cloth).Where(t => ProjectZ.FloorOf(t.Position, map) == 1).Select(t => t.Position + " " + t.Position.GetTerrain(map).defName))}");
                     Result("deconstructed: the stairs are gone, nobody and nothing left on open air", !yS1.Spawned && !OnOpenAir(map), $"spawned {yS1.Spawned}");
                     ShotAt(map, 1, yT1, 6f);
