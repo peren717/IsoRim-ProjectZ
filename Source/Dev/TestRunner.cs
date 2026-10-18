@@ -116,6 +116,12 @@ namespace ProjectZ.Dev
     //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
     //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
     //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)
+    //                                   tallmtn: tall mountains (phase 1): the fill's checks, real flows on the generated
+    //                                   mountains (stairs onto a top, building and mining up there, collapse, jump-down,
+    //                                   jump pack, sight, explosions, mortar, drops, Anomaly structures, tall things,
+    //                                   infestations), performance and shots; -projectztallmountains, -projectzfloors=4
+    //                                   -projectzmapsize=250 (-projectzhilliness=Impassable, -projectzmtnstep=X,
+    //                                   -projectztmnoflows: only the fill, performance and shots) (TestTallMtn*)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)

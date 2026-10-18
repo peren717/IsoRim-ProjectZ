@@ -30,6 +30,10 @@ namespace ProjectZ.Dev
         private static bool StepTallMtn(Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
+            if (stage.StartsWith("tm_f_"))
+            {
+                return StepTallMtnFlows(map);
+            }
             switch (stage)
             {
                 case "tm_setup":
@@ -65,6 +69,10 @@ namespace ProjectZ.Dev
                     }
                     mtPerf.Add($"frame ms {mtFrameSum / 180f * 1000f:0.00}");
                     Info($"PERF frame ms (paused, 180 frames, window hidden): {mtFrameSum / 180f * 1000f:0.00}");
+                    stage = GenCommandLine.CommandLineArgPassed("projectztmnoflows") ? "tm_shots" : "tm_f_setup";
+                    return true;
+                case "tm_shots":
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     TmPlanShots(map, a);
                     tmShot = 0;
                     // shots at noon (the quick test starts at dawn)
@@ -362,6 +370,15 @@ namespace ProjectZ.Dev
             int top = peak.IsValid ? H(peak.x, peak.z) : 0;
             Info($"shots: peak {peak} (level {top}), cliff {cliff} (drop {bestCliff}), terrace {terrace} (level {bestTer}), lip {lip}");
             IntVec3 mid = new IntVec3(sx / 2, 0, gz / 2);
+            if (tfStairs.IsValid && TfStairsBuilt(map))
+            {
+                tmShots.Add(new TmShot { name = "tm_stairs_top", floor = cap, g = tfStairs, size = 10f });
+                tmShots.Add(new TmShot { name = "tm_stairs_view1", floor = 1, g = tfStairs, size = 10f });
+            }
+            if (tfMine1.IsValid)
+            {
+                tmShots.Add(new TmShot { name = "tm_mined_view1", floor = 1, g = ProjectZ.GroundCellOf(tfMine1, map), size = 10f });
+            }
             tmShots.Add(new TmShot { name = "tm_overview", floor = cap, g = peak.IsValid ? peak : mid, size = 45f });
             tmShots.Add(new TmShot { name = "tm_overview_wide", floor = cap, g = mid, size = 80f });
             if (peak.IsValid)
