@@ -22,11 +22,20 @@ namespace ProjectZ.Patches
         // Test only (-projectznoshuttlefix): ShuttleCanLandHere without the rule, to show the old behaviour.
         public static bool ShuttleFixOff;
 
+        // Inside the game's own drop finders (NoTops_Patch: raid drop centres, random drop spots): a natural mountain top
+        // never counts (user decisions Q6 and D1; drops and shuttles the player aims may land there).
+        [System.ThreadStatic]
+        internal static int noTops;
+
         public static bool Blocked(IntVec3 c, Map map)
         {
             if (ProjectZ.Annex(map) == null || !c.InBounds(map))
             {
                 return false;
+            }
+            if (noTops > 0 && Mountains.On(map) && Mountains.NaturalFloor(c, map))
+            {
+                return true;
             }
             int k = ProjectZ.FloorOf(c, map);
             if (k < 0 || k >= 1 && !ProjectZ.HasFloor(c, map))
@@ -34,6 +43,31 @@ namespace ProjectZ.Patches
                 return true;
             }
             return FloorRoof.Kept(c, map);
+        }
+    }
+
+    // The game's own drop finders: the raid drop centres (every raid drop mode, mech clusters, crashed ship parts, boss
+    // groups) and the random drop spot (scattered raids, cargo pods, quest pods and shuttles, crashed ships, and
+    // FindSafeLandingSpot through it): a scope for DropRules.Blocked (tall mountains: no natural top).
+    [HarmonyPatch]
+    public static class NoTops_Patch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.FindRaidDropCenterDistant));
+            yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.TryFindRaidDropCenterClose));
+            yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.RandomDropSpot));
+        }
+
+        [HarmonyPriority(Priority.First)]
+        public static void Prefix()
+        {
+            DropRules.noTops++;
+        }
+
+        public static void Finalizer()
+        {
+            DropRules.noTops--;
         }
     }
 
@@ -150,6 +184,63 @@ namespace ProjectZ.Patches
                         return false;
                     }
                 }
+            }
+            return true;
+        }
+    }
+
+    // Hostile arrivals (every PawnsArrivalModeWorker's Arrive and spawn centre, the game's and other mods', for a faction
+    // hostile to the player): the same scope, so the pods spread round a raid's centre (DropThingsNear ->
+    // TryFindDropSpotNear) don't come down on a natural top next to it either. Friendly arrivals (permit aid, aimed by
+    // the player) keep the plain rule.
+    [HarmonyPatch]
+    public static class HostileArrival_NoTops_Patch
+    {
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            foreach (System.Type t in typeof(PawnsArrivalModeWorker).AllSubclassesNonAbstract())
+            {
+                foreach (string name in new[] { nameof(PawnsArrivalModeWorker.Arrive), nameof(PawnsArrivalModeWorker.TryResolveRaidSpawnCenter) })
+                {
+                    System.Reflection.MethodInfo m = AccessTools.DeclaredMethod(t, name);
+                    if (m != null && !m.IsAbstract)
+                    {
+                        yield return m;
+                    }
+                }
+            }
+        }
+
+        [HarmonyPriority(Priority.First)]
+        public static void Prefix(IncidentParms parms, out bool __state)
+        {
+            __state = parms?.faction != null && parms.faction.HostileTo(Faction.OfPlayer);
+            if (__state)
+            {
+                DropRules.noTops++;
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                DropRules.noTops--;
+            }
+        }
+    }
+
+    // Anomaly's large structures (pit gates, fleshbeast burrows, fleshmass hearts, the monolith's place; LargeBuildingCellFinder,
+    // user decision D2): ground only on a map with tall mountains (its scan runs over every row; one cell score for all).
+    [HarmonyPatch(typeof(LargeBuildingCellFinder), "GetCellScore")]
+    public static class LargeBuildingGroundOnly_Patch
+    {
+        public static bool Prefix(IntVec3 cell, Map map, ref float __result)
+        {
+            if (ProjectZ.IsAnnex(cell, map) && Mountains.On(map))
+            {
+                __result = 0f;
+                return false;
             }
             return true;
         }
