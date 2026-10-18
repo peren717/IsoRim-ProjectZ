@@ -67,8 +67,7 @@ namespace ProjectZ.Dev
 
         private static Vector2 RowCenter(int k)
         {
-            int n = ProjectZ.Annex(Find.CurrentMap).floors;
-            return FloorHud.RowRect(FloorHud.LastRect, n, k).center;
+            return FloorHud.RowRectOf(k).center;
         }
 
         private static string R(Rect r) => $"({r.x:0.#},{r.y:0.#} {r.width:0.#}x{r.height:0.#})";

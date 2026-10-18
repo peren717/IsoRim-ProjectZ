@@ -122,6 +122,9 @@ namespace ProjectZ.Dev
     //                                   infestations), performance and shots; -projectztallmountains, -projectzfloors=4
     //                                   -projectzmapsize=250 (-projectzhilliness=Impassable, -projectzmtnstep=X,
     //                                   -projectztmnoflows: only the fill, performance and shots) (TestTallMtn*)
+    //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
+    //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
+    //                                   kept); -projectzfloors=13 (TestShownLevels)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -668,6 +671,11 @@ namespace ProjectZ.Dev
                 StepMinimap(map);
                 return;
             }
+            if (stage.StartsWith("lv_"))
+            {
+                StepShownLv(map);
+                return;
+            }
             if (stage.StartsWith("tm_"))
             {
                 StepTallMtn(map);
@@ -755,6 +763,10 @@ namespace ProjectZ.Dev
                     else if (mode == "qol1")
                     {
                         stage = "o_setup";
+                    }
+                    else if (mode == "shownlv")
+                    {
+                        stage = "lv_setup";
                     }
                     else if (mode == "bugs4")
                     {

@@ -22,7 +22,8 @@ namespace ProjectZ
 
     // The floor the player works on: the pointer picks its cells (build, zone, order, select there) and the floors
     // above it are hidden. 0 = the ground. Not saved (starts on the ground). Shown and switched by the floor HUD
-    // (FloorHud.cs), the floor keys and the floor scroll (FloorKeys_Patch).
+    // (FloorHud.cs), the floor keys and the floor scroll (FloorKeys_Patch), all within the shown levels (ShownLevels);
+    // camera jumps to a target and the gravship cutscene view the target's level directly (it stays shown while viewed).
     public static class FloorView
     {
         private static int current;
@@ -51,6 +52,17 @@ namespace ProjectZ
                 SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
             }
             current = k;
+        }
+
+        // The floor keys and the floor scroll: one step up (+1) or down (-1) through the levels the HUD offers
+        // (ShownLevels); at the top or bottom shown level nothing changes. Set itself takes any of the map's levels.
+        public static void StepShown(int dir)
+        {
+            int k = ShownLevels.Step(Find.CurrentMap, Current, dir);
+            if (k != Current)
+            {
+                Set(k);
+            }
         }
 
         // IsoRim's gravship cutscene (IFloorLayout.ViewFloor): views floor k on a map without the click, returns the floor
@@ -121,12 +133,12 @@ namespace ProjectZ
             }
             if (PZKeyDefOf.PZ_FloorUp != null && PZKeyDefOf.PZ_FloorUp.KeyDownEvent)
             {
-                FloorView.Set(FloorView.Current + 1);
+                FloorView.StepShown(1);
                 Event.current.Use();
             }
             else if (PZKeyDefOf.PZ_FloorDown != null && PZKeyDefOf.PZ_FloorDown.KeyDownEvent)
             {
-                FloorView.Set(FloorView.Current - 1);
+                FloorView.StepShown(-1);
                 Event.current.Use();
             }
         }
@@ -151,7 +163,7 @@ namespace ProjectZ
                 return;
             }
             // wheel up (negative delta) = floor up
-            FloorView.Set(FloorView.Current + (scrollSum < 0f ? 1 : -1));
+            FloorView.StepShown(scrollSum < 0f ? 1 : -1);
             scrollSum = 0f;
         }
     }

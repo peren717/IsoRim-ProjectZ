@@ -61,6 +61,8 @@ namespace ProjectZ
         private int[] levelOfBand;
         private int[] bandOfLevel;
         private int minLevel, maxLevel;
+        // The levels the floor UI offers (ShownLevels), cached per map (not saved).
+        public ShownLevels.State shownLevels;
 
         public AnnexMapComponent(Map map) : base(map)
         {
@@ -74,6 +76,7 @@ namespace ProjectZ
             this.stride = stride;
             this.floors = floors;
             levelOfBand = null;
+            shownLevels = null;
             ProjectZ.Invalidate();
         }
 

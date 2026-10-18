@@ -98,12 +98,51 @@ namespace ProjectZ.Dev
                     if (tmShot >= tmShots.Count)
                     {
                         FloorView.Set(0);
-                        stage = "tm_save";
+                        stage = "tm_lv0";
                         return true;
                     }
                     ShotAt(map, tmShots[tmShot].floor, tmShots[tmShot].g, tmShots[tmShot].size);
                     Wait(25, "tm_take");
                     return true;
+                // the floor HUD offers the levels with mountain tops plus one (ShownLevels)
+                case "tm_lv0":
+                    LvWait(0.6f, "tm_lv");
+                    return true;
+                case "tm_lv":
+                {
+                    int top = 0;
+                    for (int x = 0; x < map.Size.x; x++)
+                    {
+                        for (int z = 0; z < ProjectZ.GroundZ(map); z++)
+                        {
+                            top = Mathf.Max(top, Column.NaturalTop(new IntVec3(x, 0, z), map));
+                        }
+                    }
+                    ShownExpected(map, out int elo, out int ehi);
+                    Info($"tall mountains: highest top level {top} of {Levels.Max(map)}");
+                    LvCheck(map, $"floor HUD on a tall-mountain map: the levels in use (tops up to level {top}) plus one", elo, ehi);
+                    Result("floor HUD shows every level with mountain tops and one more", ehi >= Mathf.Min(Levels.Max(map), top + 1), $"top {top}, shown up to {ehi}");
+                    // cost: the cache built from nothing, a refresh (the things pass), a refresh with one empty level to rescan
+                    AnnexMapComponent pa = ProjectZ.Annex(map);
+                    pa.shownLevels = null;
+                    Stopwatch psw = Stopwatch.StartNew();
+                    ShownLevels.ForceRefresh(map);
+                    double buildMs = psw.Elapsed.TotalMilliseconds;
+                    psw.Restart();
+                    for (int i = 0; i < 10; i++)
+                    {
+                        ShownLevels.ForceRefresh(map);
+                    }
+                    double refreshMs = psw.Elapsed.TotalMilliseconds / 10;
+                    ShownLevels.FloorChanged(Levels.Cell(new IntVec3(1, 0, 1), Levels.Max(map), map), map, false);
+                    psw.Restart();
+                    ShownLevels.ForceRefresh(map);
+                    double rescanMs = psw.Elapsed.TotalMilliseconds;
+                    Info($"PERF shown levels: build {buildMs:0.000} ms, refresh {refreshMs:0.000} ms (pawns {map.mapPawns.AllPawnsSpawnedCount}, items {map.listerThings.ThingsInGroup(ThingRequestGroup.HaulableEver).Count}, blueprints+frames {map.listerThings.ThingsInGroup(ThingRequestGroup.Blueprint).Count + map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingFrame).Count}), refresh with an empty level rescanned {rescanMs:0.000} ms; map {map.Size.x}x{ProjectZ.GroundZ(map)} x {Levels.Count(map)} levels");
+                    Capture("tm_hud");
+                    Wait(5, "tm_save");
+                    return true;
+                }
                 case "tm_take":
                     Capture(tmShots[tmShot].name);
                     tmShot++;

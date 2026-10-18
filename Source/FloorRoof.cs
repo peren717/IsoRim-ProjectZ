@@ -160,6 +160,7 @@ namespace ProjectZ
                 FloorRoof.Changed(c, map);
                 FloorHeat.Dirty();
                 SlabPeel.Dirty(map);
+                ShownLevels.FloorChanged(c, map, oldTerr == PZDefOf.PZ_OpenAir);
             }
         }
     }

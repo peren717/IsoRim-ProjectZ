@@ -300,7 +300,7 @@ namespace ProjectZ.Dev
                 {
                     bool built = tfDownStairs != null && TfDownBuilt(map);
                     Result("F12 colonists on a level-1 top with no way down build stairs downward from the top (touch from above)", built,
-                        $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName}"))}");
+                        $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName} hediffs {string.Join("/", p.health.hediffSet.hediffs.Select(h => h.def.defName))}"))}; hostiles on the map {map.mapPawns.AllPawnsSpawned.Count(h => h.HostileTo(Faction.OfPlayer) && !h.Downed)}");
                     if (!built)
                     {
                         TfDownEnd(map);

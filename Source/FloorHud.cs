@@ -8,9 +8,11 @@ using Verse.Sound;
 namespace ProjectZ
 {
     // The floor HUD (user decisions "Floor HUD", 2026-10-16; mockup model-review\projectz\floor_hud, variant B): one
-    // bar per floor stacked bottom-up (top = highest), no numbers. The viewed floor is lighter with a bright border and
-    // sticks out toward the map; floors above it (hidden) are outlines only; the ground bar is wider and darker. A white
-    // dot = a colonist on that floor, a red dot = danger there (an active hostile pawn or a fire, not under fog).
+    // bar per shown level stacked bottom-up (top = highest), no numbers. The viewed floor is lighter with a bright border
+    // and sticks out toward the map; floors above it (hidden) are outlines only; the ground bar is wider and darker. A
+    // white dot = a colonist on that floor, a red dot = danger there (an active hostile pawn or a fire, not under fog).
+    // Only the levels in use plus one above (and below) show (ShownLevels, user decision 2026-10-17); a bar coming or
+    // going slides in or out of the stack (it grows or shrinks its slot), so the column above moves smoothly.
     // Switching slides the bars (150 ms, ease-out, real time so it also plays while paused). Click a bar to view that
     // floor; Alt + drag moves the HUD anywhere (saved in the mod settings, "reset" puts it back).
     // By default it takes its own slot in the game's bottom-right controls column, right above the play settings
@@ -38,10 +40,18 @@ namespace ProjectZ
         private static readonly Color ColonistDot = new Color32(238, 238, 238, 255);
         private static readonly Color DangerDot = new Color32(224, 44, 32, 255);
 
-        // slide
+        // the view slide (levels)
         private static Map animMap;
-        private static int animFloors, shown, from;
+        private static int viewShown, viewFrom;
         private static float switchedAt = -1f;
+
+        // the slots, per level (index = level - the map's lowest level): how much of its slot a bar takes, 0 (not shown)
+        // to 1, eased from `slotFrom` toward `slotTo` since `slotAt` (real time; -1 = settled)
+        private static Map slotMap;
+        private static int slotMin, slotCount;
+        private static float[] slotFrom = new float[0], slotTo = new float[0], slotAt = new float[0];
+        // the last layout: each bar's top (UI px, NaN = not drawn)
+        private static float[] barTop = new float[0];
 
         // dots, per floor (index = level - the map's lowest level), refreshed a few times a second
         private static Map cacheMap;
@@ -62,12 +72,34 @@ namespace ProjectZ
 
         private static ProjectZSettings S => ProjectZMod.Settings;
 
-        // The row (bar plus half the gaps, full HUD width) of row index k (level - the lowest level, 0 = bottom bar) in
-        // the HUD rect r: the click and tooltip target.
-        public static Rect RowRect(Rect r, int floors, int k)
+        private static float Ease(float t) => 1f - (1f - t) * (1f - t);
+
+        // The row (bar plus half the gaps, full HUD width) of level L in the last layout: the click and tooltip target
+        // (Rect.zero when that level has no bar).
+        public static Rect RowRectOf(int L)
         {
-            int i = floors - 1 - k;
-            return new Rect(r.x, r.y + i * (BarH + Gap) - Gap / 2f, r.width, BarH + Gap);
+            int i = L - slotMin;
+            if (i < 0 || i >= barTop.Length || float.IsNaN(barTop[i]))
+            {
+                return Rect.zero;
+            }
+            return new Rect(LastRect.x, barTop[i] - Gap / 2f, LastRect.width, BarH + Gap);
+        }
+
+        // Test hook: the levels with a bar now (slot > 0) and fully in place.
+        public static string Slots()
+        {
+            string s = "";
+            float now = Time.realtimeSinceStartup;
+            for (int i = 0; i < slotCount; i++)
+            {
+                float v = SlotValue(i, now);
+                if (v > 0f)
+                {
+                    s += (s.Length > 0 ? "," : "") + (slotMin + i) + (v < 1f ? $"({v:0.00})" : "");
+                }
+            }
+            return s;
         }
 
         // From GlobalControls: draw in our own slot (moving the column base up), or where the player put it.
@@ -80,7 +112,14 @@ namespace ProjectZ
                 dragging = false;
                 return;
             }
-            float h = StackHeight(Levels.Count(map));
+            float now = Time.realtimeSinceStartup;
+            UpdateSlots(map, now);
+            float h = -Gap;
+            for (int i = 0; i < slotCount; i++)
+            {
+                h += SlotValue(i, now) * (BarH + Gap);
+            }
+            h = Mathf.Max(h, BarH);
             Rect r;
             if (S.floorHudMoved)
             {
@@ -92,7 +131,59 @@ namespace ProjectZ
                 r = new Rect(UI.screenWidth - EdgeGap - Width, curBaseY - h, Width, h);
                 curBaseY -= h;
             }
-            OnGUI(r, map, Levels.Count(map));
+            OnGUI(r, map, now);
+        }
+
+        // The slots follow the shown levels (ShownLevels.Range); a new map (or a new level layout) starts settled.
+        private static void UpdateSlots(Map map, float now)
+        {
+            int min = Levels.Min(map), n = Levels.Count(map);
+            ShownLevels.Range(map, out int lo, out int hi);
+            bool reset = slotMap != map || slotMin != min || slotCount != n;
+            if (reset)
+            {
+                slotMap = map;
+                slotMin = min;
+                slotCount = n;
+                slotFrom = new float[n];
+                slotTo = new float[n];
+                slotAt = new float[n];
+                barTop = new float[n];
+            }
+            for (int i = 0; i < n; i++)
+            {
+                float want = min + i >= lo && min + i <= hi ? 1f : 0f;
+                if (reset)
+                {
+                    slotFrom[i] = slotTo[i] = want;
+                    slotAt[i] = -1f;
+                }
+                else if (want != slotTo[i])
+                {
+                    slotFrom[i] = SlotValue(i, now);
+                    slotTo[i] = want;
+                    slotAt[i] = now;
+                }
+            }
+        }
+
+        private static float SlotValue(int i, float now)
+        {
+            if (i < 0 || i >= slotCount)
+            {
+                return 0f;
+            }
+            if (slotAt[i] < 0f || now < slotAt[i])
+            {
+                return slotTo[i];
+            }
+            float t = (now - slotAt[i]) / SlideTime;
+            if (t >= 1f)
+            {
+                slotAt[i] = -1f;
+                return slotTo[i];
+            }
+            return Mathf.Lerp(slotFrom[i], slotTo[i], Ease(t));
         }
 
         private static Rect MovedRect(float h)
@@ -102,9 +193,18 @@ namespace ProjectZ
             return new Rect(UI.screenWidth - right - Width, UI.screenHeight - bottom - h, Width, h);
         }
 
-        private static void OnGUI(Rect r, Map map, int floors)
+        private static void OnGUI(Rect r, Map map, float now)
         {
             LastRect = r;
+            // the layout: bars bottom-up, each taking its slot's share of a bar plus a gap (a bar coming in rises out
+            // from under the one below it; the stack is clipped to the HUD rect)
+            float cum = 0f;
+            for (int i = 0; i < slotCount; i++)
+            {
+                float v = SlotValue(i, now);
+                cum += v;
+                barTop[i] = v > 0f ? r.yMax - cum * (BarH + Gap) + Gap : float.NaN;
+            }
             Event e = Event.current;
             if (dragging)
             {
@@ -124,15 +224,14 @@ namespace ProjectZ
                     }
                 }
             }
-            // (rows by index i, level = lowest + i)
-            int lowest = Levels.Min(map);
             int cur = FloorView.Current;
+            // (only bars of shown levels take clicks and tooltips, not one sliding out)
             if (e.type == EventType.MouseDown && e.button == 0 && r.Contains(e.mousePosition))
             {
-                for (int i = 0; i < floors; i++)
+                for (int i = 0; i < slotCount; i++)
                 {
-                    int k = lowest + i;
-                    if (RowRect(r, floors, i).Contains(e.mousePosition))
+                    int k = slotMin + i;
+                    if (slotTo[i] > 0f && RowRectOf(k).Contains(e.mousePosition))
                     {
                         if (e.alt)
                         {
@@ -151,19 +250,23 @@ namespace ProjectZ
                     }
                 }
             }
-            for (int i = 0; i < floors; i++)
+            for (int i = 0; i < slotCount; i++)
             {
-                Rect row = RowRect(r, floors, i);
+                if (slotTo[i] <= 0f)
+                {
+                    continue;
+                }
+                Rect row = RowRectOf(slotMin + i);
                 if (Mouse.IsOver(row))
                 {
                     MouseoverSounds.DoRegion(row);
-                    int floor = lowest + i;
+                    int floor = slotMin + i;
                     TooltipHandler.TipRegion(row, new TipSignal(() => Tip(floor), 0x5A10F + i));
                 }
             }
             if (e.type == EventType.Repaint)
             {
-                Draw(r, map, floors, FloorView.Current - lowest, -lowest);
+                Draw(r, map, FloorView.Current, now);
             }
         }
 
@@ -186,81 +289,100 @@ namespace ProjectZ
             S.floorHudMoved = false;
         }
 
-        // (k, cur, ground: row indices; ground = the ground's row)
-        private static void Draw(Rect r, Map map, int floors, int cur, int ground)
+        // (cur: the viewed level)
+        private static void Draw(Rect r, Map map, int cur, float now)
         {
-            float now = Time.realtimeSinceStartup;
-            if (animMap != map || animFloors != floors)
+            if (animMap != map)
             {
                 animMap = map;
-                animFloors = floors;
-                shown = from = cur;
+                viewShown = viewFrom = cur;
                 switchedAt = -1f;
             }
-            else if (cur != shown)
+            else if (cur != viewShown)
             {
-                from = shown;
-                shown = cur;
+                viewFrom = viewShown;
+                viewShown = cur;
                 switchedAt = now;
             }
             float t = switchedAt < 0f ? 1f : Mathf.Clamp01((now - switchedAt) / SlideTime);
-            float ease = 1f - (1f - t) * (1f - t);
-            Refresh(map, floors, now);
-            for (int k = 0; k < floors; k++)
+            float ease = Ease(t);
+            Refresh(map, Levels.Count(map), now);
+            Widgets.BeginGroup(r);
+            try
             {
-                float v = Mathf.Lerp(k == from ? 1f : 0f, k == shown ? 1f : 0f, ease);
-                float f = Mathf.Lerp(k <= from ? 1f : 0f, k <= shown ? 1f : 0f, ease);
-                float w = BarW + (k == ground ? GroundExtra : 0f);
-                float y = r.y + (floors - 1 - k) * (BarH + Gap);
-                Rect bar = new Rect(r.xMax - v * Shift - w, y, w, BarH);
-                DrawBar(bar, k == ground, v, f);
-                if (!dragging && Mouse.IsOver(RowRect(r, floors, k)))
+                // top down: a bar rising into its slot comes out from under the one below it
+                for (int i = slotCount - 1; i >= 0; i--)
                 {
-                    Widgets.DrawHighlight(bar);
+                    if (float.IsNaN(barTop[i]))
+                    {
+                        continue;
+                    }
+                    int k = slotMin + i;
+                    float alpha = SlotValue(i, now);
+                    float v = Mathf.Lerp(k == viewFrom ? 1f : 0f, k == viewShown ? 1f : 0f, ease);
+                    float f = Mathf.Lerp(k <= viewFrom ? 1f : 0f, k <= viewShown ? 1f : 0f, ease);
+                    float w = BarW + (k == 0 ? GroundExtra : 0f);
+                    float y = barTop[i] - r.y;
+                    Rect bar = new Rect(r.width - v * Shift - w, y, w, BarH);
+                    DrawBar(bar, k == 0, v, f, alpha);
+                    if (!dragging && slotTo[i] > 0f && Mouse.IsOver(new Rect(0f, y - Gap / 2f, r.width, BarH + Gap)))
+                    {
+                        Widgets.DrawHighlight(bar);
+                    }
+                    int d = k - cacheLowest;
+                    if (d < 0 || d >= colonist.Length)
+                    {
+                        continue;
+                    }
+                    float dx = bar.xMax - 3f - DotSize;
+                    if (colonist[d])
+                    {
+                        DrawDot(new Rect(dx, y + 2f, DotSize, DotSize), Fade(ColonistDot, alpha));
+                        dx -= 3f + DotSize;
+                    }
+                    if (danger[d])
+                    {
+                        DrawDot(new Rect(dx, y + 2f, DotSize, DotSize), Fade(DangerDot, alpha));
+                    }
                 }
-                float dx = bar.xMax - 3f - DotSize;
-                if (colonist[k])
-                {
-                    DrawDot(new Rect(dx, y + 2f, DotSize, DotSize), ColonistDot);
-                    dx -= 3f + DotSize;
-                }
-                if (danger[k])
-                {
-                    DrawDot(new Rect(dx, y + 2f, DotSize, DotSize), DangerDot);
-                }
+            }
+            finally
+            {
+                Widgets.EndGroup();
             }
         }
 
-        // v: how much it is the viewed floor (0..1, mid-slide in between); f: how much it is filled (0 = above the view).
-        private static void DrawBar(Rect bar, bool ground, float v, float f)
+        // v: how much it is the viewed floor (0..1, mid-slide in between); f: how much it is filled (0 = above the view);
+        // a: its opacity (a bar sliding in or out).
+        private static void DrawBar(Rect bar, bool ground, float v, float f, float a)
         {
             Color fill = Color.Lerp(ground ? GroundFill : Fill, ViewFill, v);
             Color light = Color.Lerp(ground ? GroundLight : Light, ViewLight, v);
             Color dark = Color.Lerp(ground ? GroundDark : Dark, ViewDark, v);
-            Color border = Color.Lerp(Color.Lerp(HiddenOutline, Outline, f), ViewBorder, v);
+            Color border = Fade(Color.Lerp(Color.Lerp(HiddenOutline, Outline, f), ViewBorder, v), a);
             Rect inner = bar.ContractedBy(1f);
-            if (f >= 1f)
+            if (f >= 1f && a >= 1f)
             {
                 Widgets.DrawBoxSolid(bar, border);
             }
             else
             {
                 Frame(bar, border);
-                Frame(inner, Fade(HiddenRing, 1f - f));
+                Frame(inner, Fade(HiddenRing, (1f - f) * a));
             }
             if (f > 0f)
             {
-                Widgets.DrawBoxSolid(inner, Fade(fill, f));
-                Widgets.DrawBoxSolid(new Rect(inner.x, inner.y, inner.width, 1f), Fade(light, f));
-                Widgets.DrawBoxSolid(new Rect(inner.xMax - 1f, inner.y + 1f, 1f, inner.height - 1f), Fade(light, f));
-                Widgets.DrawBoxSolid(new Rect(inner.x, inner.yMax - 1f, inner.width - 1f, 1f), Fade(dark, f));
-                Widgets.DrawBoxSolid(new Rect(inner.x, inner.y + 1f, 1f, inner.height - 2f), Fade(dark, f));
+                Widgets.DrawBoxSolid(inner, Fade(fill, f * a));
+                Widgets.DrawBoxSolid(new Rect(inner.x, inner.y, inner.width, 1f), Fade(light, f * a));
+                Widgets.DrawBoxSolid(new Rect(inner.xMax - 1f, inner.y + 1f, 1f, inner.height - 1f), Fade(light, f * a));
+                Widgets.DrawBoxSolid(new Rect(inner.x, inner.yMax - 1f, inner.width - 1f, 1f), Fade(dark, f * a));
+                Widgets.DrawBoxSolid(new Rect(inner.x, inner.y + 1f, 1f, inner.height - 2f), Fade(dark, f * a));
             }
         }
 
         private static void DrawDot(Rect r, Color c)
         {
-            Widgets.DrawBoxSolid(r, Outline);
+            Widgets.DrawBoxSolid(r, Fade(Outline, c.a));
             Widgets.DrawBoxSolid(r.ContractedBy(1f), c);
         }
 
