@@ -359,3 +359,137 @@ namespace ProjectZ
         }
     }
 }
+
+namespace ProjectZ
+{
+    // Infestations per band (tall mountains only, Mountains.On; isorim-pz-mountains-design.md §2.1): a dug room in an
+    // upper band is scored like one on the ground, from its own band. Rows:
+    //   - InfestationCellFinder's mountainousness radial count, its straight lines to the open and its distance to a
+    //     blocker: cells of another band are off the map (BandScope, the cell argument is the source);
+    //   - the 30-cell distance to colony buildings (CellFinderUtility's Dijkstra): neighbours stay in their band.
+    [HarmonyPatch]
+    public static class InfestationBand_Patch
+    {
+        public static int Swapped;
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            foreach (string name in new[] { "GetMountainousnessScoreAt", "StraightLineDistToUnroofed", "DistToBlocker" })
+            {
+                MethodInfo m = AccessTools.Method(typeof(InfestationCellFinder), name);
+                if (m == null)
+                {
+                    Log.Warning("[ProjectZ] infestations per band: InfestationCellFinder." + name + " not found");
+                    continue;
+                }
+                yield return m;
+            }
+        }
+
+        public static void Prefix(IntVec3 cell, Map map, out bool __state)
+        {
+            __state = Mountains.On(map);
+            if (__state)
+            {
+                BandScope.Push(map, cell);
+            }
+        }
+
+        public static void Finalizer(bool __state)
+        {
+            if (__state)
+            {
+                BandScope.Pop();
+            }
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
+            foreach (CodeInstruction ci in instructions)
+            {
+                if (ci.Calls(inBounds))
+                {
+                    ci.opcode = OpCodes.Call;
+                    ci.operand = AccessTools.Method(typeof(BandScope), nameof(BandScope.InBounds));
+                    Swapped++;
+                }
+                yield return ci;
+            }
+        }
+    }
+
+    [HarmonyPatch]
+    public static class ColonyDistanceBand_Patch
+    {
+        public static int Swapped;
+
+        public static IEnumerable<MethodBase> TargetMethods()
+        {
+            MethodInfo getter = AccessTools.Method(typeof(DijkstraUtility), nameof(DijkstraUtility.AdjacentCellsNeighborsGetter));
+            string tag = "<" + nameof(CellFinderUtility.CalculateDistanceToColonyBuildingGrid) + ">";
+            foreach (Type nt in new[] { typeof(CellFinderUtility) }.Concat(typeof(CellFinderUtility).GetNestedTypes(AccessTools.all)))
+            {
+                foreach (MethodInfo l in nt.GetMethods(AccessTools.all | BindingFlags.DeclaredOnly))
+                {
+                    if (l.Name.Contains(tag) && l.GetMethodBody() != null && BandScope.CallsAny(l, getter))
+                    {
+                        yield return l;
+                    }
+                }
+            }
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo getter = AccessTools.Method(typeof(DijkstraUtility), nameof(DijkstraUtility.AdjacentCellsNeighborsGetter));
+            foreach (CodeInstruction ci in instructions)
+            {
+                if (ci.Calls(getter))
+                {
+                    ci.opcode = OpCodes.Call;
+                    ci.operand = AccessTools.Method(typeof(ColonyDistanceBand_Patch), nameof(Neighbours));
+                    Swapped++;
+                }
+                yield return ci;
+            }
+        }
+
+        private static readonly List<IntVec3> same = new List<IntVec3>();
+
+        public static IEnumerable<IntVec3> Neighbours(IntVec3 cell, Map map)
+        {
+            IEnumerable<IntVec3> all = DijkstraUtility.AdjacentCellsNeighborsGetter(cell, map);
+            if (!Mountains.On(map))
+            {
+                return all;
+            }
+            same.Clear();
+            foreach (IntVec3 c in all)
+            {
+                if (ProjectZ.SameBand(c, cell, map))
+                {
+                    same.Add(c);
+                }
+            }
+            return same;
+        }
+    }
+}
+
+namespace ProjectZ
+{
+    // R23: a child hive stays on its parent's band (CompSpawnerHives.FindChildHiveLocation's three searches all ask
+    // CanSpawnHiveAt; the radius reaches across the void into a dug room of the next band). Tall mountains only.
+    [HarmonyPatch(typeof(CompSpawnerHives), "CanSpawnHiveAt")]
+    public static class ChildHiveBand_Patch
+    {
+        public static void Postfix(IntVec3 c, Map map, IntVec3 parentPos, ref bool __result)
+        {
+            if (__result && Mountains.On(map) && !ProjectZ.SameBand(c, parentPos, map))
+            {
+                __result = false;
+            }
+        }
+    }
+}
