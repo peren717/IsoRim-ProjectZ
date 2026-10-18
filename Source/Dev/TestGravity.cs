@@ -441,7 +441,7 @@ namespace ProjectZ.Dev
                 $"spawn {Has(spawn, typeof(GenSpawn_Gravity_Patch))}, place {Has(place, typeof(GenPlace_Gravity_Patch))}, filth {Has(filth, typeof(FilthMaker_Gravity_Patch))}, load {Has(load, typeof(FinalizeLoading_Gravity_Patch))}");
             Result("G0 the spawn hook runs after ShipLocal's net", ours != null && net != null && net.priority > ours.priority, $"net priority {net?.priority}, ours {ours?.priority}; prefixes on GenSpawn.Spawn: {string.Join(", ", sp?.Prefixes.Select(x => x.owner + "/" + x.PatchMethod.DeclaringType.Name + " " + x.priority) ?? new string[0])}");
             Info($"G0 a map with floors seen: {BandRadial.AnyAnnex}; counters: {Gravity.Counters}");
-            if (mode == "gravityn1")
+            if (!rdFloors)
             {
                 Result("N1 no map with floors: the flag stays off", !BandRadial.AnyAnnex, "");
             }

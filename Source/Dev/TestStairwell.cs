@@ -262,8 +262,9 @@ namespace ProjectZ.Dev
                     Result("colonists take the floor up: open air over the stairs, stairwell roof below, materials back, no frame before",
                         well.All(c => c.GetTerrain(map) == PZDefOf.PZ_OpenAir) && roofs && wood > 0 && !wFrameEarly,
                         $"after {ticksTotal} ticks; terrain {string.Join(",", well.Select(c => c.GetTerrain(map).defName))}; roofs below {string.Join(",", StairShape.Footprint(wCenter, Rot4.North).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}; wood +{wood}; frame early {wFrameEarly}");
-                    Result("nobody and nothing left on open air; the drafted colonist stepped to a floor next to it",
-                        !OnOpenAir(map) && wSitter.Position.Standable(map) && ProjectZ.FloorOf(wSitter.Position, map) == 1 && map.listerThings.ThingsOfDef(ThingDefOf.Steel).Any(t => t.stackCount >= 20 && ProjectZ.FloorOf(t.Position, map) == 1),
+                    // (compat G2, user 2026-10-18: what stands on a floor taken up falls; -projectznogravity: it steps off)
+                    Result(Gravity.Off ? "nobody and nothing left on open air; the drafted colonist stepped to a floor next to it" : "nobody and nothing left on open air; the drafted colonist fell into the stairwell, the steel came down or was hauled",
+                        !OnOpenAir(map) && wSitter.Position.Standable(map) && ProjectZ.FloorOf(wSitter.Position, map) == (Gravity.Off ? 1 : 0) && map.listerThings.ThingsOfDef(ThingDefOf.Steel).Any(t => t.stackCount >= 20 && (Gravity.Off ? ProjectZ.FloorOf(t.Position, map) == 1 : !Gravity.Air(t.Position, map))),
                         $"{wSitter} at {wSitter.Position} ({wSitter.Position.GetTerrain(map).defName}); steel {string.Join(", ", map.listerThings.ThingsOfDef(ThingDefOf.Steel).Where(t => ProjectZ.FloorOf(t.Position, map) == 1).Select(t => t.Position + " x" + t.stackCount))}");
                     Draft(wSitter, false);
                     ViewUp(map, wCenter, 5f);

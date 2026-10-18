@@ -823,7 +823,16 @@ namespace ProjectZ.Dev
             Thing wall = null;
             MethodInfoRefuse(d, click, f0, map, "F4 refused: a wall standing in the column on floor 3", null, () =>
             {
-                wall = Place(ThingDefOf.Wall, ThingDefOf.WoodLog, ProjectZ.CellOnFloor(f0, 2, map), map);
+                // (a stray wall on open air, as an older save could hold: placed outside gravity, compat G2)
+                Gravity.Suspend();
+                try
+                {
+                    wall = Place(ThingDefOf.Wall, ThingDefOf.WoodLog, ProjectZ.CellOnFloor(f0, 2, map), map);
+                }
+                finally
+                {
+                    Gravity.Resume();
+                }
             }, () => wall?.Destroy());
             // too few floors: the map's count lowered for the check only
             int floors = an.floors;

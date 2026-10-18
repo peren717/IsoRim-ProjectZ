@@ -17,11 +17,12 @@ namespace ProjectZ.Dev
     //      with a slab above (floor 3);
     //   Z2 a 4 x 5 block dragged at H's east end (one cell carpeted, filth on one, a drafted colonist and steel on two)
     //      plus a slab island nobody reaches: colonists take the block up farthest first (peel order), each from the
-    //      cell one step nearer the stairs, carpet then slab, wood (and cloth) back on floor 2, roof below plain and the
-    //      room still indoors, nobody and nothing on open air, the island never worked;
+    //      cell one step nearer the stairs, carpet then slab; compat G2 (user 2026-10-18): the wood (and cloth), the colonist
+    //      and the steel fall to the ground, breaking the plain roof below; nobody and nothing on open air; the island never
+    //      worked (-projectznogravity: the old rule, wood back on floor 2, roof below plain, the room still indoors);
     //   Z3 stairs T placed in the open field (no roof anywhere): accepted, built by colonists with their landing and the
     //      roof under it, a colonist walks up; shots (two turns and the side); deconstructed: landing and its roof go,
-    //      the colonist on the landing moves to the nearest floor cell;
+    //      the colonist on the landing falls to the floor below (compat G2; -projectznogravity: the nearest floor cell);
     //   Z4 pavilion P (a 5 x 5 slab on a roof held by one column): a colonist, steel and a table on the slab, a colonist
     //      under it; the column is killed: the slab collapses (colonist falls, bruised and crushed; steel down; table
     //      destroyed; the colonist under it crushed); a slab nobody holds up (as in a save from before) stays put.
@@ -39,7 +40,7 @@ namespace ProjectZ.Dev
         private static readonly List<IntVec3> zOrder = new List<IntVec3>();
         private static int zWorkChecks, zWorkBad, zIslandJobs, zCarpetFloorJobs, zCarpetSlabJobs, zTick;
         private static string zWorkBadLine;
-        private static int zWoodBefore, zClothBefore, zSteelTotal;
+        private static int zWoodBefore, zClothBefore, zSteelTotal, zWoodLowBefore, zClothLowBefore;
         private static Thing zSteel, zPTable, zPSteel;
         private static int zInjOnSlab, zInjBelow;
         private static Building_Stairs zT;
@@ -203,6 +204,8 @@ namespace ProjectZ.Dev
                     // Z2: the block (one drag) and the island (one click)
                     zWoodBefore = CountOn(map, ThingDefOf.WoodLog, 1);
                     zClothBefore = CountOn(map, ThingDefOf.Cloth, 1);
+                    zWoodLowBefore = CountOn(map, ThingDefOf.WoodLog, 0);
+                    zClothLowBefore = CountOn(map, ThingDefOf.Cloth, 0);
                     UiDesignate(ScreenOf(new IntVec3(zBlock.minX, 0, zBlock.minZ), 1), ScreenOf(new IntVec3(zBlock.maxX, 0, zBlock.maxZ), 1));
                     UiDesignate(ScreenOf(ProjectZ.GroundCellOf(zIsland, map), 1), ScreenOf(ProjectZ.GroundCellOf(zIsland, map), 1));
                     Find.DesignatorManager.Deselect();
@@ -263,16 +266,38 @@ namespace ProjectZ.Dev
                     int wood = CountOn(map, ThingDefOf.WoodLog, 1) - zWoodBefore;
                     int cloth = CountOn(map, ThingDefOf.Cloth, 1) - zClothBefore;
                     int woodLow = CountOn(map, ThingDefOf.WoodLog, 0);
-                    Result("half the materials back, on floor 2 (2 wood a slab, the carpet's cloth)", wood == 2 * zDist.Count && cloth >= 3,
-                        $"wood +{wood} (want {2 * zDist.Count}), cloth +{cloth}; wood on the ground {woodLow}");
                     List<IntVec3> belowCells = zDist.Keys.Select(c => FloorRoof.Below(c, map)).ToList();
                     Room room = ProjectZ.GroundCellOf(zDist.Keys.First(), map).GetRoom(map);
-                    Result("roof below a plain roof again, the room below still indoors", belowCells.All(c => map.roofGrid.RoofAt(c) == RoofDefOf.RoofConstructed) && room != null && !room.PsychologicallyOutdoors && room.OpenRoofCount == 0,
-                        $"roofs {string.Join(",", belowCells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none").Distinct())}; room {room?.ID} outdoors {room?.PsychologicallyOutdoors} open roof {room?.OpenRoofCount}");
+                    if (Gravity.Off)
+                    {
+                        Result("half the materials back, on floor 2 (2 wood a slab, the carpet's cloth)", wood == 2 * zDist.Count && cloth >= 3,
+                            $"wood +{wood} (want {2 * zDist.Count}), cloth +{cloth}; wood on the ground {woodLow}");
+                        Result("roof below a plain roof again, the room below still indoors", belowCells.All(c => map.roofGrid.RoofAt(c) == RoofDefOf.RoofConstructed) && room != null && !room.PsychologicallyOutdoors && room.OpenRoofCount == 0,
+                            $"roofs {string.Join(",", belowCells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none").Distinct())}; room {room?.ID} outdoors {room?.PsychologicallyOutdoors} open roof {room?.OpenRoofCount}");
+                    }
+                    else
+                    {
+                        // compat G2 (user 2026-10-18): what a removed slab leaves falls, breaking the ordinary roof it passes
+                        int woodDown = woodLow - zWoodLowBefore;
+                        int clothDown = CountOn(map, ThingDefOf.Cloth, 0) - zClothLowBefore;
+                        Result("half the materials back, fallen to the ground below (2 wood a slab, the carpet's cloth)", wood == 0 && woodDown == 2 * zDist.Count && cloth + clothDown >= 3,
+                            $"wood on the ground +{woodDown} (want {2 * zDist.Count}), on floor 2 +{wood}; cloth on the ground +{clothDown}, on floor 2 +{cloth}");
+                        Result("the roof below (an ordinary roof again) broke where the materials fell through", belowCells.All(c => !map.roofGrid.Roofed(c)),
+                            $"roofs {string.Join(",", belowCells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none").Distinct())}; room {room?.ID} open roof {room?.OpenRoofCount}; gravity {Gravity.Counters}");
+                    }
                     Result("filth on a removed cell gone", !zFilth.GetThingList(map).Any(t => t is Filth), $"{zFilth}: {string.Join(",", zFilth.GetThingList(map).Select(t => t.def.defName))}");
-                    Result("nobody and nothing on open air; the drafted colonist and the steel on floor 2",
-                        !OnOpenAir(map) && ProjectZ.FloorOf(zSitter.Position, map) == 1 && zSitter.Position.Standable(map) && CountOn(map, ThingDefOf.Steel, 1) == zSteelTotal,
-                        $"{zSitter} at {zSitter.Position}; steel on floor 2 {CountOn(map, ThingDefOf.Steel, 1)}/{zSteelTotal}");
+                    if (Gravity.Off)
+                    {
+                        Result("nobody and nothing on open air; the drafted colonist and the steel on floor 2",
+                            !OnOpenAir(map) && ProjectZ.FloorOf(zSitter.Position, map) == 1 && zSitter.Position.Standable(map) && CountOn(map, ThingDefOf.Steel, 1) == zSteelTotal,
+                            $"{zSitter} at {zSitter.Position}; steel on floor 2 {CountOn(map, ThingDefOf.Steel, 1)}/{zSteelTotal}");
+                    }
+                    else
+                    {
+                        Result("nobody and nothing on open air; the drafted colonist and the steel fell to the ground (bruised)",
+                            !OnOpenAir(map) && ProjectZ.FloorOf(zSitter.Position, map) == 0 && zSitter.Position.Standable(map) && zSteel.Spawned && ProjectZ.FloorOf(zSteel.Position, map) == 0 && Injuries(zSitter) > 0,
+                            $"{zSitter} at {zSitter.Position} (injuries {InjuryNames(zSitter)}); steel at {zSteel.PositionHeld}");
+                    }
                     Result("the island nobody reaches is never worked", Slab.At(zIsland, map) && zIslandJobs == 0 && map.designationManager.DesignationAt(zIsland, DesignationDefOf.RemoveFoundation) != null,
                         $"{zIsland}: {zIsland.GetTerrain(map).defName}, jobs seen {zIslandJobs}");
                     Draft(zSitter, false);
@@ -399,8 +424,8 @@ namespace ProjectZ.Dev
                     Result("deconstructed: the landing goes with the stairs, the roof they brought under it too",
                         !zT.Spawned && top.GetTerrain(map) == PZDefOf.PZ_OpenAir && !map.roofGrid.Roofed(below) && StairGrid.For(map)?.links.Any(l => l.stairs == zT) != true,
                         $"after {ticksTotal} ticks; landing {top} {top.GetTerrain(map).defName}; roof under it {map.roofGrid.RoofAt(below)?.defName ?? "none"}; wood on the ground +{CountOn(map, ThingDefOf.WoodLog, 0) - zWoodBefore}");
-                    Result("the drafted colonist on the landing moved to the nearest floor cell, not left on open air",
-                        zClimber.Spawned && zClimber.Position.Standable(map) && zClimber.Position.GetTerrain(map) != PZDefOf.PZ_OpenAir, $"{zClimber} at {zClimber.Position} (floor {ProjectZ.FloorOf(zClimber.Position, map) + 1}, {zClimber.Position.GetTerrain(map).defName})");
+                    Result(Gravity.Off ? "the drafted colonist on the landing moved to the nearest floor cell, not left on open air" : "the drafted colonist on the landing fell to the floor below (compat G2), not left on open air",
+                        zClimber.Spawned && zClimber.Position.Standable(map) && zClimber.Position.GetTerrain(map) != PZDefOf.PZ_OpenAir && (Gravity.Off || ProjectZ.FloorOf(zClimber.Position, map) == 0), $"{zClimber} at {zClimber.Position} (floor {ProjectZ.FloorOf(zClimber.Position, map) + 1}, {zClimber.Position.GetTerrain(map).defName})");
                     Draft(zClimber, false);
                     SetWork(map, false);
                     Wait(5, "z_collapse");

@@ -357,8 +357,9 @@ namespace ProjectZ.Dev
         {
             tickWatch = null;
             IntVec3 well = FloorRoof.Below(skRm, map);
-            Result("K5 a colonist removed it: open air, the roof under it an ordinary roof again (as for any deck); the other decks over the opening stay",
-                skRm.GetTerrain(map) == PZDefOf.PZ_OpenAir && !ShipDeck.At(skRm, map) && map.roofGrid.RoofAt(well) == RoofDefOf.RoofConstructed && ShipDeck.At(skKeep, map) && ShipDeck.At(skLanding2, map),
+            // (compat G2, user 2026-10-18: the deck's materials fall and break the ordinary roof under it; -projectznogravity: it stays)
+            Result(Gravity.Off ? "K5 a colonist removed it: open air, the roof under it an ordinary roof again (as for any deck); the other decks over the opening stay" : "K5 a colonist removed it: open air, the roof under it broken by its falling materials; the other decks over the opening stay",
+                skRm.GetTerrain(map) == PZDefOf.PZ_OpenAir && !ShipDeck.At(skRm, map) && (Gravity.Off ? map.roofGrid.RoofAt(well) == RoofDefOf.RoofConstructed : !map.roofGrid.Roofed(well)) && ShipDeck.At(skKeep, map) && ShipDeck.At(skLanding2, map),
                 $"{SpCell(skRm, map)} {skRm.GetTerrain(map)?.defName}, roof below {map.roofGrid.RoofAt(well)?.defName ?? "none"}; kept {ShipDeck.At(skKeep, map)} landing 2 {ShipDeck.At(skLanding2, map)}; after {ticksTotal} ticks");
             // the rule for stairs that are gone: their opening is no ship column cell any more, the decks over it fall
             List<Building_Stairs> st = SpShipStairs(map);
