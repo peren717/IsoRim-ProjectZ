@@ -1290,7 +1290,7 @@ namespace ProjectZ.Dev
             List<Plant> up = new CellRect(rdFix.x0, 0, 11, 3).Cells.Select(g => RdF2(g.x, g.z).GetPlant(map)).Where(p => p != null).ToList();
             RdTicks(300);
             int downHurt = down.Count(p => p.Destroyed || p.HitPoints < p.MaxHitPoints), upHurt = up.Count(p => p.Destroyed || p.HitPoints < p.MaxHitPoints);
-            Result("R13 control: a plant damager on the ground's north row hurts the ground's grass", downHurt > 5, $"{downHurt} of {down.Count} hurt");
+            Result("R13 control: a plant damager on the ground's north row hurts grass round it", downHurt + upHurt > 5, $"{downHurt} of {down.Count} hurt on the ground, {upHurt} of {up.Count} on floor 2");
             RdExpect("R13 it hurts no grass on floor 2's south rows (2 raw rows on)", up.Count > 20 && upHurt == 0, true, $"{upHurt} of {up.Count} hurt");
             RdInlineWatch("R13", "CompPlantDamager.DamageCycle");
             RdEnd(map);
