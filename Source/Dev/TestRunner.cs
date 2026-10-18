@@ -112,7 +112,8 @@ namespace ProjectZ.Dev
     //                                   in the copy gizmo, walking and hauling over them, the ship flown and landed turned
     //                                   with them working); -projectzfloors=4, Odyssey (TestShipStairs)
     //                                   (-projectzshipfresh: a fresh ship, the landing deck; -projectzshiproof: stairs in
-    //                                   roofed rooms, the roof over a ship stairwell, TestShipRoof)
+    //                                   roofed rooms, the roof over a ship stairwell, TestShipRoof; -projectzshipstack:
+    //                                   ship stairs stacked over the opening of the ones below, TestShipStack)
     //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
     //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
     //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)

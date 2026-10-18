@@ -83,9 +83,10 @@ namespace ProjectZ
             if (!ShipDeck.At(top, map))
             {
                 // The landing (as ordinary stairs): a ship upper deck laid with the stairs (LayLanding; or one planned
-                // there), so the exit only has to be where a deck may go: over the ship's deck, nothing too tall under
-                // it. The stairs hold the roof under it.
-                if (top.GetTerrain(map) != PZDefOf.PZ_OpenAir || map.terrainGrid.FoundationAt(top) != null || !SlabSupport.Gravship(below, map))
+                // there), so the exit only has to be where a deck may go: over the ship's column (a deck or substructure,
+                // or the opening of ship stairs below: ShipColumn), nothing too tall under it. The stairs hold the roof
+                // under it.
+                if (top.GetTerrain(map) != PZDefOf.PZ_OpenAir || map.terrainGrid.FoundationAt(top) != null || !ShipColumn.Cell(below, map))
                 {
                     return "PZ_ShipStairsOnDeck".Translate();
                 }
@@ -132,15 +133,60 @@ namespace ProjectZ
         // The stairwell of ship stairs on the floor above them: an upper-floor cell with no deck (open air) right over a
         // ship stairs ramp (built or a building site) on the gravship's deck. It is an opening in the ship's deck, so it
         // belongs to the ship as the deck round it does: a room's roof over it is the ship's roof (IsoRim draws it so,
-        // IFloorLayout.ShipCell), as a house roof spans a house's stairwell.
+        // IFloorLayout.ShipCell), as a house roof spans a house's stairwell. For anything above it, it is a ship column
+        // cell (ShipColumn): a deck may go over it. The stairs govern only this floor (their opening and their landing).
         public static bool Opening(IntVec3 c, Map map)
         {
-            if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || map.terrainGrid.FoundationAt(c) != null)
+            return OverRamp(c, map) && map.terrainGrid.FoundationAt(c) == null;
+        }
+
+        // An upper-floor cell right over a ship stairs ramp (built or a building site) on the gravship's deck: the
+        // opening, or a deck there that is to be taken up for it.
+        public static bool OverRamp(IntVec3 c, Map map)
+        {
+            if (!c.IsValid || !c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1)
             {
                 return false;
             }
             IntVec3 below = FloorRoof.Below(c, map);
             return SlabSupport.Gravship(below, map) && Stairwell.StairThingAt(below, map);
+        }
+
+        // Ship stairs (or their site) came or went: their opening came or went, so a deck over it joins or leaves the ship
+        // set (ShipSet: the game rebuilds it lazily after a substructure change).
+        public static void ColumnChanged(Thing t, Map map)
+        {
+            if (map != null && (Is(t.def) || Is(t.def.entityDefToBuild)) && ProjectZ.Annex(map) != null)
+            {
+                map.substructureGrid?.MarkDirty();
+            }
+        }
+
+        // Ship stairs (or their site) gone for good (deconstructed, cancelled, destroyed): their opening is no ship column
+        // cell any more, so a deck over it falls as over removed substructure (ShipDeck.SupportLost), like a roof losing its
+        // support (user decision 2026-10-17: the stairs may be taken down freely, nothing blocks it). Not at a take-off
+        // (vanilla despawns with WillReplace), nor when a site turns into a frame or the frame into the stairs (the old
+        // one goes with Vanish or FailConstruction before the next one spawns). A deck left over a lost opening by any
+        // other way falls at the next load (ShipDeck.CheckAll).
+        public static void Gone(Thing t, Map map, DestroyMode mode)
+        {
+            if (mode != DestroyMode.Deconstruct && mode != DestroyMode.Cancel && mode != DestroyMode.KillFinalize
+                && mode != DestroyMode.KillFinalizeLeavingsOnly && mode != DestroyMode.Refund)
+            {
+                return;
+            }
+            if (map == null || ProjectZ.Annex(map) == null || PZDefOf.PZ_ShipDeck == null || GravshipUtility.generatingGravship)
+            {
+                return;
+            }
+            foreach (IntVec3 c in t.OccupiedRect())
+            {
+                IntVec3 well = StairShape.Above(c, map);
+                if (well.IsValid && map.terrainGrid.FoundationAt(well) == null)
+                {
+                    ShipDeck.SupportLost(well, map);
+                }
+            }
         }
 
         private static readonly AccessTools.FieldRef<Gravship, Dictionary<IntVec3, RoofDef>> shipRoofs = AccessTools.FieldRefAccess<Gravship, Dictionary<IntVec3, RoofDef>>("roofs");
@@ -166,17 +212,21 @@ namespace ProjectZ
                 if (r != null)
                 {
                     roofs[ShipLocal.From(up, ship.originalPosition, map)] = r;
-                    map.roofGrid.SetRoof(up, null);
+                    // (as vanilla takes the ship cells' roofs: directly, so the floor-roof rule, which keeps the roof
+                    // under a deck over the opening, doesn't hold it back; that deck flies too)
+                    map.roofGrid.RemoveRoofUnsafe(map.cellIndices.CellToIndex(up));
+                    map.mapDrawer.MapMeshDirty(up, MapMeshFlagDefOf.Roofs);
+                    map.glowGrid.DirtyCell(up);
                     ProjectZ.DebugLog($"ship stairs opening {up}: its roof {r.defName} flies with the ship");
                 }
             }
         }
 
-        // A stairwell cell with a ship deck that can be taken up: nothing built or planned on it, no deck over it, not the
-        // exit of other stairs (ShipDeck.Blocker).
+        // A stairwell cell with a ship deck that can be taken up: nothing built or planned on it, not the exit of other
+        // stairs (ShipDeck.Blocker). A deck over it may stay: the opening holds its column (ShipColumn).
         public static bool CanClearDeck(IntVec3 up, Map map)
         {
-            if (!ShipDeck.At(up, map) || ShipDeck.Blocker(up, map) != null)
+            if (!ShipDeck.At(up, map) || ShipDeck.Blocker(up, map, forWell: true) != null)
             {
                 return false;
             }

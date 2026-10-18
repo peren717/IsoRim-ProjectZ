@@ -36,6 +36,7 @@ namespace ProjectZ.Dev
     //   them from up there, then ship stairs 2 on them up to floor 3 (their landing deck laid too); F5 a colonist walks up
     //   both; then T5's flight and landing, plus every deck cell landed; F6 colonists take ship stairs 2 down: their landing
     //   deck goes with them, stairs 1 keep theirs.
+    // With -projectzshipstack: ship stairs stacked over the opening of the ones below (TestShipStack.cs).
     public static partial class TestRunner
     {
         private static IntVec3 spO;
@@ -172,6 +173,11 @@ namespace ProjectZ.Dev
                     Finish();
                     return;
                 default:
+                    if (stage.StartsWith("sp_k_"))
+                    {
+                        StepShipStack(map);
+                        return;
+                    }
                     StepShipRoof(map);
                     return;
             }
@@ -281,7 +287,8 @@ namespace ProjectZ.Dev
             BuildShip(map, spO, 13, 11);
             Building_GravEngine e = GlEngine(map);
             e.nameHidden = false;
-            spFresh = GenCommandLine.CommandLineArgPassed("projectzshipfresh");
+            spStack = GenCommandLine.CommandLineArgPassed("projectzshipstack");
+            spFresh = GenCommandLine.CommandLineArgPassed("projectzshipfresh") || spStack;
             spDeckRec.Clear();
             if (GenCommandLine.CommandLineArgPassed("projectzshiproof"))
             {
@@ -629,7 +636,7 @@ namespace ProjectZ.Dev
             Building_GravEngine e = GlEngine(map);
             List<Pawn> cols = Colonists(map);
             // (fresh: no one on the single floor-3 landing cell, the walker's goal)
-            IntVec3[] aboard = spFresh ? new[] { SP(1, 9), SPF(2, 6, 1, map) } : new[] { SP(1, 9), SPF(9, 5, 1, map), SPF(5, 8, 2, map) };
+            IntVec3[] aboard = spStack ? new[] { SP(1, 9), SPF(5, 2, 1, map) } : spFresh ? new[] { SP(1, 9), SPF(2, 6, 1, map) } : new[] { SP(1, 9), SPF(9, 5, 1, map), SPF(5, 8, 2, map) };
             for (int i = 0; i < cols.Count; i++)
             {
                 Teleport(cols[i], i < aboard.Length ? aboard[i] : SP(-8 - i, 4));
@@ -637,7 +644,7 @@ namespace ProjectZ.Dev
             }
             spWalker = cols[0].ThingID;
             spDownOff = ShipLocal.From(SP(1, 9), e.Position, map);
-            spUpOff = ShipLocal.From(spFresh ? SPF(1, 8, 2, map) : SPF(4, 8, 2, map), e.Position, map);
+            spUpOff = ShipLocal.From(spStack ? SPF(1, 2, 2, map) : spFresh ? SPF(1, 8, 2, map) : SPF(4, 8, 2, map), e.Position, map);
             if (spFresh)
             {
                 spDeckRec.Clear();
@@ -716,6 +723,10 @@ namespace ProjectZ.Dev
                 Result("F5 every deck flew and landed with the ship (both stairs landings and the decks built from them)", decks == spDeckRec.Count && spDeckRec.Count > 0,
                     $"{decks} of {spDeckRec.Count} deck cells on the new map; set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
             }
+            if (spStack)
+            {
+                SkLandedChecks(map, e);
+            }
             spFoot1.Clear();
             spFoot2.Clear();
             if (st.Count == 2)
@@ -762,7 +773,7 @@ namespace ProjectZ.Dev
             IntVec3 eg = ProjectZ.GroundCellOf(e.Position, map);
             GlShot(0, eg, 12f, "sp_3_landed_ground");
             GlShot(1, eg, 12f, "sp_3_landed_f2");
-            glAfter = spFresh ? "sp_f_decon" : "sp_end";
+            glAfter = spStack ? "sp_k_rm" : spFresh ? "sp_f_decon" : "sp_end";
             Wait(2, "gl_shots");
         }
 
@@ -888,6 +899,11 @@ namespace ProjectZ.Dev
             tickWatch = null;
             Pawn w = SfPawn(spWalker);
             Result("F3 a colonist walks from outside up ship stairs 1 onto the landing deck on floor 2", w?.Position == spGoal && spSeen1 > 0, $"at {SpCell(w?.Position ?? IntVec3.Invalid, map)}, ticks on the ramp {spSeen1}, after {ticksTotal} ticks");
+            if (spStack)
+            {
+                SkPlan(map);
+                return;
+            }
             // decks on floor 2 from the landing out: a row north (ship stairs 2 go on it) and one beside it
             spF2Decks.Clear();
             for (int z = 5; z <= 8; z++)

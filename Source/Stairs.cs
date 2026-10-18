@@ -394,6 +394,7 @@ namespace ProjectZ
                 {
                     StairwellFloor.Mark(__instance);
                 }
+                ShipStairs.ColumnChanged(__instance, __instance.Map);
             }
         }
     }
@@ -406,12 +407,18 @@ namespace ProjectZ
             __state = Stairwell.IsStairThing(__instance) ? __instance.Map : null;
         }
 
-        public static void Postfix(Thing __instance, Map __state)
+        public static void Postfix(Thing __instance, Map __state, DestroyMode mode)
         {
             if (__state != null)
             {
                 Stairwell.Refresh(__state, __instance.OccupiedRect());
                 StairwellFloor.Unmark(__state, __instance.OccupiedRect());
+                if (ShipStairs.Is(__instance.def) || ShipStairs.Is(__instance.def.entityDefToBuild))
+                {
+                    // (their opening is no ship column cell now: a deck over it falls)
+                    ShipStairs.Gone(__instance, __state, mode);
+                }
+                ShipStairs.ColumnChanged(__instance, __state);
             }
         }
     }

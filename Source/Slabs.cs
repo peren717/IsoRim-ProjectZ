@@ -211,14 +211,15 @@ namespace ProjectZ
         //    only ask the landing cell's own roof (Column.OpenAbove, DropRules), never the column under it, so they
         //    already use any floor. No natural rock floors exist yet: today both rules give what ColumnBlocked gave.
         //
-        // Thick roof or gravship under a cell: the reason no floor or stairs may be built over it, or null.
+        // Thick roof or gravship under a cell: the reason no floor or stairs may be built over it, or null. The ship is its
+        // column (ShipColumn: a ship stairs opening too; over it only ship decks and ship stairs go).
         public static string BuildBlocked(IntVec3 c, Map map)
         {
             if (ThickRoof(c, map))
             {
                 return "PZ_ThickRoof";
             }
-            return Gravship(c, map) ? "PZ_OverGravship" : null;
+            return ShipColumn.Cell(c, map) ? "PZ_OverGravship" : null;
         }
 
         // The same for a slab (or a stairs landing): over a gravship it points to the ship upper deck (Odyssey).
