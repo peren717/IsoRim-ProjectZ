@@ -116,7 +116,11 @@ namespace ProjectZ.Patches
             {
                 return null;
             }
+            // (reachability's own search is running: no CanReach from inside it)
+            bool reachWorking = ReachWorkingRef(map.reachability);
             busy = true;
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            ctx.Reset(tp);
             List<PawnPath> legs = new List<PawnPath>();
             try
             {
@@ -129,12 +133,40 @@ namespace ProjectZ.Patches
                         return rim;
                     }
                 }
+                // Nothing to search for where reachability (the same links: StairRegions.Links) says no.
+                if (!reachWorking && !Dev.TestRunner.OldRoute && !map.reachability.CanReach(start, dest, peMode, tp))
+                {
+                    Dev.PZStats.routeUnreachable++;
+                    return null;
+                }
                 int cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: false, depth: 0);
                 if (cost < 0 && ProjectZ.FloorOf(start, map) >= ProjectZ.FloorOf(dest.Cell, map))
                 {
                     // Pass 2 (J4): no stair route; going down, jumps are allowed.
                     DisposeAll(legs);
+                    ctx.NextPass();
                     cost = Route(map, start, dest, peMode, tp, tuning, legs, jumps: true, depth: 0);
+                }
+                if (cost < 0 && !Dev.TestRunner.OldRoute && !Dev.TestRunner.GreedyRoute)
+                {
+                    // Reachability found a way the search above cut off (its few best candidates per step, its depth or
+                    // budget): the way reachability found, over the same region graph.
+                    if (ctx.outOfBudget)
+                    {
+                        Dev.PZStats.routeBudgetOuts++;
+                    }
+                    DisposeAll(legs);
+                    ctx.Fallback();
+                    cost = RegionRoute(map, start, dest, peMode, tp, tuning, legs, withJumps: false);
+                    if (cost < 0)
+                    {
+                        DisposeAll(legs);
+                        cost = RegionRoute(map, start, dest, peMode, tp, tuning, legs, withJumps: true);
+                    }
+                    if (cost >= 0)
+                    {
+                        Dev.PZStats.regionRoutes++;
+                    }
                 }
                 return cost < 0 ? null : Join(legs, cost);
             }
@@ -146,9 +178,76 @@ namespace ProjectZ.Patches
             finally
             {
                 DisposeAll(legs);
+                ctx.Clear();
                 busy = false;
+                double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                Dev.PZStats.finds++;
+                Dev.PZStats.findLegs += ctx.legsRun;
+                if (ms > Dev.PZStats.findMsMax)
+                {
+                    Dev.PZStats.findMsMax = ms;
+                }
             }
         }
+
+        private static readonly AccessTools.FieldRef<Reachability, bool> ReachWorkingRef = AccessTools.FieldRefAccess<Reachability, bool>("working");
+
+        // Per Find call (Find never re-enters: busy): leg results, the regions the search is in or has given up on, and
+        // the leg budget.
+        public const int LegBudget = 64;          // real path finder legs per Find, both stair passes
+        public const int FallbackLegBudget = 32;  // the region route's own (its legs are known to join)
+        private const int FallbackRegions = 6000;
+
+        private sealed class LegResult
+        {
+            public List<IntVec3> nodes;   // reversed, as PawnPath.NodesReversed; null = no path
+            public float cost;
+        }
+
+        private sealed class RouteCtx
+        {
+            public readonly Dictionary<(IntVec3, IntVec3, int, PathEndMode), LegResult> legs = new Dictionary<(IntVec3, IntVec3, int, PathEndMode), LegResult>();
+            public readonly Dictionary<Region, HashSet<Region>> onFloor = new Dictionary<Region, HashSet<Region>>();
+            public readonly HashSet<Region> failed = new HashSet<Region>();
+            public readonly HashSet<Region> onStack = new HashSet<Region>();
+            public int legsLeft;
+            public int legsRun;
+            public bool outOfBudget;
+            public TraverseParms tp;
+
+            public void Reset(TraverseParms tp)
+            {
+                Clear();
+                legsLeft = LegBudget;
+                legsRun = 0;
+                outOfBudget = false;
+                this.tp = tp;
+            }
+
+            // Pass 2 may take jumps: what failed without them may work now.
+            public void NextPass()
+            {
+                failed.Clear();
+                onStack.Clear();
+            }
+
+            public void Fallback()
+            {
+                NextPass();
+                legsLeft = FallbackLegBudget;
+                outOfBudget = false;
+            }
+
+            public void Clear()
+            {
+                legs.Clear();
+                onFloor.Clear();
+                failed.Clear();
+                onStack.Clear();
+            }
+        }
+
+        private static readonly RouteCtx ctx = new RouteCtx();
 
         private static void DisposeAll(List<PawnPath> legs)
         {
@@ -165,7 +264,41 @@ namespace ProjectZ.Patches
         // stairs whose exit leads nowhere (a one-cell landing, a closed-off room) must not end the search while other
         // stairs lead there: a route that gave up after the first stairs it could get onto left the work givers handing
         // out the same job again and again with no path (pawns standing with the materials in hand).
+        // Each region is searched from once per pass: not again while the route is in it (no loops back over the same
+        // stairs) and not again after it led nowhere. The candidates and their order are unchanged, so the route found is
+        // the one the search always found; only branches that fail anyway, or loop, are cut. Without this a failing
+        // search was exponential (3 stairs or jumps per step, to the depth of the map's levels).
         private static int Route(Map map, IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool jumps, int depth)
+        {
+            if (ctx.outOfBudget)
+            {
+                return -1;
+            }
+            Region key = from.InBounds(map) ? map.regionGrid.GetValidRegionAt_NoRebuild(from) : null;
+            if (key != null && !Dev.TestRunner.OldRoute && (ctx.failed.Contains(key) || !ctx.onStack.Add(key)))
+            {
+                return -1;
+            }
+            int cost;
+            try
+            {
+                cost = RouteFrom(map, from, dest, peMode, tp, tuning, legs, jumps, depth);
+            }
+            finally
+            {
+                if (key != null)
+                {
+                    ctx.onStack.Remove(key);
+                }
+            }
+            if (cost < 0 && key != null && !ctx.outOfBudget)
+            {
+                ctx.failed.Add(key);
+            }
+            return cost;
+        }
+
+        private static int RouteFrom(Map map, IntVec3 from, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool jumps, int depth)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int fd = ProjectZ.FloorOf(dest.Cell, map);
@@ -236,6 +369,170 @@ namespace ProjectZ.Patches
             return -1;
         }
 
+        // The fallback when the search above found nothing but reachability says yes: the cheapest way over the region
+        // graph reachability itself searches (region links on a floor, StairRegions.Links between floors: stairs, and
+        // jumps when withJumps), walked as legs between the floor changes found. Region costs are straight lines
+        // between region centres (8-way), a stair step StepCost, a jump JumpCost. The total cost, or -1.
+        private static int RegionRoute(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, List<PawnPath> legs, bool withJumps)
+        {
+            RegionGrid rg = map.regionGrid;
+            Region from = start.InBounds(map) ? rg.GetValidRegionAt_NoRebuild(start) : null;
+            StairGrid g = StairGrid.For(map);
+            if (from == null || g == null)
+            {
+                return -1;
+            }
+            // the destination's regions, as Reachability.CanReach takes them
+            HashSet<Region> goals = new HashSet<Region>();
+            if (peMode == PathEndMode.Touch)
+            {
+                List<Region> touch = new List<Region>();
+                TouchPathEndModeUtility.AddAllowedAdjacentRegions(dest, tp, map, touch);
+                goals.UnionWith(touch);
+            }
+            CellRect rect = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+            if (peMode != PathEndMode.OnCell && peMode != PathEndMode.Touch)
+            {
+                rect = rect.ExpandedBy(1);
+            }
+            foreach (IntVec3 c in rect)
+            {
+                Region r = c.InBounds(map) ? rg.GetValidRegionAt_NoRebuild(c) : null;
+                if (r != null && r.type.Passable())
+                {
+                    goals.Add(r);
+                }
+            }
+            if (goals.Count == 0)
+            {
+                return -1;
+            }
+            // Dijkstra over regions; parent and the floor link taken into each region (stair -1 and jump -1: on foot)
+            Dictionary<Region, int> dist = new Dictionary<Region, int> { [from] = 0 };
+            Dictionary<Region, (Region parent, StairRegions.FloorLink link)> came = new Dictionary<Region, (Region, StairRegions.FloorLink)>();
+            HashSet<Region> closed = new HashSet<Region>();
+            PriorityQueue<Region, int> open = new PriorityQueue<Region, int>();
+            List<StairRegions.FloorLink> links = new List<StairRegions.FloorLink>();
+            open.Enqueue(from, 0);
+            Region hit = null;
+            while (open.Count > 0 && closed.Count < FallbackRegions)
+            {
+                Region r = open.Dequeue();
+                if (!closed.Add(r))
+                {
+                    continue;
+                }
+                if (goals.Contains(r))
+                {
+                    hit = r;
+                    break;
+                }
+                int d = dist[r];
+                IntVec3 rc = r.extentsClose.CenterCell;
+                for (int i = 0; i < r.links.Count; i++)
+                {
+                    RegionLink link = r.links[i];
+                    for (int j = 0; j < 2; j++)
+                    {
+                        Region o = link.regions[j];
+                        if (o != null && o != r)
+                        {
+                            Relax(r, o, d + Octile(rc, o.extentsClose.CenterCell), new StairRegions.FloorLink { to = o, stair = -1, jump = -1 });
+                        }
+                    }
+                }
+                links.Clear();
+                StairRegions.Links(r, map, withJumps, StairRegions.FogBlocks(tp), links);
+                for (int i = 0; i < links.Count; i++)
+                {
+                    StairRegions.FloorLink fl = links[i];
+                    if (fl.stair >= 0 && !g.Passable(g.links[fl.stair], tp))
+                    {
+                        continue;
+                    }
+                    Relax(r, fl.to, d + (fl.stair >= 0 ? StepCost : JumpCost), fl);
+                }
+            }
+            if (hit == null)
+            {
+                return -1;
+            }
+            List<(Region parent, StairRegions.FloorLink link)> hops = new List<(Region, StairRegions.FloorLink)>();
+            for (Region r = hit; r != from; r = came[r].parent)
+            {
+                if (came[r].link.stair >= 0 || came[r].link.jump >= 0)
+                {
+                    hops.Add(came[r]);
+                }
+            }
+            hops.Reverse();
+            // walk it: a leg to each floor change, the change, and the last leg
+            IntVec3 at = start;
+            int cost = 0;
+            JumpGrid jg = JumpGrid.For(map);
+            for (int i = 0; i < hops.Count; i++)
+            {
+                (Region parent, StairRegions.FloorLink fl) = hops[i];
+                if (fl.stair >= 0)
+                {
+                    StairLink l = g.links[fl.stair];
+                    int dir = rg.GetValidRegionAt_NoRebuild(l.bottom) == parent ? 1 : -1;
+                    int step = StairStep(map, l, at, dir, dest, tp, tuning, legs, out IntVec3 next);
+                    if (step < 0)
+                    {
+                        return -1;
+                    }
+                    cost += step;
+                    at = next;
+                    continue;
+                }
+                // a jump into that region: of the parent's jumps there, the nearest take-off
+                List<Jump> down = jg?.Down(parent);
+                if (down == null)
+                {
+                    return -1;
+                }
+                Jump best = down[fl.jump];
+                for (int k = 0; k < down.Count; k++)
+                {
+                    if (down[k].to == fl.to && Octile(at, down[k].from) < Octile(at, best.from))
+                    {
+                        best = down[k];
+                    }
+                }
+                PawnPath leg = Leg(map, at, best.from, PathEndMode.OnCell, tp, tuning);
+                if (leg == null)
+                {
+                    return -1;
+                }
+                legs.Add(leg);
+                cost += (int)leg.TotalCost + JumpCost;
+                at = best.land;
+                Dev.PZStats.jumpRoutes++;
+            }
+            PawnPath last = Leg(map, at, dest, peMode, tp, tuning);
+            if (last == null)
+            {
+                return -1;
+            }
+            legs.Add(last);
+            return cost + (int)last.TotalCost;
+
+            void Relax(Region r, Region o, int nd, StairRegions.FloorLink via)
+            {
+                if (closed.Contains(o) || !o.type.Passable() || !o.Allows(tp, isDestination: false) && !goals.Contains(o))
+                {
+                    return;
+                }
+                if (!dist.TryGetValue(o, out int old) || nd < old)
+                {
+                    dist[o] = nd;
+                    came[o] = (r, via);
+                    open.Enqueue(o, nd);
+                }
+            }
+        }
+
         private static void DisposeFrom(List<PawnPath> legs, int mark)
         {
             for (int i = legs.Count - 1; i >= mark; i--)
@@ -256,10 +553,11 @@ namespace ProjectZ.Patches
                 return cands;
             }
             int f = ProjectZ.FloorOf(from, map);
+            bool fog = StairRegions.FogBlocks(tp);   // (the shared rule: StairRegions.Links)
             for (int i = 0; i < g.links.Count; i++)
             {
                 StairLink l = g.links[i];
-                if ((dir > 0 ? l.floor == f : l.floor == f - 1) && (Dev.TestRunner.NoExitFix ? g.Usable(l) : g.Passable(l, tp)))
+                if ((dir > 0 ? l.floor == f : l.floor == f - 1) && (Dev.TestRunner.NoExitFix ? g.Usable(l) : g.Passable(l, tp)) && !(fog && StairRegions.IntoFog(l, dir > 0, map)))
                 {
                     cands.Add(l);
                 }
@@ -356,6 +654,7 @@ namespace ProjectZ.Patches
                 return result;
             }
             List<Jump> cands = new List<Jump>();
+            bool fog = StairRegions.FogBlocks(tp);   // (the shared rule: StairRegions.Links)
             StairRegions.suppress++;
             try
             {
@@ -375,7 +674,7 @@ namespace ProjectZ.Patches
             for (int i = 0; i < cands.Count && result.Count < CandidatesPerStep; i++)
             {
                 Jump j = cands[i];
-                if (!j.land.ContainsStaticFire(map) && map.reachability.CanReach(j.land, dest, peMode, tp))
+                if (!j.land.ContainsStaticFire(map) && !(fog && StairRegions.IntoFog(j, map)) && map.reachability.CanReach(j.land, dest, peMode, tp))
                 {
                     result.Add(j);
                 }
@@ -419,13 +718,106 @@ namespace ProjectZ.Patches
                 CostRef(one) = 0f;
                 return one;
             }
+            // The same leg again in this Find (the search meets the same stairs from several sides): the same answer.
+            var key = (from, to.Cell, to.HasThing ? to.Thing.thingIDNumber : -1, peMode);
+            if (ctx.legs.TryGetValue(key, out LegResult known))
+            {
+                return known.nodes == null ? null : FromNodes(known);
+            }
+            // Not joined on this floor at all: no path finder search (a failing one floods the whole floor).
+            if (!JoinedOnFloor(map, from, to, peMode))
+            {
+                ctx.legs[key] = new LegResult();
+                return null;
+            }
+            if (ctx.legsLeft <= 0)
+            {
+                ctx.outOfBudget = true;
+                return null;
+            }
+            ctx.legsLeft--;
+            ctx.legsRun++;
             PawnPath p = map.pathFinder.FindPathNow(from, to, tp, tuning, peMode);
             if (p == null || !p.Found || p.NodesReversed.Count == 0)
             {
                 p?.Dispose();
+                ctx.legs[key] = new LegResult();
                 return null;
             }
+            ctx.legs[key] = new LegResult { nodes = new List<IntVec3>(p.NodesReversed), cost = p.TotalCost };
             return p;
+        }
+
+        private static PawnPath FromNodes(LegResult r)
+        {
+            PawnPath p = new PawnPath();
+            for (int i = 0; i < r.nodes.Count; i++)
+            {
+                p.AddNode(r.nodes[i]);
+            }
+            IndexRef(p) = p.NodesReversed.Count - 1;
+            CostRef(p) = r.cost;
+            return p;
+        }
+
+        // Can a leg from 'from' to 'to' exist on one floor: is a region at the target (or, not on the cell, next to it)
+        // joined to from's region by the floor's own region links? A superset of what the path finder can walk (any
+        // passable region is entered), so it only saves searches that must fail. Unknown cases (no region, other end
+        // modes, traversal modes that dig through walls) say yes.
+        private static bool JoinedOnFloor(Map map, IntVec3 from, LocalTargetInfo to, PathEndMode peMode)
+        {
+            TraverseMode m = ctx.tp.mode;
+            if (m == TraverseMode.PassAllDestroyableThings || m == TraverseMode.PassAllDestroyablePlayerOwnedThings || m == TraverseMode.PassAllDestroyableThingsNotWater)
+            {
+                return true;
+            }
+            if (peMode != PathEndMode.OnCell && peMode != PathEndMode.Touch && peMode != PathEndMode.ClosestTouch)
+            {
+                return true;
+            }
+            RegionGrid rg = map.regionGrid;
+            Region start = from.InBounds(map) ? rg.GetValidRegionAt_NoRebuild(from) : null;
+            if (start == null || !to.Cell.InBounds(map))
+            {
+                return true;
+            }
+            if (!ctx.onFloor.TryGetValue(start, out HashSet<Region> joined))
+            {
+                joined = new HashSet<Region>();
+                StairRegions.suppress++;
+                try
+                {
+                    RegionTraverser.BreadthFirstTraverse(start, (Region _, Region r) => r.type.Passable(), delegate(Region r)
+                    {
+                        joined.Add(r);
+                        return false;
+                    }, 100000);
+                }
+                finally
+                {
+                    StairRegions.suppress--;
+                }
+                ctx.onFloor[start] = joined;
+            }
+            CellRect rect = to.HasThing ? to.Thing.OccupiedRect() : CellRect.SingleCell(to.Cell);
+            if (peMode != PathEndMode.OnCell)
+            {
+                rect = rect.ExpandedBy(1);
+            }
+            bool anyRegion = false;
+            foreach (IntVec3 c in rect)
+            {
+                Region r = c.InBounds(map) ? rg.GetValidRegionAt_NoRebuild(c) : null;
+                if (r != null)
+                {
+                    anyRegion = true;
+                    if (joined.Contains(r))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return !anyRegion;
         }
 
         // Legs in walking order -> one path: nodes are stored last first, so the last leg's nodes come first.

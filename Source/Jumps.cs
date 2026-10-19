@@ -63,7 +63,42 @@ namespace ProjectZ
             {
                 listening = true;
                 map.events.RegionsRoomsChanged += Dirty;
+                map.events.CellFogChanged += FogChanged;
+                map.events.MapFogged += MapFogged;
             }
+        }
+
+        // The player's pawns take no stairs or jump into fog (StairRegions.FogBlocks): when fog comes or goes where a
+        // jump can land (a column open above) or at a stairs end, reachability answers change. (The game's own cache
+        // never minds fog: on the ground it never changes what can be reached.)
+        private void FogChanged(IntVec3 c, bool fogged)
+        {
+            if (c.InBounds(map) && (Column.OpenAbove(c, map) || StairEnd(c)))
+            {
+                map.reachability?.ClearCache();
+            }
+        }
+
+        private void MapFogged()
+        {
+            map.reachability?.ClearCache();
+        }
+
+        private bool StairEnd(IntVec3 c)
+        {
+            StairGrid g = StairGrid.For(map);
+            if (g == null)
+            {
+                return false;
+            }
+            for (int i = 0; i < g.links.Count; i++)
+            {
+                if (g.links[i].top == c || g.links[i].bottom == c)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public override void FinalizeInit()

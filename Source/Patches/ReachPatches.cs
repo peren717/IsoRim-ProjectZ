@@ -20,9 +20,60 @@ namespace ProjectZ.Patches
         internal static int suppress;
 
         // The regions one step away from 'region' over stairs (either way) and jumps (down only); null for most regions.
-        internal static List<Region> Partners(Region region, Map map)
+        // fogBlocked: no link into a fogged cell (FogBlocks).
+        internal static List<Region> Partners(Region region, Map map, bool fogBlocked)
         {
+            List<FloorLink> found = scratch ??= new List<FloorLink>();
+            found.Clear();
+            Links(region, map, withJumps: true, fogBlocked, found);
             List<Region> into = null;
+            for (int i = 0; i < found.Count; i++)
+            {
+                Region to = found[i].to;
+                if (found[i].stair >= 0 || into == null || !into.Contains(to))
+                {
+                    (into ??= new List<Region>()).Add(to);
+                }
+            }
+            found.Clear();
+            return into;
+        }
+
+        [ThreadStatic]
+        private static List<FloorLink> scratch;
+
+        // One link out of a region to another floor: a stairs link (index into StairGrid.links; jump -1) or a jump
+        // (index into JumpGrid.Down(from region); stair -1).
+        internal struct FloorLink
+        {
+            public Region to;
+            public int stair;
+            public int jump;
+        }
+
+        // Fog: the player's pawns never go into fog over a floor link (vanilla never lets them be sent into fog: work
+        // givers skip fogged things, orders can't target fog, and on the ground fog sits behind rock; a stairs exit or a
+        // jump landing would be a way in). Others (raiders, animals, visitors) go as in vanilla, where fog is no
+        // obstacle. A search with a pawn: that pawn's faction (fixed per pawn, so the reachability cache, keyed by pawn,
+        // stays right whether it is drafted or not); without a pawn: the query's own fog flag (TraverseParms.avoidFog,
+        // vanilla's fogBlocked); a region search whose traveller is unknown (the BFS hook): blocked.
+        internal static bool FogBlocks(TraverseParms tp)
+        {
+            return tp.pawn != null ? tp.pawn.Faction != null && tp.pawn.Faction.IsPlayer : tp.avoidFog;
+        }
+
+        // The stairs link, taken up (onto its exit) or down (onto its high end), enters fog.
+        internal static bool IntoFog(StairLink l, bool up, Map map) => (up ? l.top : l.bottom).Fogged(map);
+
+        internal static bool IntoFog(Jump j, Map map) => j.land.Fogged(map);
+
+        // THE rule for which links join floors, shared by reachability (Partners: stairs and jumps) and the path router
+        // (StairRouter: its candidates and RegionRoute, stairs only in the first pass): each usable stairs link touching
+        // 'region' (either way), then, withJumps, each jump down out of it; with fogBlocked none that enters fog. The
+        // traveller's own test (Region.Allows: doors, fences, danger) is the caller's entry test, as in the game's
+        // region searches.
+        internal static void Links(Region region, Map map, bool withJumps, bool fogBlocked, List<FloorLink> into)
+        {
             StairGrid g = StairGrid.For(map);
             if (g != null)
             {
@@ -41,30 +92,28 @@ namespace ProjectZ.Patches
                     {
                         continue;
                     }
-                    if (b == region)
+                    if (b == region && !(fogBlocked && IntoFog(l, true, map)))
                     {
-                        (into ??= new List<Region>()).Add(t);
+                        into.Add(new FloorLink { to = t, stair = i, jump = -1 });
                     }
-                    else if (t == region)
+                    else if (t == region && !(fogBlocked && IntoFog(l, false, map)))
                     {
-                        (into ??= new List<Region>()).Add(b);
+                        into.Add(new FloorLink { to = b, stair = i, jump = -1 });
                     }
                 }
             }
-            JumpGrid jg = JumpGrid.For(map);
+            JumpGrid jg = withJumps ? JumpGrid.For(map) : null;
             if (jg != null)
             {
                 List<Jump> jumps = jg.Down(region);
                 for (int i = 0; i < jumps.Count; i++)
                 {
-                    Region to = jumps[i].to;
-                    if (to.valid && (into == null || !into.Contains(to)))
+                    if (jumps[i].to.valid && !(fogBlocked && IntoFog(jumps[i], map)))
                     {
-                        (into ??= new List<Region>()).Add(to);
+                        into.Add(new FloorLink { to = jumps[i].to, stair = -1, jump = i });
                     }
                 }
             }
-            return into;
         }
     }
 
@@ -158,7 +207,7 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            List<Region> partners = StairRegions.Partners(region, map);
+            List<Region> partners = StairRegions.Partners(region, map, fogBlocked: true);
             if (partners == null)
             {
                 return;
@@ -325,7 +374,7 @@ namespace ProjectZ.Patches
                         }
                     }
                 }
-                List<Region> partners = StairRegions.Partners(region, map);
+                List<Region> partners = StairRegions.Partners(region, map, StairRegions.FogBlocks(traverseParams));
                 for (int i = 0; partners != null && i < partners.Count; i++)
                 {
                     if (Visit(partners[i], traverseParams, open, starts, dests, reached, cache))

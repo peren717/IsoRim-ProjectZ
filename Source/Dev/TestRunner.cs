@@ -134,6 +134,9 @@ namespace ProjectZ.Dev
         public static int FloorsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
+        // -projectzoldroute: the stair router as before branch stairroute (no reachability check first, no memory of
+        // regions searched, no region-graph fallback), to show what the fixtures catch.
+        public static bool OldRoute;
         // Test only (-projectzmintbreak=<member>): that Dubs Mint Minimap member counts as missing (Compat/MintMinimap).
         public static string MintBreak;
 
@@ -185,6 +188,7 @@ namespace ProjectZ.Dev
             NoExitFix = GenCommandLine.CommandLineArgPassed("projectznoexitfix");
             TerrainShadowMask_OpenAir_Patch.Disabled = GenCommandLine.CommandLineArgPassed("projectznoshadowfix");
             GreedyRoute = GenCommandLine.CommandLineArgPassed("projectzgreedyroute");
+            OldRoute = GenCommandLine.CommandLineArgPassed("projectzoldroute");
             DropRules.ShuttleFixOff = GenCommandLine.CommandLineArgPassed("projectznoshuttlefix");
             Combat.Explosions3D.Off = GenCommandLine.CommandLineArgPassed("projectznoexplfix");
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
