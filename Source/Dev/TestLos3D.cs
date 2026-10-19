@@ -588,6 +588,11 @@ namespace ProjectZ.Dev
         {
             lChecks.Clear();
             void Add(string n, Action<Map> a) => lChecks.Add(new LCheck { name = n, run = a });
+            if (Mountains.On(lMap))
+            {
+                BuildMtnChecks(Add);
+                return;
+            }
             Add("walk", LWalk);
             Add("parity", LParity);
             Add("sealed", LSealed);
@@ -647,6 +652,99 @@ namespace ProjectZ.Dev
             Add("perf_calls", LPerfCalls);
             Add("perf_fight", m => LPerfFight(m, true));
             Add("perf_fight_ground", m => LPerfFight(m, false));
+        }
+
+        // ---- tall mountains (a tall-mountain world, -projectztallmountains: these checks run instead of the others).
+        // Natural rock put in the wiped field as the fill makes it (Mountains.Generate): a column of height h has the rock
+        // (with its thick roof) on levels 0..h-1 and the rock's natural floor on levels 1..h; its top is level h. Los3D
+        // reads it through the column queries: the natural floors and the thick roofs are planes, the rock on every level
+        // a block.
+        // the first natural rock of the map's tile (as the fill uses the ground's rock); read when the checks run (defs loaded)
+        private static ThingDef lRockDef => Find.World.NaturalRockTypesIn(lMap.Tile).FirstOrDefault(d => d.building != null && d.building.isNaturalRock && !d.building.isResourceRock && d.building.naturalTerrain != null) ?? ThingDef.Named("Granite");
+
+        private static void LMountain(int x0, int z0, int x1, int z1, int h)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int z = z0; z <= z1; z++)
+                {
+                    for (int L = 0; L <= h; L++)
+                    {
+                        IntVec3 c = L == 0 ? LG(x, z) : LU(x, z, L);
+                        // (the floor first, as the fill: rock upstairs stands on its natural floor)
+                        if (L >= 1)
+                        {
+                            lMap.terrainGrid.SetTerrain(c, lRockDef.building.naturalTerrain);
+                        }
+                        if (L < h)
+                        {
+                            lMap.roofGrid.SetRoof(c, RoofDefOf.RoofRockThick);
+                            GenSpawn.Spawn(ThingMaker.MakeThing(lRockDef), c, lMap, WipeMode.Vanish);
+                        }
+                    }
+                }
+            }
+        }
+
+        // A tunnel dug into the ground level of a mountain: the rock gone, its thick roof and the floor above kept.
+        private static void LTunnel(int x0, int z0, int x1, int z1)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int z = z0; z <= z1; z++)
+                {
+                    LG(x, z).GetEdifice(lMap)?.Destroy(DestroyMode.Vanish);
+                }
+            }
+        }
+
+        // The mountain shot cases' plateau: a level-1 top over ground x 14..26, z 20..30; its south row z = 20 is the edge.
+        private static void LPlateau() => LMountain(14, 20, 26, 30, 1);
+
+        private static void LMtnShot(Map map, string name, IntVec3 shooterAt, IntVec3 targetAt, bool expect)
+        {
+            int rock = 0, floors = 0, thick = 0;
+            foreach (IntVec3 g in lField)
+            {
+                for (int L = 0; L <= Levels.Max(map); L++)
+                {
+                    IntVec3 c = Levels.Cell(g, L, map);
+                    rock += c.GetEdifice(map)?.def == lRockDef ? 1 : 0;
+                    floors += L >= 1 && Floors.KindAt(c, map) == FloorKind.NaturalRock ? 1 : 0;
+                    thick += map.roofGrid.RoofAt(c) == RoofDefOf.RoofRockThick ? 1 : 0;
+                }
+            }
+            Info($"{name}: fixture rock {rock}, natural rock floors {floors}, thick roofs {thick}; shooter on {Floors.KindAt(shooterAt, map)}, target on {Floors.KindAt(targetAt, map)}");
+            LShotStart(map, new LShot
+            {
+                name = name,
+                shooter = LPut(LGun(mA), shooterAt),
+                target = LeanRaider(map, targetAt, null),
+                expect = expect
+            });
+        }
+
+        private static void BuildMtnChecks(Action<string, Action<Map>> add)
+        {
+            // down: a shooter on the top 1 to 3 rows in, a raider on the ground 2 and 10 cells out (the 4th row is past
+            // the edge's reach for 2 out, as on a slab)
+            foreach (int row in new[] { 1, 2, 3 })
+            {
+                int z = 20 + row - 1;
+                add($"mtn_top_row{row}_2out", m => { LPlateau(); LMtnShot(m, $"mtn_top_row{row}_2out", LU(20, z), LG(20, 18), true); });
+                add($"mtn_top_row{row}_10out", m => { LPlateau(); LMtnShot(m, $"mtn_top_row{row}_10out", LU(20, z), LG(17, 10), true); });
+            }
+            add("mtn_top_row4_2out", m => { LPlateau(); LMtnShot(m, "mtn_top_row4_2out", LU(20, 23), LG(20, 18), false); });
+            // up: a ground shooter 6 cells out vs a raider in the top's 2nd row; one at the cliff's foot vs the 3rd row
+            add("mtn_up_row2_from6out", m => { LPlateau(); LMtnShot(m, "mtn_up_row2_from6out", LG(20, 14), LU(20, 21), true); });
+            add("mtn_up_row3_atfoot", m => { LPlateau(); LMtnShot(m, "mtn_up_row3_atfoot", LG(20, 19), LU(20, 22), false); });
+            // rock between: a 2-storey ridge (rock on the ground and on level 1) between the top's edge and a raider 12
+            // out blocks; over a 1-storey ridge the same line is clear
+            add("mtn_ridge2_blocks", m => { LPlateau(); LMountain(12, 13, 28, 15, 2); LMtnShot(m, "mtn_ridge2_blocks", LU(20, 20), LG(20, 8), false); });
+            add("mtn_ridge1_over", m => { LPlateau(); LMountain(12, 13, 28, 15, 1); LMtnShot(m, "mtn_ridge1_over", LU(20, 20), LG(20, 8), true); });
+            // a tunnel dug into the plateau (x 20, z 20..27): its thick roof and the top's floor block a shooter on the
+            // top from a raider inside
+            add("mtn_tunnel_roof_blocks", m => { LPlateau(); LTunnel(20, 20, 20, 27); LMtnShot(m, "mtn_tunnel_roof_blocks", LU(20, 28), LG(20, 22), false); });
         }
 
         // The standard shot fixture: the slab (built once per check), the shooter (colonist A, assault rifle), a raider
@@ -1533,7 +1631,8 @@ namespace ProjectZ.Dev
             int aimedClear = lImps.Count(i => i.cross && i.aimed && i.clear);
             int clearSlab = lImps.Count(i => i.cross && i.aimed && i.clear && i.slab);
             int slab = lImps.Count(i => i.cross && i.slab);
-            Result("flights: no aimed shot along a clear line stopped on a slab or roof over the whole run", clearSlab == 0 && aimedClear >= 40,
+            // (the tall-mountain run has fewer shot checks)
+            Result("flights: no aimed shot along a clear line stopped on a slab or roof over the whole run", clearSlab == 0 && aimedClear >= (Mountains.On(map) ? 15 : 40),
                 $"cross-floor impacts {lImps.Count(i => i.cross)}, aimed {aimed}, aimed along a clear line {aimedClear}, of those slab stops {clearSlab}; all slab stops {slab}");
             Info($"combat stats: cross-floor shots {PZCombatStats.crossFloorShots}, intercepts {PZCombatStats.intercepts}, passed over {PZCombatStats.passedOver}, slab stops {PZCombatStats.slabStops}; Los3D calls {Los3D.Calls}");
             WatchCheck(map, "los3d end");

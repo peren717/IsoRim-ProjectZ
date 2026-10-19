@@ -654,37 +654,44 @@ namespace ProjectZ.Dev
                     continue;
                 }
                 lines++;
-                // the straight line from eye to middle: inside a rock column (below its top's floor) somewhere in the
-                // middle part?
-                float hs = L1 * Heights.Storey + Heights.Eye, ht = L2 * Heights.Storey + Heights.Middle;
+                // Los3D's lines (eye to each aim height, in cells): every one of them inside a rock block (a natural rock
+                // edifice on some level, a wall high over its floor) somewhere in the middle part?
+                float storey = IsoRimBridge.StoreyHeight, wall = IsoRimBridge.WallHeight;
+                float hs = L1 * storey + Los3D.Eye;
                 float len = (g2 - g1).LengthHorizontal;
-                bool inRock = false;
+                bool inRock = true;
                 string where = null;
-                // the game's own cell line (Heights.Line), the line's height over each middle cell
-                List<IntVec3> cells = Heights.Line(g1, g2).ToList();
-                for (int k = 1; k < cells.Count - 1 && !inRock; k++)
+                // the game's own walk (Los3D.Walk = GenSight.LineOfSight's cells), the line's height over each middle cell
+                List<IntVec3> cells = new List<IntVec3>();
+                Los3D.Walk(g1, g2, 0, 0, cells);
+                foreach (float aim in new[] { Los3D.AimHead, Los3D.AimChest, Los3D.AimWaist })
                 {
-                    IntVec3 gc = cells[k];
-                    float t = (gc - g1).LengthHorizontal / len;
-                    if (t < 1.5f / len || t > 1f - 1.5f / len)
+                    float ht = L2 * storey + aim;
+                    bool inside = false;
+                    for (int k = 1; k < cells.Count - 1 && !inside; k++)
                     {
-                        continue;
-                    }
-                    float y = Mathf.Lerp(hs, ht, t);
-                    // inside a rock block (a natural rock edifice on some level, a wall high over its floor)
-                    int H = TH(gc, map);
-                    for (int L = 0; L <= Mathf.Max(0, H - 1) && !inRock; L++)
-                    {
-                        IntVec3 lc = Levels.Cell(gc, L, map);
-                        if (lc.IsValid && lc.GetEdifice(map) is Building b && (b.def.building?.isNaturalRock ?? false))
+                        IntVec3 gc = cells[k];
+                        float t = ((gc.x - g1.x) * (g2.x - g1.x) + (gc.z - g1.z) * (g2.z - g1.z)) / (len * len);
+                        if (t < 1.5f / len || t > 1f - 1.5f / len)
                         {
-                            inRock = y > L * Heights.Storey + 0.3f && y < L * Heights.Storey + Heights.Wall - 0.3f;
-                            if (inRock)
+                            continue;
+                        }
+                        float y = Mathf.Lerp(hs, ht, t);
+                        int H = TH(gc, map);
+                        for (int L = 0; L <= Mathf.Max(0, H - 1) && !inside; L++)
+                        {
+                            IntVec3 lc = Levels.Cell(gc, L, map);
+                            if (lc.IsValid && lc.GetEdifice(map) is Building b && (b.def.building?.isNaturalRock ?? false))
                             {
-                                where = $"{lc} {b.def.defName} L{L} at height {y:0.00} (t {t:0.00})";
+                                inside = y > L * storey + 0.3f && y < L * storey + wall - 0.3f;
+                                if (inside && where == null)
+                                {
+                                    where = $"{lc} {b.def.defName} L{L} at height {y:0.00} (t {t:0.00})";
+                                }
                             }
                         }
                     }
+                    inRock &= inside;
                 }
                 if (!inRock)
                 {
@@ -694,7 +701,7 @@ namespace ProjectZ.Dev
                 if (Heights.CanSee(c1, c2, map))
                 {
                     bad++;
-                    first = (first == null ? "" : first + " || ") + $"{c1} -> {c2} (L{L1} -> L{L2}), inside {where}; cells on the line: {string.Join(" ", Heights.Line(g1, g2).Select(x => x.x + "," + x.z + ":" + TH(x, map) + (x.GetEdifice(map)?.def.defName ?? "")))}";
+                    first = (first == null ? "" : first + " || ") + $"{c1} -> {c2} (L{L1} -> L{L2}), inside {where}; cells on the line: {string.Join(" ", cells.Select(x => x.x + "," + x.z + ":" + TH(x, map) + (x.GetEdifice(map)?.def.defName ?? "")))}";
                 }
             }
             Rand.PopState();

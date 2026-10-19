@@ -72,7 +72,9 @@ namespace ProjectZ.Dev
     //                                   random layout, sealed rooms and doors, the plan's sheet cases and the user's case
     //                                   as real ordered shots, facing at normal speed, AI, turrets, smoke, the "no line of
     //                                   sight" preview and refusal, per-call and fight timings, shots frozen mid-flight;
-    //                                   run with -projectzfloors=3 -projectzseed=N (TestLos3D)
+    //                                   run with -projectzfloors=3 -projectzseed=N (TestLos3D); in a tall-mountain world
+    //                                   (-projectztallmountains -projectzfloors=4 -projectzmapsize=250) only its mountain
+    //                                   checks (natural rock tops, ridges, a dug tunnel) on a mountainous tile
     //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
     //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
     //                                   shuttles: shuttles and transport pods on a floor-2 slab (landing checks, a permit shuttle,
@@ -148,6 +150,9 @@ namespace ProjectZ.Dev
         public static int FloorsOverride;
         // -projectztallmountains: worlds created in this run have tall mountains (the Create World page's default).
         public static bool TallMountainsOverride;
+
+        // Modes run on a mountainous tile (MtnTile); los3d too in a tall-mountain world (its mountain checks).
+        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "los3d" && TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // Test only (-projectzmintbreak=<member>): that Dubs Mint Minimap member counts as missing (Compat/MintMinimap).
@@ -341,7 +346,7 @@ namespace ProjectZ.Dev
                         continue;
                     }
                     // mode mtn: a mountainous tile (MtnTile picks one if no temperate forest has it)
-                    if (mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog")
+                    if (MtnTileMode)
                     {
                         continue;
                     }
@@ -361,7 +366,7 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog")
+            if (MtnTileMode)
             {
                 MtnTile();
             }
@@ -1149,8 +1154,9 @@ namespace ProjectZ.Dev
                     }
                 }
             }
-            Result("annex empty " + when, notAir == 0 && things == 0 && roofs == 0 && fogged == 0 && snow == 0,
-                $"{annexCells} annex cells: non-open-air {notAir}, things {things} (plants {plants}, pawns {pawns}, filth {filth}) {string.Join(",", thingDefs.Select(kv => kv.Key + "x" + kv.Value))}, roofed {roofs}, fogged {fogged}, snow {snow}");
+            // (a tall-mountain world fills the annex with its mountains: tallmtn checks that fill)
+            Result("annex empty " + when, Mountains.On(map) || notAir == 0 && things == 0 && roofs == 0 && fogged == 0 && snow == 0,
+                $"{(Mountains.On(map) ? "tall mountains (filled, not checked here); " : "")}{annexCells} annex cells: non-open-air {notAir}, things {things} (plants {plants}, pawns {pawns}, filth {filth}) {string.Join(",", thingDefs.Select(kv => kv.Key + "x" + kv.Value))}, roofed {roofs}, fogged {fogged}, snow {snow}");
             // The ground itself was generated normally, right up to its top row.
             int topAir = 0, river = 0, road = 0, water = 0;
             Dictionary<string, int> topTerrain = new Dictionary<string, int>();
