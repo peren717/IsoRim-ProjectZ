@@ -137,6 +137,9 @@ namespace ProjectZ.Dev
     //                                   under a lip (its floor falls), stairs onto a lip top, a wall, a bed and a wood floor
     //                                   up there, the drop finders, a jump pack off a lip top and back; the same arguments
     //                                   as tallmtn (TestRockTop)
+    //                                   minebody: a colonist mining natural rock in a tall mountain (ground floor at a
+    //                                   face and inside, a level-1 top, a low rock on flat ground) is drawn in every frame
+    //                                   (filmed, the magenta clothes counted); the same arguments as rocktop (TestMineBody)
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
@@ -166,7 +169,7 @@ namespace ProjectZ.Dev
         public static bool TallMountainsOverride;
 
         // Modes run on a mountainous tile (MtnTile); los3d too in a tall-mountain world (its mountain checks).
-        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "los3d" && TallMountainsOverride;
+        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "los3d" && TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // -projectzoldroute: the stair router as before branch stairroute (no reachability check first, no memory of
@@ -271,7 +274,7 @@ namespace ProjectZ.Dev
             {
                 Seed = seed;
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -402,7 +405,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -769,6 +772,11 @@ namespace ProjectZ.Dev
                 StepRockTop(map);
                 return;
             }
+            if (stage.StartsWith("mb_"))
+            {
+                StepMineBody(map);
+                return;
+            }
             if (stage.StartsWith("fg_"))
             {
                 StepTallFog(map);
@@ -783,7 +791,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
