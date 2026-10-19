@@ -339,7 +339,9 @@ namespace ProjectZ
             {
                 return def;
             }
-            bool well = StairThingAt(c, map);
+            // (one rule: an opening is a stairs thing or a mined shaft under a covered top; a hole to the sky keeps a roof
+            // built over it, Shaft.ApplyRoof)
+            bool well = StairThingAt(c, map) || Shaft.Covered(c, map);
             if (well && def != PZDefOf.PZ_StairwellRoof)
             {
                 return PZDefOf.PZ_StairwellRoof;

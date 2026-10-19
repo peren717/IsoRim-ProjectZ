@@ -85,6 +85,11 @@ namespace ProjectZ
                     map.roofGrid.SetRoof(below, want);
                 }
             }
+            else if (ShaftMarks.Has(below, map))
+            {
+                // the bottom of a mined shaft (just opened, or its cap gone again): the shaft rule
+                Shaft.ApplyRoof(below, map);
+            }
             else if (cur == PZDefOf.PZ_FloorRoof)
             {
                 map.roofGrid.SetRoof(below, RoofDefOf.RoofConstructed);
@@ -194,10 +199,16 @@ namespace ProjectZ
         // The one guard for every path that writes a floor's or a stairwell's roof (slab built, stairs built, landing,
         // load-time Normalize, the rules above): a thick (rock) roof is never replaced by one, nor by what the stairwell
         // rule makes of one (placement refuses those spots, SlabSupport.ThickRoof; this keeps anything that slips through
-        // from swapping the rock roof).
+        // from swapping the rock roof). The one exception: the bottom of a mined shaft (Shaft.Is), whose rock ceiling the
+        // player opened.
         private static void KeepThick(RoofGrid grid, IntVec3 c, RoofDef asked, ref RoofDef def)
         {
             if (!IsOurs(asked) && !IsOurs(def))
+            {
+                return;
+            }
+            Map map = mapRef(grid);
+            if (map != null && Shaft.Is(c, map))
             {
                 return;
             }
@@ -221,13 +232,14 @@ namespace ProjectZ
         }
     }
 
-    // No roof-removal jobs under a floor.
+    // No roof-removal jobs under a floor, nor on a stairwell's roof (an opening: under stairs or a covered shaft; the
+    // stairwell rule would only put it back).
     [HarmonyPatch(typeof(WorkGiver_RemoveRoof), nameof(WorkGiver_RemoveRoof.HasJobOnCell))]
     public static class RemoveRoof_FloorRoof_Patch
     {
         public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
         {
-            if (__result && FloorRoof.FloorAbove(c, pawn.Map))
+            if (__result && (FloorRoof.FloorAbove(c, pawn.Map) || pawn.Map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof))
             {
                 __result = false;
             }
