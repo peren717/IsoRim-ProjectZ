@@ -89,11 +89,13 @@ namespace ProjectZ
             return FloorKind.Slab;   // any other terrain up there stands for a built floor (as it always did)
         }
 
-        // The roof a floor kind puts on the cell under it: a built floor (slab or deck) the floor's own roof
-        // (PZ_FloorRoof, FloorRoof.cs), natural rock the thick rock roof (vanilla's "overhead mountain"); none for None.
-        // Support follows from it: a floor roof needs the game's roof support (and falls with it, SlabCollapse); a thick
-        // roof never vanishes (vanilla: it drops rocks and stays), so natural rock needs none.
-        public static RoofDef CeilingFor(FloorKind k)
+        // The roof a floor kind puts on the cell under it (rock-top floors, isorim-pz-rocktop-floors-plan.md §3.1): a built
+        // floor (slab or deck) the floor's own roof (PZ_FloorRoof, FloorRoof.cs); natural rock keeps a natural rock roof (the
+        // one asked for, else the one there: vanilla's thick overhead mountain, or the thin roof at a mountain's edge) and
+        // otherwise takes the floor roof too (the support roof, as under a slab); none for None. Support follows from it: a
+        // floor roof or a thin rock roof needs the game's roof support and falls with its floor (SlabCollapse); a thick roof
+        // never vanishes (vanilla: it drops rocks and stays), so the floor over it stays.
+        public static RoofDef CeilingFor(FloorKind k, RoofDef asked = null, RoofDef cur = null)
         {
             switch (k)
             {
@@ -101,14 +103,26 @@ namespace ProjectZ
                 case FloorKind.ShipDeck:
                     return PZDefOf.PZ_FloorRoof;
                 case FloorKind.NaturalRock:
-                    return RoofDefOf.RoofRockThick;
+                    if (asked != null && asked.isNatural)
+                    {
+                        return asked;
+                    }
+                    return cur != null && cur.isNatural ? cur : PZDefOf.PZ_FloorRoof;
                 default:
                     return null;
             }
         }
 
-        // The roof the floor at upper-band cell "above" puts on the cell under it (null: no floor there).
-        public static RoofDef CeilingUnder(IntVec3 above, Map map) => CeilingFor(KindAt(above, map));
+        // The roof the floor at upper-band cell "above" puts on the cell under it (null: no floor there); asked and cur as
+        // in CeilingFor (the roof being written there, the roof there now).
+        public static RoofDef CeilingUnder(IntVec3 above, Map map, RoofDef asked = null, RoofDef cur = null) => CeilingFor(KindAt(above, map), asked, cur);
+
+        // An unbuilt natural floor: an upper-band cell with a floor whose top terrain is natural stone (a mountain top as
+        // generated, rough or smoothed, or a dug cell's floor). A player's floor laid on a top (carpet, tiles) is not one.
+        public static bool UnbuiltNatural(IntVec3 c, Map map)
+        {
+            return ProjectZ.FloorOf(c, map) >= 1 && ProjectZ.HasFloor(c, map) && IsNatural(map.terrainGrid.TopTerrainAt(c));
+        }
 
         // (Taking a floor away stays per kind where it is: slabs Slab.Remove (Slab.At is slab-only), decks as vanilla
         // substructure; natural rock has no way yet ("dig down", mountains phase 3).)

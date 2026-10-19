@@ -23,7 +23,8 @@ namespace ProjectZ.Patches
         public static bool ShuttleFixOff;
 
         // Inside the game's own drop finders (NoTops_Patch: raid drop centres, random drop spots): a natural mountain top
-        // never counts (user decisions Q6 and D1; drops and shuttles the player aims may land there).
+        // never counts while unbuilt (user decisions Q6 and D1, rock-top floors: natural stone on top; a player floor laid
+        // there counts); drops and shuttles the player aims may land on any top.
         [System.ThreadStatic]
         internal static int noTops;
 
@@ -33,7 +34,7 @@ namespace ProjectZ.Patches
             {
                 return false;
             }
-            if (noTops > 0 && Mountains.On(map) && Mountains.NaturalFloor(c, map))
+            if (noTops > 0 && Mountains.On(map) && Floors.UnbuiltNatural(c, map))
             {
                 return true;
             }

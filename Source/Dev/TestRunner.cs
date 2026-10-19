@@ -68,9 +68,13 @@ namespace ProjectZ.Dev
     //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
     //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
-    //                                   lean: shoot leaning round wall corners between floors (down from a slab edge, not
-    //                                   from further in, up from behind a ground corner, AI raiders, one-floor controls),
-    //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=2 or more (TestLean)
+    //                                   los3d: line of sight between floors (Los3D): the game's walk, same-floor parity on a
+    //                                   random layout, sealed rooms and doors, the plan's sheet cases and the user's case
+    //                                   as real ordered shots, facing at normal speed, AI, turrets, smoke, the "no line of
+    //                                   sight" preview and refusal, per-call and fight timings, shots frozen mid-flight;
+    //                                   run with -projectzfloors=3 -projectzseed=N (TestLos3D); in a tall-mountain world
+    //                                   (-projectztallmountains -projectzfloors=4 -projectzmapsize=250) only its mountain
+    //                                   checks (natural rock tops, ridges, a dug tunnel) on a mountainous tile
     //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
     //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
     //                                   shuttles: shuttles and transport pods on a floor-2 slab (landing checks, a permit shuttle,
@@ -126,6 +130,11 @@ namespace ProjectZ.Dev
     //                                   infestations), performance and shots; -projectztallmountains, -projectzfloors=4
     //                                   -projectzmapsize=250 (-projectzhilliness=Impassable, -projectzmtnstep=X,
     //                                   -projectztmnoflows: only the fill, performance and shots) (TestTallMtn*)
+    //                                   rocktop: rock-top floors (every natural rock gets a floor above): the fill's checks,
+    //                                   save + load, then per check a reload of pz_rocktop: a tunnel under a plateau, a hall
+    //                                   under a lip (its floor falls), stairs onto a lip top, a wall, a bed and a wood floor
+    //                                   up there, the drop finders, a jump pack off a lip top and back; the same arguments
+    //                                   as tallmtn (TestRockTop)
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
@@ -144,6 +153,8 @@ namespace ProjectZ.Dev
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
+    //   -projectzseed=N     a fixed random seed: the same world, tile and colonists every run, and in los3d each check's
+    //                       own random state from N and the check's name
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
     public static partial class TestRunner
     {
@@ -151,6 +162,9 @@ namespace ProjectZ.Dev
         public static int FloorsOverride;
         // -projectztallmountains: worlds created in this run have tall mountains (the Create World page's default).
         public static bool TallMountainsOverride;
+
+        // Modes run on a mountainous tile (MtnTile); los3d too in a tall-mountain world (its mountain checks).
+        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "los3d" && TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // Test only (-projectzmintbreak=<member>): that Dubs Mint Minimap member counts as missing (Compat/MintMinimap).
@@ -247,7 +261,11 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (GenCommandLine.TryGetCommandLineArg("projectzseed", out string sd) && int.TryParse(sd, out int seed) && seed >= 0)
+            {
+                Seed = seed;
+            }
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -353,7 +371,7 @@ namespace ProjectZ.Dev
                         continue;
                     }
                     // mode mtn: a mountainous tile (MtnTile picks one if no temperate forest has it)
-                    if (mode == "mtn" || mode == "tallmtn")
+                    if (MtnTileMode)
                     {
                         continue;
                     }
@@ -373,11 +391,11 @@ namespace ProjectZ.Dev
             {
                 Out("tile pick failed: " + e.Message);
             }
-            if (mode == "mtn" || mode == "tallmtn")
+            if (MtnTileMode)
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -455,6 +473,10 @@ namespace ProjectZ.Dev
 
         public static void OnGUI()
         {
+            if (Active)
+            {
+                LosGui();
+            }
             if (Active && guiAction != null && Event.current.type == EventType.Repaint)
             {
                 Action act = guiAction;
@@ -730,6 +752,16 @@ namespace ProjectZ.Dev
                 StepFinders(map);
                 return;
             }
+            if (stage.StartsWith("rt_"))
+            {
+                StepRockTop(map);
+                return;
+            }
+            if (stage.StartsWith("fg_"))
+            {
+                StepTallFog(map);
+                return;
+            }
             if (stage.StartsWith("mt_"))
             {
                 StepMtn(map);
@@ -739,7 +771,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -905,7 +937,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "g_setup";
                     }
-                    else if (mode == "lean")
+                    else if (mode == "los3d")
                     {
                         stage = "m_setup";
                     }
@@ -1171,8 +1203,9 @@ namespace ProjectZ.Dev
                     }
                 }
             }
-            Result("annex empty " + when, notAir == 0 && things == 0 && roofs == 0 && fogged == 0 && snow == 0,
-                $"{annexCells} annex cells: non-open-air {notAir}, things {things} (plants {plants}, pawns {pawns}, filth {filth}) {string.Join(",", thingDefs.Select(kv => kv.Key + "x" + kv.Value))}, roofed {roofs}, fogged {fogged}, snow {snow}");
+            // (a tall-mountain world fills the annex with its mountains: tallmtn checks that fill)
+            Result("annex empty " + when, Mountains.On(map) || notAir == 0 && things == 0 && roofs == 0 && fogged == 0 && snow == 0,
+                $"{(Mountains.On(map) ? "tall mountains (filled, not checked here); " : "")}{annexCells} annex cells: non-open-air {notAir}, things {things} (plants {plants}, pawns {pawns}, filth {filth}) {string.Join(",", thingDefs.Select(kv => kv.Key + "x" + kv.Value))}, roofed {roofs}, fogged {fogged}, snow {snow}");
             // The ground itself was generated normally, right up to its top row.
             int topAir = 0, river = 0, road = 0, water = 0;
             Dictionary<string, int> topTerrain = new Dictionary<string, int>();

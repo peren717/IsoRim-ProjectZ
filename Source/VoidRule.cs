@@ -18,7 +18,7 @@ namespace ProjectZ
     //   2. the glow grid's light-blocker bit, set on every load (Apply);
     //   3. no gas (GasCanMoveTo false; gas already there on load is cleared);
     //   4. no flat line of sight between two bands (GenSight.LineOfSight false): sight across floors only through
-    //      ProjectZ's own 3D rule (Heights.CanSee), also with the combat module off;
+    //      ProjectZ's own 3D rule (Los3D), also with the combat module off;
     //   5. no wall temperature exchange with another band (a one-row gap made the equalize cell two rows out land there).
     // Radius effects (tornado, auras, shields, ...) are a separate class: BandScope.cs.
     public static class VoidRule

@@ -30,7 +30,7 @@ namespace ProjectZ.Dev
     //   F10 tall things (Q7): allowed in a dug ground cell under solid rock, refused under a top and under a dug cell;
     //   F11 infestations per band: a dug level-1 room next to a colony building on that band gets candidates, all
     //      within reach of a band-1 building; a child hive never lands on another band (R23);
-    //   F12 colonists put on a level-1 top with no way down (as by a transport pod) build stairs downward from the top
+    //   F12 colonists put on a level-1 top (as by a transport pod; since rock-top floors a jump off the lip is a way down too) build stairs downward from the top
     //      (the stairs are touched from the floor above, StairTouch) and walk down them to the ground. A fresh, rested
     //      crew with no hostiles or shells left over: F7's explosions and F8's raid can leave the old colonists hurt.
     public static partial class TestRunner
@@ -234,7 +234,7 @@ namespace ProjectZ.Dev
                         gone && t == tfRockDef.building.leaveTerrain && Floors.KindAt(tfMine1, map) == FloorKind.NaturalRock && r == RoofDefOf.RoofRockThick && revealed,
                         $"{tfMine1}: edifice gone {gone}, terrain {t?.defName} (leave {tfRockDef.building.leaveTerrain?.defName}), kind {Floors.KindAt(tfMine1, map)}, roof {r?.defName}, behind {tfMine2} revealed {revealed}; chunks near {chunks}");
                     // R40: the mined cell is a natural floor for stairs landing and for drops
-                    Result("R40 the mined cell counts as natural: stairs may land there, its roof is not kept like a slab's", SlabSupport.LandingBlocked(tfMine1, map) == null && !FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map),
+                    Result("R40 the mined cell counts as natural: stairs may land there, its roof kept against pods like any floor's (rock-top floors)", SlabSupport.LandingBlocked(tfMine1, map) == null && FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map),
                         $"landing {SlabSupport.LandingBlocked(tfMine1, map) ?? "allowed"}, kept below {FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map)}");
                     map.designationManager.AddDesignation(new Designation(tfMine2, DesignationDefOf.Mine));
                     TickUntil(20000, () => tfMine2.GetEdifice(map) == null, "tm_f_mined2", 60);
@@ -308,7 +308,7 @@ namespace ProjectZ.Dev
                 case "tm_f_down_built":
                 {
                     bool built = tfDownStairs != null && TfDownBuilt(map);
-                    Result("F12 colonists on a level-1 top with no way down build stairs downward from the top (touch from above)", built,
+                    Result("F12 colonists on a level-1 top build stairs downward from the top (touch from above)", built,
                         $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName} hediffs {string.Join("/", p.health.hediffSet.hediffs.Select(h => h.def.defName))}"))}; hostiles on the map {map.mapPawns.AllPawnsSpawned.Count(h => h.HostileTo(Faction.OfPlayer) && !h.Downed)}");
                     if (!built)
                     {
@@ -654,37 +654,44 @@ namespace ProjectZ.Dev
                     continue;
                 }
                 lines++;
-                // the straight line from eye to middle: inside a rock column (below its top's floor) somewhere in the
-                // middle part?
-                float hs = L1 * Heights.Storey + Heights.Eye, ht = L2 * Heights.Storey + Heights.Middle;
+                // Los3D's lines (eye to each aim height, in cells): every one of them inside a rock block (a natural rock
+                // edifice on some level, a wall high over its floor) somewhere in the middle part?
+                float storey = IsoRimBridge.StoreyHeight, wall = IsoRimBridge.WallHeight;
+                float hs = L1 * storey + Los3D.Eye;
                 float len = (g2 - g1).LengthHorizontal;
-                bool inRock = false;
+                bool inRock = true;
                 string where = null;
-                // the game's own cell line (Heights.Line), the line's height over each middle cell
-                List<IntVec3> cells = Heights.Line(g1, g2).ToList();
-                for (int k = 1; k < cells.Count - 1 && !inRock; k++)
+                // the game's own walk (Los3D.Walk = GenSight.LineOfSight's cells), the line's height over each middle cell
+                List<IntVec3> cells = new List<IntVec3>();
+                Los3D.Walk(g1, g2, 0, 0, cells);
+                foreach (float aim in new[] { Los3D.AimHead, Los3D.AimChest, Los3D.AimWaist })
                 {
-                    IntVec3 gc = cells[k];
-                    float t = (gc - g1).LengthHorizontal / len;
-                    if (t < 1.5f / len || t > 1f - 1.5f / len)
+                    float ht = L2 * storey + aim;
+                    bool inside = false;
+                    for (int k = 1; k < cells.Count - 1 && !inside; k++)
                     {
-                        continue;
-                    }
-                    float y = Mathf.Lerp(hs, ht, t);
-                    // inside a rock block (a natural rock edifice on some level, a wall high over its floor)
-                    int H = TH(gc, map);
-                    for (int L = 0; L <= Mathf.Max(0, H - 1) && !inRock; L++)
-                    {
-                        IntVec3 lc = Levels.Cell(gc, L, map);
-                        if (lc.IsValid && lc.GetEdifice(map) is Building b && (b.def.building?.isNaturalRock ?? false))
+                        IntVec3 gc = cells[k];
+                        float t = ((gc.x - g1.x) * (g2.x - g1.x) + (gc.z - g1.z) * (g2.z - g1.z)) / (len * len);
+                        if (t < 1.5f / len || t > 1f - 1.5f / len)
                         {
-                            inRock = y > L * Heights.Storey + 0.3f && y < L * Heights.Storey + Heights.Wall - 0.3f;
-                            if (inRock)
+                            continue;
+                        }
+                        float y = Mathf.Lerp(hs, ht, t);
+                        int H = TH(gc, map);
+                        for (int L = 0; L <= Mathf.Max(0, H - 1) && !inside; L++)
+                        {
+                            IntVec3 lc = Levels.Cell(gc, L, map);
+                            if (lc.IsValid && lc.GetEdifice(map) is Building b && (b.def.building?.isNaturalRock ?? false))
                             {
-                                where = $"{lc} {b.def.defName} L{L} at height {y:0.00} (t {t:0.00})";
+                                inside = y > L * storey + 0.3f && y < L * storey + wall - 0.3f;
+                                if (inside && where == null)
+                                {
+                                    where = $"{lc} {b.def.defName} L{L} at height {y:0.00} (t {t:0.00})";
+                                }
                             }
                         }
                     }
+                    inRock &= inside;
                 }
                 if (!inRock)
                 {
@@ -694,7 +701,7 @@ namespace ProjectZ.Dev
                 if (Heights.CanSee(c1, c2, map))
                 {
                     bad++;
-                    first = (first == null ? "" : first + " || ") + $"{c1} -> {c2} (L{L1} -> L{L2}), inside {where}; cells on the line: {string.Join(" ", Heights.Line(g1, g2).Select(x => x.x + "," + x.z + ":" + TH(x, map) + (x.GetEdifice(map)?.def.defName ?? "")))}";
+                    first = (first == null ? "" : first + " || ") + $"{c1} -> {c2} (L{L1} -> L{L2}), inside {where}; cells on the line: {string.Join(" ", cells.Select(x => x.x + "," + x.z + ":" + TH(x, map) + (x.GetEdifice(map)?.def.defName ?? "")))}";
                 }
             }
             Rand.PopState();
@@ -897,7 +904,7 @@ namespace ProjectZ.Dev
         private static void TfDropsCheck(Map map)
         {
             List<Pawn> hostiles = map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer) && p.RaceProps.Humanlike).ToList();
-            int hostTop = hostiles.Count(p => TmTop(p.Position, map) || ProjectZ.FloorOf(p.Position, map) >= 1 && p.Position.Roofed(map) == false && Mountains.NaturalFloor(p.Position, map));
+            int hostTop = hostiles.Count(p => TmTop(p.Position, map) || ProjectZ.FloorOf(p.Position, map) >= 1 && p.Position.Roofed(map) == false && Floors.UnbuiltNatural(p.Position, map));
             int hostUp = hostiles.Count(p => ProjectZ.FloorOf(p.Position, map) >= 1);
             Info($"F8 raiders 1200 ticks after landing (they may climb the stairs): {hostiles.Count}, {hostUp} on an upper level, {hostTop} on a natural top: {string.Join(" ", hostiles.Take(8).Select(h => h.Position.ToString()))}");
             bool aimedUp = tfAimed.Count == 0 || tfAimed.Any(t => t.Spawned && ProjectZ.FloorOf(t.Position, map) >= 1);
@@ -953,6 +960,12 @@ namespace ProjectZ.Dev
         {
             tfDownCrew.Clear();
             tfDownStairs = null;
+            // (isolated from F1: rock-top floors join a mountain's level-1 tops through its lips, so F1's stairs would be a
+            // way down from every top of that mountain; they go first)
+            foreach (Thing st in map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).ToList())
+            {
+                st.Destroy(DestroyMode.Vanish);
+            }
             IntVec3 home = Centroid(map);
             TraverseParms tp = TraverseParms.For(TraverseMode.PassDoors);
             int best = int.MaxValue;
@@ -990,9 +1003,11 @@ namespace ProjectZ.Dev
                     {
                         continue;
                     }
-                    if (map.reachability.CanReach(top, foot, PathEndMode.OnCell, tp) || !GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                    // (rock-top floors: every level-1 top now has a way down, a jump off its lip, so the site no longer needs
+                    // a stranded top; the crew still starts on the top and the stairs go down from it)
+                    if (!GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
                     {
-                        continue;   // (a top with a way down already)
+                        continue;
                     }
                     // a rim the crew can work from: a walkable level-1 cell over the stairwell's ring that the top
                     // reaches (as StairTouch.UpperCells); an exit over the lip with no top beside the stairwell has none
@@ -1017,7 +1032,7 @@ namespace ProjectZ.Dev
             }
             if (!tfDownAt.IsValid)
             {
-                Result("F12 a stairs site down from a level-1 top with no way down", false, $"none within 70 of {home}");
+                Result("F12 a stairs site down from a level-1 top", false, $"none within 70 of {home}");
                 TfDownEnd(map);
                 return;
             }

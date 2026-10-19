@@ -22,7 +22,7 @@ namespace ProjectZ.Dev
     //      and a signed table (sandbox, restored) round-trip cell <-> level;
     //   F2 every ground cell x level: Column.PlaneSolid / FloorAt / BlockAt / Top equal the old Heights.Plane / HasFloor
     //      / sight / ColumnTop code (copied below), over a fixture with slabs on two levels, a wall and a roof upstairs; a
-    //      sample of sight lines between levels (Heights.CanSee) equals the old one;
+    //      sample of sight lines between levels (Los3D) equals Los3D reading the old raw rows;
     //   F3 floor kinds: slab, ship deck (Odyssey), none, natural rock (rough and smooth granite put in a band: its ceiling
     //      roof is the thick rock roof), Column.NaturalTop;
     //   F4 build vs use: over a thick roof BuildBlocked / SlabColumnBlocked refuse, LandingBlocked refuses open air and
@@ -157,87 +157,91 @@ namespace ProjectZ.Dev
             return g;
         }
 
-        private static bool OAtEdge(IntVec3 g, IntVec3 other, int k, Map map, AnnexMapComponent a)
-        {
-            List<IntVec3> l = new List<IntVec3>(Heights.Line(g, other));
-            if (l.Count < 2)
-            {
-                return false;
-            }
-            IntVec3 c1 = OCell(l[1], k, a);
-            if (!c1.IsValid)
-            {
-                return false;
-            }
-            if (!OHasFloor(c1, map, a))
-            {
-                return true;
-            }
-            Building b = c1.GetEdifice(map);
-            if (b == null || b.def.Fillage != FillCategory.Partial || l.Count < 3)
-            {
-                return false;
-            }
-            IntVec3 c2 = OCell(l[2], k, a);
-            return c2.IsValid && !OHasFloor(c2, map, a);
-        }
-
-        private static bool OClear(IntVec3 gs, IntVec3 gt, float hs, float ht, Map map, AnnexMapComponent a)
-        {
-            int floors = a.floors;
-            List<IntVec3> l = new List<IntVec3>(Heights.Line(gs, gt));
-            int n = l.Count - 1;
-            float len = Mathf.Max((gt - gs).LengthHorizontal, 0.5f);
-            float half = 0.6f / len;
-            for (int i = 0; i <= n; i++)
-            {
-                IntVec3 g = l[i];
-                float t = i == 0 ? 0f : (i == n ? 1f : (g - gs).LengthHorizontal / len);
-                float lo0 = Mathf.Lerp(hs, ht, Mathf.Clamp01(t - half));
-                float hi0 = Mathf.Lerp(hs, ht, Mathf.Clamp01(t + half));
-                float lo = Mathf.Min(lo0, hi0);
-                float hi = Mathf.Max(lo0, hi0);
-                for (int k = 1; k <= floors; k++)
-                {
-                    float level = k * Heights.Storey;
-                    if (level >= lo && level <= hi && OPlane(g, k, map, a))
-                    {
-                        return false;
-                    }
-                }
-                if (i == 0 || i == n)
-                {
-                    continue;
-                }
-                for (int k = 0; k < floors; k++)
-                {
-                    float bottom = k * Heights.Storey;
-                    if (hi < bottom || lo > bottom + Heights.Wall)
-                    {
-                        continue;
-                    }
-                    if (OBlock(g, k, map, a) && lo <= bottom + Heights.Wall)
-                    {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-
-        private static bool OCanSee(IntVec3 from, IntVec3 to, Map map, AnnexMapComponent a)
+        // Los3D as it read the columns before F2 (master's raw-stride adapter: OCell, OPlane, OBlock, floors 0..floors-1),
+        // the same walk (Los3D.Walk), cell clipping and heights.
+        private static bool OLos(IntVec3 from, IntVec3 to, Map map, AnnexMapComponent a)
         {
             int ks = OFloorOf(from, a), kt = OFloorOf(to, a);
             IntVec3 gs = OGround(from, a), gt = OGround(to, a);
-            if (ks < 0 || kt < 0 || !gs.IsValid || !gt.IsValid || gs == gt)
+            if (ks < 0 || kt < 0 || !gs.IsValid || !gt.IsValid)
             {
                 return false;
             }
-            if (ks != kt && !OAtEdge(ks > kt ? gs : gt, ks > kt ? gt : gs, Mathf.Max(ks, kt), map, a))
+            float storey = IsoRimBridge.StoreyHeight, wall = IsoRimBridge.WallHeight;
+            float hs = ks * storey + Los3D.Eye;
+            List<IntVec3> cells = new List<IntVec3>();
+            Los3D.Walk(gs, gt, 0, 0, cells);
+            foreach (float aim in new[] { Los3D.AimHead, Los3D.AimChest, Los3D.AimWaist })
             {
-                return false;
+                float ht = kt * storey + aim;
+                bool blocked = false;
+                for (int i = 0; i < cells.Count && !blocked; i++)
+                {
+                    IntVec3 g = cells[i];
+                    OClip(gs.x, gs.z, gt.x, gt.z, g.x, g.z, out float t0, out float t1);
+                    float h0 = hs + (ht - hs) * t0, h1 = hs + (ht - hs) * t1;
+                    float lo = Mathf.Min(h0, h1), hi = Mathf.Max(h0, h1);
+                    int kLo = Mathf.FloorToInt(lo / storey), kHi = Mathf.FloorToInt(hi / storey);
+                    for (int k = Mathf.Max(1, kLo); k <= kHi && k <= a.floors && !blocked; k++)
+                    {
+                        blocked = lo < k * storey && k * storey < hi && OPlane(g, k, map, a);
+                    }
+                    if (i == 0 || i == cells.Count - 1)
+                    {
+                        continue;
+                    }
+                    for (int k = Mathf.Max(0, kLo); k <= kHi && k < a.floors && !blocked; k++)
+                    {
+                        blocked = hi >= k * storey && lo <= k * storey + wall && OBlock(g, k, map, a);
+                    }
+                }
+                if (!blocked)
+                {
+                    return true;
+                }
             }
-            return OClear(gs, gt, ks * Heights.Storey + Heights.Eye, kt * Heights.Storey + Heights.Middle, map, a);
+            return false;
+        }
+
+        private static void OClip(float x0, float z0, float x1, float z1, int cx, int cz, out float t0, out float t1)
+        {
+            t0 = 0f;
+            t1 = 1f;
+            float dx = x1 - x0, dz = z1 - z0;
+            if (OClipEdge(-dx, x0 - (cx - 0.5f), ref t0, ref t1) && OClipEdge(dx, (cx + 0.5f) - x0, ref t0, ref t1)
+                && OClipEdge(-dz, z0 - (cz - 0.5f), ref t0, ref t1) && OClipEdge(dz, (cz + 0.5f) - z0, ref t0, ref t1))
+            {
+                return;
+            }
+            float len2 = dx * dx + dz * dz;
+            float t = len2 < 1e-6f ? 1f : Mathf.Clamp01(((cx - x0) * dx + (cz - z0) * dz) / len2);
+            t0 = t1 = t;
+        }
+
+        private static bool OClipEdge(float p, float q, ref float t0, ref float t1)
+        {
+            if (Mathf.Abs(p) < 1e-7f)
+            {
+                return q >= 0f;
+            }
+            float r = q / p;
+            if (p < 0f)
+            {
+                if (r > t1)
+                {
+                    return false;
+                }
+                t0 = Mathf.Max(t0, r);
+            }
+            else
+            {
+                if (r < t0)
+                {
+                    return false;
+                }
+                t1 = Mathf.Min(t1, r);
+            }
+            return true;
         }
 
         // ---------------------------------------------------------------- stages
@@ -802,7 +806,7 @@ namespace ProjectZ.Dev
                 }
                 IntVec3 from = Levels.Cell(g1, Rand.Range(0, Mathf.Min(a.floors, 3)), map);
                 IntVec3 to = Levels.Cell(g2, Rand.Range(0, Mathf.Min(a.floors, 3)), map);
-                bool n = Heights.CanSee(from, to, map), o = OCanSee(from, to, map, a);
+                bool n = Los3D.CanSee(from, to, map), o = OLos(from, to, map, a);
                 lines++;
                 seen += n ? 1 : 0;
                 if (n != o)
@@ -811,7 +815,7 @@ namespace ProjectZ.Dev
                     firstLine = firstLine ?? $"{from} -> {to}: {n} vs {o}";
                 }
             }
-            Result("F2 sight lines between levels (Heights.CanSee) equal the old code", diff == 0 && lines > 1000, $"{lines} lines, {seen} clear, {diff} differ{(firstLine == null ? "" : ", first " + firstLine)}");
+            Result("F2 sight lines between levels (Los3D over the column queries) equal Los3D over the old raw rows", diff == 0 && lines > 1000, $"{lines} lines, {seen} clear, {diff} differ{(firstLine == null ? "" : ", first " + firstLine)}");
         }
 
         // ---------------------------------------------------------------- F3
@@ -841,24 +845,43 @@ namespace ProjectZ.Dev
                 deckOk = k == FloorKind.ShipDeck && under == PZDefOf.PZ_FloorRoof && Floors.KindAt(d, map) == FloorKind.None;
                 deck = $"deck {k}, its ceiling {under?.defName}, after removal {Floors.KindAt(d, map)}";
             }
-            // natural rock: rough and smooth granite on level 1 over open ground (its ceiling is the thick rock roof)
+            // natural rock (rock-top floors): rough granite on level 1 over unroofed ground takes the floor roof (the support
+            // roof, as under a slab); smooth granite over ground with a thin rock roof keeps that roof; a thick roof written
+            // under it stays thick, a constructed one asked for keeps the thin one
             TerrainDef rough = DefDatabase<TerrainDef>.GetNamedSilentFail("Granite_Rough");
             TerrainDef smooth = DefDatabase<TerrainDef>.GetNamedSilentFail("Granite_Smooth");
             IntVec3 r1 = Levels.Cell(MtC(8, 12), 1, map), r2 = Levels.Cell(MtC(9, 12), 1, map);
+            map.roofGrid.SetRoof(MtC(8, 12), null);
+            map.roofGrid.SetRoof(MtC(9, 12), RoofDefOf.RoofRockThin);
             map.terrainGrid.SetTerrain(r1, rough);
             map.terrainGrid.SetTerrain(r2, smooth);
             FloorKind k1 = Floors.KindAt(r1, map), k2 = Floors.KindAt(r2, map);
             RoofDef u1 = map.roofGrid.RoofAt(MtC(8, 12)), u2 = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(9, 12), RoofDefOf.RoofConstructed);
+            RoofDef u2c = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(9, 12), null);
+            RoofDef u2n = map.roofGrid.RoofAt(MtC(9, 12));
+            map.roofGrid.SetRoof(MtC(8, 12), RoofDefOf.RoofRockThick);
+            RoofDef u1t = map.roofGrid.RoofAt(MtC(8, 12));
+            map.roofGrid.SetRoof(MtC(8, 12), RoofDefOf.RoofConstructed);
+            RoofDef u1tc = map.roofGrid.RoofAt(MtC(8, 12));
+            bool rule = Floors.CeilingFor(FloorKind.NaturalRock) == PZDefOf.PZ_FloorRoof
+                && Floors.CeilingFor(FloorKind.NaturalRock, RoofDefOf.RoofRockThick, null) == RoofDefOf.RoofRockThick
+                && Floors.CeilingFor(FloorKind.NaturalRock, RoofDefOf.RoofConstructed, RoofDefOf.RoofRockThin) == RoofDefOf.RoofRockThin
+                && Floors.CeilingFor(FloorKind.NaturalRock, null, PZDefOf.PZ_FloorRoof) == PZDefOf.PZ_FloorRoof
+                && Floors.CeilingFor(FloorKind.Slab, RoofDefOf.RoofRockThin, RoofDefOf.RoofRockThin) == PZDefOf.PZ_FloorRoof;
             int top = Column.NaturalTop(MtC(8, 12), map), topNone = Column.NaturalTop(MtC(2, 14), map);
             bool natOk = rough != null && smooth != null && Floors.IsNatural(rough) && Floors.IsNatural(smooth) && !Floors.IsNatural(PZDefOf.PZ_UpperFloor)
-                && k1 == FloorKind.NaturalRock && k2 == FloorKind.NaturalRock && u1 == RoofDefOf.RoofRockThick && u2 == RoofDefOf.RoofRockThick && top == 1 && topNone == 0;
+                && k1 == FloorKind.NaturalRock && k2 == FloorKind.NaturalRock && u1 == PZDefOf.PZ_FloorRoof && u2 == RoofDefOf.RoofRockThin
+                && u2c == RoofDefOf.RoofRockThin && u2n == RoofDefOf.RoofRockThin && u1t == RoofDefOf.RoofRockThick && u1tc == RoofDefOf.RoofRockThick && rule && top == 1 && topNone == 0;
+            string natNote = $"thin kept on a constructed write {u2c?.defName}, on a removal {u2n?.defName}; thick written {u1t?.defName}, then constructed {u1tc?.defName}; rule {rule}";
             map.terrainGrid.SetTerrain(r1, PZDefOf.PZ_OpenAir);
             map.terrainGrid.SetTerrain(r2, PZDefOf.PZ_OpenAir);
             map.roofGrid.SetRoof(MtC(8, 12), null);
             map.roofGrid.SetRoof(MtC(9, 12), null);
-            Result("F3 floor kinds and their ceilings: slab (floor roof), none (open air, ground), ship deck, natural rock (rough and smooth: thick rock roof), NaturalTop",
+            Result("F3 floor kinds and their ceilings: slab (floor roof), none (open air, ground), ship deck, natural rock (keeps a natural rock roof, else the floor roof), NaturalTop",
                 slabOk && noneOk && deckOk && natOk,
-                $"slab {Floors.KindAt(slab, map)} roof under {map.roofGrid.RoofAt(FloorRoof.Below(slab, map))?.defName}; air {Floors.KindAt(air, map)}, ground {Floors.KindAt(ground, map)}; {deck}; rough {k1} roof under {u1?.defName}, smooth {k2} roof under {u2?.defName}; NaturalTop {top} (slab column {topNone})");
+                $"slab {Floors.KindAt(slab, map)} roof under {map.roofGrid.RoofAt(FloorRoof.Below(slab, map))?.defName}; air {Floors.KindAt(air, map)}, ground {Floors.KindAt(ground, map)}; {deck}; rough {k1} roof under {u1?.defName}, smooth {k2} roof under {u2?.defName}; {natNote}; NaturalTop {top} (slab column {topNone})");
         }
 
         // ---------------------------------------------------------------- F4
@@ -888,8 +911,10 @@ namespace ProjectZ.Dev
         private static void MtStairs(Map map, AnnexMapComponent a)
         {
             TerrainDef rough = DefDatabase<TerrainDef>.GetNamed("Granite_Rough");
-            // S3's landing: a natural rock floor (its thick roof below comes with it, F3); S4's landing column: thick first
+            // S3's landing: a natural rock floor over a thick rock roof (a mountain top; laid over open ground it would take
+            // the floor roof, F3); S4's landing column: thick first
             map.terrainGrid.SetTerrain(mtTop3, rough);
+            map.roofGrid.SetRoof(FloorRoof.Below(mtTop3, map), RoofDefOf.RoofRockThick);
             IntVec3 b4 = FloorRoof.Below(StairShape.Exit(mtS4, Rot4.North, map), map);
             map.roofGrid.SetRoof(b4, RoofDefOf.RoofRockThick);
             Designator_Build d = new Designator_Build(PZDefOf.PZ_Stairs);

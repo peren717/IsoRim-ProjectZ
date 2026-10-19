@@ -13,7 +13,9 @@ namespace ProjectZ
     // to the ground, the viewed level (never yank the view away) and any level with a HUD dot. Levels below the ground
     // (basements, later) need nothing more: the ground counts as used, so one level below it shows once such levels exist.
     // A level is used where it has a floor (any terrain but open air: slab, ship deck, natural rock incl. mountain tops;
-    // ProjectZ.HasFloor), a blueprint or frame (a slab blueprint on open air too), a pawn or an item.
+    // ProjectZ.HasFloor), a blueprint or frame (a slab blueprint on open air too), a pawn or an item. On a tall-mountain
+    // map a natural rock floor (an unbuilt mountain top) counts only once the player's pawns reached that level
+    // (AnnexMapComponent.Reached, marked by MountainFog.Reveal; user option 2, 2026-10-18).
     //
     // Cost, per map (State, kept on the AnnexMapComponent, not saved):
     //   - floors: one flag per level. The first ask scans each level's band until the first floor cell (a level without
@@ -94,6 +96,10 @@ namespace ProjectZ
             }
             if (added)
             {
+                if (a.tallMountains && !a.Reached(L) && Floors.IsNatural(map.terrainGrid.TopTerrainAt(c)))
+                {
+                    return;   // (an unbuilt mountain top on a level not reached yet)
+                }
                 s.floor[L - s.min] = true;
             }
             else
@@ -101,6 +107,19 @@ namespace ProjectZ
                 s.dirty[L - s.min] = true;
                 s.anyDirty = true;
             }
+        }
+
+        // MountainFog: level L was reached; its natural floors count from now on (read at the next refresh).
+        public static void LevelReached(Map map, int L)
+        {
+            State s = ProjectZ.Annex(map)?.shownLevels;
+            if (s == null || s.floor == null || L < s.min || L > s.max)
+            {
+                return;
+            }
+            s.dirty[L - s.min] = true;
+            s.anyDirty = true;
+            s.at = -100f;
         }
 
         // Test hooks: refresh now; what the cache holds.
@@ -210,9 +229,12 @@ namespace ProjectZ
             TerrainDef air = PZDefOf.PZ_OpenAir;
             int w = map.Size.x;
             int end = (to + 1) * w;
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            bool builtOnly = a != null && a.tallMountains && !a.Reached(L);
             for (int i = from * w; i < end; i++)
             {
-                if (tg.TerrainAt(i) != air)
+                TerrainDef t = tg.TerrainAt(i);
+                if (t != air && !(builtOnly && Floors.IsNatural(t)))
                 {
                     return true;
                 }

@@ -33,18 +33,22 @@ namespace ProjectZ.Dev
         private static void ShownExpected(Map map, out int lo, out int hi)
         {
             int usedLo = 0, usedHi = 0;
+            AnnexMapComponent an = ProjectZ.Annex(map);
             foreach (int L in Levels.All(map))
             {
                 if (L == 0)
                 {
                     continue;
                 }
+                // (tall mountains, option 2: an unbuilt natural top counts once the level was reached)
+                bool builtOnly = an != null && an.tallMountains && !an.Reached(L);
                 for (int z = Levels.RowMin(map, L); z <= Levels.RowMax(map, L); z++)
                 {
                     bool any = false;
                     for (int x = 0; x < map.Size.x && !any; x++)
                     {
-                        any = ProjectZ.HasFloor(new IntVec3(x, 0, z), map);
+                        IntVec3 c = new IntVec3(x, 0, z);
+                        any = ProjectZ.HasFloor(c, map) && !(builtOnly && Floors.IsNatural(c.GetTerrain(map)));
                     }
                     if (any)
                     {

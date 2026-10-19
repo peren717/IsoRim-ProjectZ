@@ -359,7 +359,7 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
-            if (mode == "lean")
+            if (mode == "los3d")
             {
                 LeanHook(map);
                 return;

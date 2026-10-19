@@ -121,33 +121,11 @@ namespace ProjectZ
 
         private static object SetOptionInner(string field, object value) => IsoRim.Api.SetOption(field, value);
 
-        // ---- the fog lid (IsoRim API 3, optional): off in a game with tall mountains (user decision 2026-10-17), as the
-        // lid of the fogged rock under each mountain top lies at the top's height and hides it. IsoRim keeps the
-        // player's own option and greys it out while locked.
+        // ---- the fog lid (IsoRim API 3, optional): ProjectZ never locks it (the lid is the player's option in every
+        // game; IsoRim draws it per storey). Read-only members for the tests.
         private const int FogLidApi = 3;
 
         public static bool CanLockFogLid => Present && ApiVersion >= FogLidApi;
-
-        // The lock for the current game: off with tall mountains, the player's option otherwise.
-        public static void UpdateFogLid(bool tallMountains)
-        {
-            if (CanLockFogLid)
-            {
-                UpdateFogLidInner(tallMountains);
-            }
-        }
-
-        private static void UpdateFogLidInner(bool tallMountains)
-        {
-            if (tallMountains)
-            {
-                IsoRim.Api.LockFogLid("PZ_FogLidOff".Translate(), false);
-            }
-            else
-            {
-                IsoRim.Api.UnlockFogLid();
-            }
-        }
 
         // IsoRim's fog lid lock (tests): its tooltip (null when not locked, or without IsoRim API 3) and whether the
         // lid is drawn now.

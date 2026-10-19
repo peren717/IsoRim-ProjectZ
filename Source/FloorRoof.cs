@@ -41,31 +41,20 @@ namespace ProjectZ
             return up.IsValid && ProjectZ.HasFloor(up, map);
         }
 
-        // The roof the floor right above c puts on c (by its kind, Floors.CeilingFor); null without a floor above.
-        public static RoofDef CeilingOf(IntVec3 c, Map map)
+        // The roof the floor right above c puts on c (by its kind, Floors.CeilingFor, with the roof asked for and the one c
+        // has now); null without a floor above.
+        public static RoofDef CeilingOf(IntVec3 c, Map map, RoofDef asked = null)
         {
             IntVec3 up = Above(c, map);
-            return up.IsValid ? Floors.CeilingUnder(up, map) : null;
+            return up.IsValid ? Floors.CeilingUnder(up, map, asked, map.roofGrid.RoofAt(c)) : null;
         }
 
-        // A built floor (slab or ship deck) right above c, not a natural rock floor.
-        public static bool BuiltFloorAbove(IntVec3 c, Map map)
-        {
-            IntVec3 up = Above(c, map);
-            if (!up.IsValid || !ProjectZ.HasFloor(up, map))
-            {
-                return false;
-            }
-            FloorKind k = Floors.KindAt(up, map);
-            return k == FloorKind.Slab || k == FloorKind.ShipDeck;
-        }
-
-        // A roof that never drops: a built floor's (the floor itself) or the stairwell's (an opening). The thick roof
-        // under a natural rock floor (tall mountains) is vanilla's overhead mountain: it collapses as vanilla (drops rocks
-        // and stays), so it is not kept here.
+        // A roof that is never dropped by pods, shells or tornadoes: the roof under any floor (built or natural: the floor
+        // itself) or the stairwell's (an opening). A collapse for want of support is separate (DropRoofCellList_Patch):
+        // a floor roof or thin rock roof falls with its floor there, a thick one stays (vanilla).
         public static bool Kept(IntVec3 c, Map map)
         {
-            return c.InBounds(map) && (BuiltFloorAbove(c, map) || ProjectZ.Annex(map) != null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
+            return c.InBounds(map) && (FloorAbove(c, map) || ProjectZ.Annex(map) != null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
         }
 
         // The cell under c on the floor below (c on an upper floor), else Invalid.
@@ -90,7 +79,7 @@ namespace ProjectZ
             RoofDef cur = map.roofGrid.RoofAt(below);
             if (ProjectZ.HasFloor(c, map))
             {
-                RoofDef want = Floors.CeilingUnder(c, map);
+                RoofDef want = Floors.CeilingUnder(c, map, null, cur);
                 if (cur != want)
                 {
                     map.roofGrid.SetRoof(below, want);
@@ -193,7 +182,7 @@ namespace ProjectZ
                 {
                     return;
                 }
-                def = FloorRoof.CeilingOf(c, map);
+                def = FloorRoof.CeilingOf(c, map, asked);
             }
             else
             {
@@ -280,11 +269,14 @@ namespace ProjectZ
             }
             if (SlabCollapse.Resolving)
             {
+                // Any roof that vanishes when it collapses (a floor roof, a thin rock roof under a mountain-edge top) takes its
+                // floor down with it; a thick one stays (vanilla), and so does the floor over it.
                 // (by index: walls falling with a slab add the roofs they held to this same list, the buffer's own)
                 for (int i = 0; i < cells.Count; i++)
                 {
                     IntVec3 c = cells[i];
-                    if (c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_FloorRoof && FloorRoof.FloorAbove(c, map))
+                    RoofDef r = c.InBounds(map) ? map.roofGrid.RoofAt(c) : null;
+                    if (r != null && r.VanishOnCollapse && r != PZDefOf.PZ_StairwellRoof && FloorRoof.FloorAbove(c, map))
                     {
                         SlabCollapse.BufferCollapse(c, map, outCrushedThings);
                     }

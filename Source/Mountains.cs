@@ -10,14 +10,17 @@ namespace ProjectZ
     // default, new worlds only). On a map generated with it, the overhead-mountain (thick-roof) areas rise into the bands:
     //   - height H per ground column from the elevation captured at generation (NaturalElevation): 1 + one storey per
     //     Step of elevation over the thick-roof threshold (Step 0.10, user 2026-10-17), cut flat at the top level (the top level stays free, so
-    //     every top is standable); edge rock (thin or no roof) gets no height: a one-storey lip as in vanilla;
+    //     every top is standable); every other ground natural rock (the edge lip with a thin roof or none, ore, lone
+    //     outcrops) gets height 1: a walkable level-1 top (rock-top floors, RockTops); a tall thing under a rise gets
+    //     solid rock over it (a small level-2 plateau);
     //   - per level a cleanup like vanilla's: features narrower than 3 cells and level groups under 20 cells go, and
     //     ledges narrower than Terrace cells are filled up (one sheer cliff instead of 1-2 cell steps);
     //   - levels 1..H-1 of a column hold the column's ground rock (the nearest non-ore natural rock) on its rough
-    //     floor, level H only the rough floor (the mountain top); the cell under every rock floor gets the thick rock
-    //     roof (the floor kind's ceiling, Floors.CeilingFor);
-    //   - fog as vanilla's flood from the open: open air is unfogged, tops reached from it (4-way) too, rock next to
-    //     an unfogged non-rock cell (8-way) is a revealed face; the rest is fogged;
+    //     floor, level H only the rough floor (the mountain top); the cell under every band rock gets the thick rock
+    //     roof; ground roofs stay vanilla's (thick inside, thin at the edge), a ground rock without one gets the floor
+    //     roof (the support roof, as under a slab: Floors.CeilingFor);
+    //   - fog: only a one-cell rim of each top along the open air is revealed, with the rock faces next to it (BandFog);
+    //     the plateau behind opens when the player's pawns can walk there (MountainFog.Reveal);
     //   - ore lumps per level: the ground's ore share of its rock, the ground's ore mix, vanilla lump sizes.
     // Everything else (mining, collapse, temperature, darkness, regions) is vanilla on the Things and roofs made here.
     public static class Mountains
@@ -28,16 +31,13 @@ namespace ProjectZ
         public const int Terrace = 3;
 
         // last fill, for the test
-        public static int LastRock, LastTops, LastOre, LastFogged, LastMaxH;
+        public static int LastRock, LastTops, LastOre, LastFogged, LastMaxH, LastLips, LastLipRoofs, LastTallRaised, LastRim, LastHoles;
         public static double LastSeconds;
         public static byte[] LastHeights;
         public static string LastTimes;
 
         // The map has tall mountains (generated with them).
         public static bool On(Map map) => ProjectZ.Annex(map)?.tallMountains ?? false;
-
-        // A natural rock floor in a band (a mountain top, or the floor of a dug cell): Floors.KindAt.
-        public static bool NaturalFloor(IntVec3 c, Map map) => Floors.KindAt(c, map) == FloorKind.NaturalRock;
 
         // ---------------------------------------------------------------- heights
 
@@ -87,7 +87,59 @@ namespace ProjectZ
                     }
                 }
             }
+            RockTops(map, h, sx, gz);
             return h;
+        }
+
+        // Rock-top floors (isorim-pz-rocktop-floors-plan.md §3.2), after the cleanup (its level-2 ledge fill builds on
+        // level 1; lips raised before it would be pulled up into level 2):
+        //   - every ground natural rock (ore too, a lone outcrop too: user Q1) has at least a level-1 top: the edge lip
+        //     with a thin roof or none is walkable on top, like the rest of the mountain;
+        //   - a tall thing under a rise (ancient dangers; HeightRule.TallThingAt) gets solid rock on level 1 over it, raised
+        //     as a small plateau at least 3 cells wide (user Q2: the 3x3 round it, where the mountain rises): H 2, a top on
+        //     level 2. In a 2-storey world (cap 1) that H is cap + 1: level 1 is solid rock with its thick roof and no top
+        //     (decided 2026-10-18).
+        private static void RockTops(Map map, byte[] h, int sx, int gz)
+        {
+            int n = sx * gz;
+            LastLips = LastTallRaised = 0;
+            for (int i = 0; i < n; i++)
+            {
+                if (h[i] == 0 && (new IntVec3(i % sx, 0, i / sx).GetEdifice(map)?.def.building?.isNaturalRock ?? false))
+                {
+                    h[i] = 1;
+                    LastLips++;
+                }
+            }
+            List<int> tall = new List<int>();
+            for (int i = 0; i < n; i++)
+            {
+                if (h[i] >= 1 && HeightRule.TallThingAt(new IntVec3(i % sx, 0, i / sx), map) != null)
+                {
+                    tall.Add(i);
+                }
+            }
+            foreach (int i in tall)
+            {
+                int x = i % sx, z = i / sx;
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx, nz = z + dz;
+                        if (nx < 0 || nz < 0 || nx >= sx || nz >= gz)
+                        {
+                            continue;
+                        }
+                        int j = nz * sx + nx;
+                        if (h[j] == 1)
+                        {
+                            h[j] = 2;
+                            LastTallRaised++;
+                        }
+                    }
+                }
+            }
         }
 
         // 3x3 opening (erode, then dilate inside the set): parts narrower than 3 cells go. Off the map counts as set.
@@ -362,8 +414,9 @@ namespace ProjectZ
                 maxH = Mathf.Max(maxH, h[i]);
             }
             a.tallMountains = true;
-            LastRock = LastTops = LastOre = LastFogged = 0;
-            LastMaxH = maxH;
+            a.reachedLevels = new List<int>();   // (MountainFog: no level reached yet)
+            LastRock = LastTops = LastOre = LastFogged = LastLipRoofs = LastRim = LastHoles = 0;
+            LastMaxH = Mathf.Min(maxH, cap);
             if (maxH == 0)
             {
                 ProjectZ.DebugLog($"map {map}: tall mountains, nothing to rise (no overhead mountain)");
@@ -412,7 +465,9 @@ namespace ProjectZ
             bool[][] fog = new bool[cap + 1][];
             for (int L = 1; L <= cap; L++)
             {
-                fog[L] = BandFog(h, L, sx, gz);
+                fog[L] = BandFog(h, L, sx, gz, out int rim, out int holes);
+                LastRim += rim;
+                LastHoles += holes;
             }
             Patches.AnnexGen.FillRule rule = (c, m) =>
             {
@@ -425,7 +480,8 @@ namespace ProjectZ
                 int i = g.z * sx + g.x;
                 if (h[i] < L)
                 {
-                    return Patches.AnnexGen.OpenAir(c, m);
+                    // (a hole, a small enclosed shaft, starts fogged)
+                    return new Patches.AnnexGen.AnnexCell { terrain = PZDefOf.PZ_OpenAir, fogged = fog[L][i] };
                 }
                 return new Patches.AnnexGen.AnnexCell { terrain = rock[i].building.naturalTerrain, fogged = fog[L][i] };
             };
@@ -481,72 +537,121 @@ namespace ProjectZ
                     LastRock++;
                 }
             }
+            // the ground cell under a new top without a natural rock roof gets the floor roof (the support roof, as under a
+            // slab); vanilla's thin and thick rock roofs stay
+            for (int i = 0; i < n; i++)
+            {
+                IntVec3 g = new IntVec3(i % sx, 0, i / sx);
+                if (h[i] >= 1 && !(map.roofGrid.RoofAt(g)?.isNatural ?? false))
+                {
+                    map.roofGrid.SetRoof(g, PZDefOf.PZ_FloorRoof);
+                    LastLipRoofs++;
+                }
+            }
             LastSeconds = sw.Elapsed.TotalSeconds;
             LastTimes = $"heights+fog {tPrep:0.00}, terrain {tFill - tPrep:0.00}, ore plan {tOre:0.00}, rock (spawn {tSpawn:0.00}, roof {tRoof:0.00})";
-            ProjectZ.DebugLog($"map {map}: tall mountains up to level {maxH} (cap {cap}, step {Step}): {LastRock} rock, {LastTops} tops, {LastOre} ore cells, {LastFogged} fogged band cells, {LastSeconds:0.00} s");
+            ProjectZ.DebugLog($"map {map}: tall mountains up to level {maxH} (cap {cap}, step {Step}): {LastRock} rock, {LastTops} tops, {LastOre} ore cells, {LastFogged} fogged band cells (rim {LastRim}, holes {LastHoles}), lips {LastLips} ({LastLipRoofs} given the floor roof), {LastTallRaised} cells raised over tall things, {LastSeconds:0.00} s");
         }
 
-        // Fog of level L's band (index over ground cells): vanilla's flood from the open (FloodFillerFog: 4-way through
-        // non-blocking cells, then 8-way onto the blockers next to them).
-        private static bool[] BandFog(byte[] h, int L, int sx, int gz)
+        // Fog of level L's band at generation (index over ground cells), the rim rule (isorim-pz-mountains-fog-plan.md
+        // §2.1, user 2026-10-18):
+        //   - sky: open air (h < L) whose 4-way group touches the band's edge or has MinGroup cells or more: unfogged;
+        //   - hole: a smaller enclosed open-air group (a shaft): fogged, opened with its plateau (user Q2);
+        //   - rim: a top (h == L) with sky among its 8 neighbours (user Q3): unfogged, one cell wide;
+        //   - revealed face: rock (h > L) with sky or rim among its 8 neighbours (vanilla's 8-way blocker expansion; ore on
+        //     a cliff face shows, user Q4);
+        //   - everything else fogged: plateau interiors, pits, holes, inner rock and ore.
+        // Plateaus open later through MountainFog.Reveal ("where your pawns can walk to").
+        internal static bool[] BandFog(byte[] h, int L, int sx, int gz, out int rim, out int holes)
         {
             int n = sx * gz;
-            bool[] vis = new bool[n];
+            rim = holes = 0;
+            bool[] sky = new bool[n], seen = new bool[n], isRim = new bool[n];
+            List<int> group = new List<int>();
             Queue<int> q = new Queue<int>();
-            for (int i = 0; i < n; i++)
+            for (int i0 = 0; i0 < n; i0++)
             {
-                if (h[i] < L)
-                {
-                    vis[i] = true;   // open air (the sky)
-                    q.Enqueue(i);
-                }
-            }
-            while (q.Count > 0)
-            {
-                int i = q.Dequeue();
-                int x = i % sx, z = i / sx;
-                for (int d = 0; d < 4; d++)
-                {
-                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), nz = z + (d == 2 ? 1 : d == 3 ? -1 : 0);
-                    if (nx < 0 || nz < 0 || nx >= sx || nz >= gz)
-                    {
-                        continue;
-                    }
-                    int j = nz * sx + nx;
-                    if (!vis[j] && h[j] == L)
-                    {
-                        vis[j] = true;   // a top reached from the open
-                        q.Enqueue(j);
-                    }
-                }
-            }
-            bool[] fogged = new bool[n];
-            for (int i = 0; i < n; i++)
-            {
-                if (h[i] < L)
+                if (h[i0] >= L || seen[i0])
                 {
                     continue;
                 }
-                if (h[i] == L)
+                group.Clear();
+                bool edge = false;
+                seen[i0] = true;
+                q.Enqueue(i0);
+                while (q.Count > 0)
                 {
-                    fogged[i] = !vis[i];
-                    continue;
-                }
-                bool face = false;
-                int x = i % sx, z = i / sx;
-                for (int dz = -1; dz <= 1 && !face; dz++)
-                {
-                    for (int dx = -1; dx <= 1 && !face; dx++)
+                    int i = q.Dequeue();
+                    group.Add(i);
+                    int x = i % sx, z = i / sx;
+                    if (x == 0 || z == 0 || x == sx - 1 || z == gz - 1)
                     {
-                        int nx = x + dx, nz = z + dz;
-                        if ((dx != 0 || dz != 0) && nx >= 0 && nz >= 0 && nx < sx && nz < gz)
+                        edge = true;
+                    }
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), nz = z + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                        if (nx < 0 || nz < 0 || nx >= sx || nz >= gz)
                         {
-                            int j = nz * sx + nx;
-                            face = h[j] <= L && vis[j];
+                            continue;
+                        }
+                        int j = nz * sx + nx;
+                        if (!seen[j] && h[j] < L)
+                        {
+                            seen[j] = true;
+                            q.Enqueue(j);
                         }
                     }
                 }
-                fogged[i] = !face;
+                bool open = edge || group.Count >= MinGroup;
+                foreach (int i in group)
+                {
+                    sky[i] = open;
+                }
+                if (!open)
+                {
+                    holes += group.Count;
+                }
+            }
+            bool[] fogged = new bool[n];
+            // tops first (the rim), then rock (faces next to the sky or the rim)
+            for (int pass = 0; pass < 2; pass++)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    if (h[i] < L)
+                    {
+                        if (pass == 0)
+                        {
+                            fogged[i] = !sky[i];
+                        }
+                        continue;
+                    }
+                    if (h[i] == L != (pass == 0))
+                    {
+                        continue;
+                    }
+                    bool open = false;
+                    int x = i % sx, z = i / sx;
+                    for (int dz = -1; dz <= 1 && !open; dz++)
+                    {
+                        for (int dx = -1; dx <= 1 && !open; dx++)
+                        {
+                            int nx = x + dx, nz = z + dz;
+                            if ((dx != 0 || dz != 0) && nx >= 0 && nz >= 0 && nx < sx && nz < gz)
+                            {
+                                int j = nz * sx + nx;
+                                open = sky[j] || pass == 1 && isRim[j];
+                            }
+                        }
+                    }
+                    fogged[i] = !open;
+                    if (pass == 0 && open)
+                    {
+                        isRim[i] = true;
+                        rim++;
+                    }
+                }
             }
             return fogged;
         }
