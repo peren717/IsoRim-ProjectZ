@@ -760,7 +760,7 @@ namespace ProjectZ.Dev
                     int hurt = muP1.health.hediffSet.hediffs.Count(h => h is Hediff_Injury);
                     bool fell = muP1.Spawned && ProjectZ.FloorOf(muP1.Position, map) == 0 && muP1.Position.InHorDistOf(c, 1.5f);
                     bool steelFell = muSteel.Spawned && ProjectZ.FloorOf(muSteel.Position, map) == 0 && muSteel.Position.InHorDistOf(c, 2.5f);
-                    Result("M4 the colonist and the steel on the top fell to the tunnel floor; the colonist bruised", fell && steelFell && (hurt > muInt % 1000 || Gravity.PawnsBruised > muInt / 1000),
+                    Result("M4 the colonist and the steel on the top fell to the tunnel floor; the colonist unhurt (one floor)", fell && steelFell && hurt == muInt % 1000 && Gravity.PawnsBruised == muInt / 1000,
                         $"colonist at {muP1.Position} L{ProjectZ.FloorOf(muP1.Position, map)}, injuries {muInt % 1000} -> {hurt}, bruised count {muInt / 1000} -> {Gravity.PawnsBruised}; steel at {muSteel.Position} L{ProjectZ.FloorOf(muSteel.Position, map)}");
                     Result("M4 the stool on the next top stays; nothing collapsed", muStool.Spawned && muStool.Position == muStoolAt && PZStats.slabCollapses == muCollapses,
                         $"stool {muStool.Position} (was {muStoolAt}), floor collapses {PZStats.slabCollapses - muCollapses}");

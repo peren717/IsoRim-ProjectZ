@@ -11,7 +11,7 @@ namespace ProjectZ
     // four sides: a slab edge, a hole, the stairwell) down to the first floor or ground below n whose column is open
     // (Column.OpenAbove: no landing on roofs). Reachability, region searches and the router see it as a link from c's
     // region to the landing's region, never the other way. Pawns only take it when no stair route exists (StairRouter
-    // pass 2); landing bruises and staggers them.
+    // pass 2); landing staggers them, and bruises them from two floors down (JumpGrid.Hurts).
     public struct Jump
     {
         public Region to;
@@ -22,7 +22,8 @@ namespace ProjectZ
     public class JumpGrid : MapComponent
     {
         public const int JumpTicks = 30;
-        public const float DamagePerFloor = 3f;   // Blunt, twice (vanilla bruises)
+        public const float DamagePerFloor = 3f;   // Blunt, twice (vanilla bruises), from HurtFrom floors down
+        public const int HurtFrom = 2;            // a drop of one floor only staggers (user 2026-10-19)
         public const int StaggerTicks = 60;
 
         private static readonly List<Jump> None = new List<Jump>();
@@ -229,11 +230,18 @@ namespace ProjectZ
             return 0;
         }
 
-        // A pawn just landed: hurt and staggered on this map's next tick.
+        // A pawn just landed (every drop between floors comes here: jumps, falls through holes and shafts, gravity, slab
+        // collapses): staggered on this map's next tick, and bruised from HurtFrom floors down.
         public void Landed(Pawn p, int fallen)
         {
             landings.Add(new KeyValuePair<Pawn, int>(p, fallen));
         }
+
+        // The one landing rule: a drop of one floor does no harm (it still staggers).
+        public static bool Hurts(int fallen) => fallen >= HurtFrom;
+
+        // counters (tests): landings that staggered, landings that hurt
+        public static int Staggers, HurtLandings;
 
         public override void MapComponentTick()
         {
@@ -253,14 +261,19 @@ namespace ProjectZ
                 // (who is carried is read first: the carrier's own hurt can end its job and drop them)
                 Pawn carried = p.carryTracker?.CarriedThing as Pawn;
                 ProjectZ.DebugLog($"{p} landed ({fallen} floor(s)), carrying {carried}");
-                Hurt(p, fallen);
-                if (carried != null && !carried.Dead && !carried.Destroyed)
+                if (Hurts(fallen))
                 {
-                    Hurt(carried, fallen);   // Q4: the carried pawn is bruised too
+                    HurtLandings++;
+                    Hurt(p, fallen);
+                    if (carried != null && !carried.Dead && !carried.Destroyed)
+                    {
+                        Hurt(carried, fallen);   // Q4: the carried pawn is bruised too
+                    }
                 }
                 if (!p.Dead && p.Spawned)
                 {
                     p.stances?.stagger?.StaggerFor(StaggerTicks);
+                    Staggers++;
                 }
                 Dev.PZStats.landings++;
             }

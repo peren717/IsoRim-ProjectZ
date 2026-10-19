@@ -291,8 +291,8 @@ namespace ProjectZ.Dev
                     }
                     else
                     {
-                        Result("nobody and nothing on open air; the drafted colonist and the steel fell to the ground (bruised)",
-                            !OnOpenAir(map) && ProjectZ.FloorOf(zSitter.Position, map) == 0 && zSitter.Position.Standable(map) && zSteel.Spawned && ProjectZ.FloorOf(zSteel.Position, map) == 0 && Injuries(zSitter) > 0,
+                        Result("nobody and nothing on open air; the drafted colonist and the steel fell to the ground (one floor: no bruises)",
+                            !OnOpenAir(map) && ProjectZ.FloorOf(zSitter.Position, map) == 0 && zSitter.Position.Standable(map) && zSteel.Spawned && ProjectZ.FloorOf(zSteel.Position, map) == 0 && ZHits(zSitter, "Blunt/") == 0,
                             $"{zSitter} at {zSitter.Position} (injuries {InjuryNames(zSitter)}); steel at {zSteel.PositionHeld}");
                     }
                     Result("the island nobody reaches is never worked", Slab.At(zIsland, map) && zIslandJobs == 0 && map.designationManager.DesignationAt(zIsland, DesignationDefOf.RemoveFoundation) != null,
@@ -471,8 +471,8 @@ namespace ProjectZ.Dev
                     int roofs = zPavilion.Cells.Count(g => map.roofGrid.Roofed(g));
                     Result("the column destroyed: the roof under the slab collapses, the slab with it", left == 0 && roofs == 0 && PZStats.slabCollapses - zCollapses == zPavilion.Area,
                         $"slab cells left {left}, roofs left {roofs}, collapses {PZStats.slabCollapses - zCollapses}");
-                    Result("the colonist on the slab fell to the ground: the collapse crush (as everyone under it) and, alive, the fall bruises",
-                        ProjectZ.FloorOf(zOnSlab.PositionHeld, map) == 0 && ZHits(zOnSlab, "Crush/Collapse") > 0 && (zOnSlab.Dead || ZHits(zOnSlab, "Blunt/") >= 2),
+                    Result("the colonist on the slab fell to the ground: the collapse crush (as everyone under it), no fall bruises (one floor)",
+                        ProjectZ.FloorOf(zOnSlab.PositionHeld, map) == 0 && ZHits(zOnSlab, "Crush/Collapse") > 0 && ZHits(zOnSlab, "Blunt/") == 0,
                         $"{zOnSlab} at {zOnSlab.PositionHeld} (floor {ProjectZ.FloorOf(zOnSlab.PositionHeld, map) + 1}), dead {zOnSlab.Dead}, hits {ZHitList(zOnSlab)}, injuries {zInjOnSlab} -> {Injuries(zOnSlab)}: {InjuryNames(zOnSlab)}");
                     Result("the colonist under it took the game's collapse crush", ZHits(zBelow, "Crush/Collapse") > 0, $"{zBelow} at {zBelow.PositionHeld}, hits {ZHitList(zBelow)}, injuries {zInjBelow} -> {Injuries(zBelow)}: {InjuryNames(zBelow)}");
                     Result("the steel fell to the ground, the table was destroyed (its leavings fell too)",

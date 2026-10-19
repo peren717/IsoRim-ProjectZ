@@ -915,8 +915,8 @@ namespace ProjectZ.Dev
                 IntVec3 animalAt = animal.Spawned ? animal.Position : IntVec3.Invalid;
                 bool steelOk = steelAt.IsValid && ProjectZ.FloorOf(steelAt, map) == 1 && Floors.KindAt(steelAt, map) == FloorKind.NaturalRock;
                 bool animalOk = animalAt.IsValid && ProjectZ.FloorOf(animalAt, map) == 1 && Floors.KindAt(animalAt, map) == FloorKind.NaturalRock;
-                Result("G2 x rock-top: steel and an animal put on the open air over a mountain top fall onto the top (one floor, the animal to be bruised, no roof broken)",
-                    steelOk && animalOk && Gravity.Fell >= fell0 + 2 && Gravity.PawnsBruised > bruised0 && Gravity.RoofsBroken == broken0,
+                Result("G2 x rock-top: steel and an animal put on the open air over a mountain top fall onto the top (one floor: the animal not bruised; no roof broken)",
+                    steelOk && animalOk && Gravity.Fell >= fell0 + 2 && Gravity.PawnsBruised == bruised0 && Gravity.RoofsBroken == broken0,
                     $"air {air} over top {top}: steel at {steelAt} (level {(steelAt.IsValid ? ProjectZ.FloorOf(steelAt, map) : -9)}), animal at {animalAt} (level {(animalAt.IsValid ? ProjectZ.FloorOf(animalAt, map) : -9)}); fell +{Gravity.Fell - fell0}, bruised +{Gravity.PawnsBruised - bruised0}, roofs broken +{Gravity.RoofsBroken - broken0}");
                 if (steel.Spawned)
                 {
@@ -938,7 +938,7 @@ namespace ProjectZ.Dev
                 return true;
             }
             int hurt = rtAnimal.health.hediffSet.hediffs.Count(h => h is Hediff_Injury) - rtAnimalHurt0;
-            Result("G2 x rock-top: the animal that fell onto the top took the fall bruises", hurt > 0 && !rtAnimal.Dead,
+            Result("G2 x rock-top: the animal that fell one floor onto the top is unhurt", hurt == 0 && !rtAnimal.Dead,
                 $"{rtAnimal}: new injuries {hurt} ({string.Join(",", rtAnimal.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}), dead {rtAnimal.Dead}");
             if (rtAnimal.Spawned)
             {

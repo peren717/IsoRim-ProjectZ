@@ -11,7 +11,7 @@ namespace ProjectZ
     // "air". Whatever is spawned or placed on air, by the game or any mod going through the game's entry points:
     //   - pawns and items (corpses, minified things, chunks) fall to the first floor below in their column (Column.Landing:
     //     slab, ship deck, mountain top, ground). A void row's thing goes to the edge row of the band below the gap. Pawns
-    //     falling one floor or more get the slab-collapse bruises (JumpGrid.Landed).
+    //     falling land as from a jump (JumpGrid.Landed: staggered, bruised from two floors down).
     //   - a roof passed on the way (the ceiling of a room below open air) breaks like under a drop pod (the game's own
     //     RoofCollapserImmediate.DropRoofInCells for that cell: crush damage under it, rubble, the roof gone), for every
     //     falling thing. A thick (rock) roof never breaks: the fall stops and the thing takes the game's nearest placement
@@ -202,7 +202,10 @@ namespace ProjectZ
         {
             if (fallen >= 1 && p.Spawned)
             {
-                PawnsBruised++;
+                if (JumpGrid.Hurts(fallen))
+                {
+                    PawnsBruised++;
+                }
                 JumpGrid.For(p.Map)?.Landed(p, fallen);
             }
         }

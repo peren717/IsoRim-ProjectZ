@@ -21,7 +21,7 @@ namespace ProjectZ.Dev
     //   - real jumps ordered as the targeter does (Verb.OrderForceTarget) on real ticks: ground -> floor 2, floor 2 ->
     //     ground, floor 2 -> floor 2 across the gap; each lands where asked, unhurt; flights between floors filmed in
     //     bursts at yaw 45 and 225 with floor 2 viewed and hidden;
-    //   - a plain jump-down off the slab edge (no pack, ProjectZ's jump link) bruises, for comparison;
+    //   - a plain jump-down off the slab edge (no pack, ProjectZ's jump link): one floor, unhurt (only 2+ floors bruise);
     //   - a sanguophage's longjump ground -> floor 2;
     //   - the game's own AI jump: a colony paramedic mech given a rescue of a downed colonist on floor 2 jumps up to it
     //     (JobGiver_AIJumpToJobTarget, its constant think tree).
@@ -222,7 +222,7 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     int inj = Injuries(jpPlain) - jpInjBefore;
-                    Result("plain jump-down (no pack) bruises, unlike the pack's landing", ProjectZ.FloorOf(jpPlain.Position, map) == 0 && inj > 0, $"at {jpPlain.Position}, new injuries {inj} ({InjuryNames(jpPlain)})");
+                    Result("plain jump-down of one floor (no pack): unhurt (one floor), as the pack's landing", ProjectZ.FloorOf(jpPlain.Position, map) == 0 && inj == 0, $"at {jpPlain.Position}, new injuries {inj} ({InjuryNames(jpPlain)})");
                     Wait(2, "jp_mech");
                     return true;
                 }

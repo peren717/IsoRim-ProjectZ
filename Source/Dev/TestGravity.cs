@@ -1120,7 +1120,7 @@ namespace ProjectZ.Dev
             RdTicks(10);
             int wood = RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).Where(x => x.def == ThingDefOf.WoodLog && Levels.LevelOf(x.Position, map) == 0).Sum(x => x.stackCount);
             Result("G14 the remover worked from the next cell, never on the slab", checks > 0 && bad == 0, $"{checks} work ticks, {bad} bad {badLine}");
-            GvExpect("G14 the pawn on it fell to the ground, bruised (user 2026-10-18: no more stepping off)", !Slab.At(slab, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Gravity.PawnsBruised >= 1 && Injuries(v) > inj, true,
+            GvExpect("G14 the pawn on it fell to the ground, unhurt (one floor; user 2026-10-18: no more stepping off)", !Slab.At(slab, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Injuries(v) == inj, true,
                 $"removed after {t} ticks; pawn {GvAt(v, map)}, injuries {inj} -> {Injuries(v)}");
             GvExpect("G14 the steel on it fell to the ground", steel.Spawned && Levels.LevelOf(steel.Position, map) == 0, true, GvAt(steel, map));
             Result("G14 the slab returns no materials (user 2026-10-18)", wood == 0 && RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).All(x => x.def != ThingDefOf.WoodLog), $"wood on the ground {wood}");
@@ -1190,7 +1190,7 @@ namespace ProjectZ.Dev
             }
             RdTicks(10);
             Result("G14d the remover worked from the next deck cell, never on the deck it took up", designated && checks > 0 && bad == 0, $"designated {designated}; {checks} work ticks, {bad} bad {badLine}; deck now {deck.GetTerrain(map).defName} after {t} ticks");
-            GvExpect("G14d the pawn on it fell to the ground floor (the substructure), bruised", !ShipDeck.At(deck, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Injuries(v) > inj, true, $"pawn {GvAt(v, map)}, injuries {inj} -> {Injuries(v)}; {Gravity.Counters}");
+            GvExpect("G14d the pawn on it fell to the ground floor (the substructure), unhurt (one floor)", !ShipDeck.At(deck, map) && v.Spawned && Levels.LevelOf(v.Position, map) == 0 && Injuries(v) == inj, true, $"pawn {GvAt(v, map)}, injuries {inj} -> {Injuries(v)}; {Gravity.Counters}");
             GvExpect("G14d nothing on air", GvOnAir(map).Count == 0, true, GvList(GvOnAir(map), map));
             int refund = RdStrip(map).SelectMany(c => map.thingGrid.ThingsListAtFast(c)).Where(x => x.def == ThingDefOf.Steel || x.def == ThingDefOf.GravlitePanel).Sum(x => x.stackCount);
             Result("G14d the deck returns no materials (user 2026-10-18)", refund == refund0, $"steel and gravlite in the strip {refund0} -> {refund}");

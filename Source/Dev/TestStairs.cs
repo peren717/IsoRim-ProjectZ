@@ -230,7 +230,7 @@ namespace ProjectZ.Dev
                         TickUntil(3000, () => ProjectZ.FloorOf(w.Position, map) == 0, "s_f4_land", 1);
                         return true;
                     }
-                    Result("F4 walled off: the pawn jumps down, lands bruised and staggered", w != null && jumpsColonists - jumpsColAt >= 1 && HasBruise(w) && !w.Downed, $"{w} at {w?.Position}, bruised {HasBruise(w)}, staggered {w?.stances?.stagger?.Staggered}, downed {w?.Downed}; {Counts()}");
+                    Result("F4 walled off: the pawn jumps down one floor, lands staggered, unhurt (one floor: no bruise)", w != null && jumpsColonists - jumpsColAt >= 1 && !HasBruise(w) && w.stances?.stagger != null && w.stances.stagger.Staggered && !w.Downed, $"{w} at {w?.Position}, bruised {HasBruise(w)}, staggered {w?.stances?.stagger?.Staggered}, downed {w?.Downed}; {Counts()}");
                     ShotAt(map, 1, ProjectZ.GroundCellOf(w.Position, map), 7f);
                     Wait(3, "s_f4_land_take");
                     return true;
@@ -325,7 +325,7 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     hungry = false;
                     List<Pawn> cols = Colonists(map);
-                    Result("F1 stairs broken: every upstairs colonist jumps down for food within 2500 ticks", OnFloor(map, cols, 0) == cols.Count && jumpsColonists - jumpsColAt >= cols.Count && climbsColonists + climbsHostiles - climbsAt == 0 && cols.All(p => HasBruise(p) && !p.Downed),
+                    Result("F1 stairs broken: every upstairs colonist jumps down for food within 2500 ticks (one floor: unhurt)", OnFloor(map, cols, 0) == cols.Count && jumpsColonists - jumpsColAt >= cols.Count && climbsColonists + climbsHostiles - climbsAt == 0 && cols.All(p => !HasBruise(p) && !p.Downed),
                         $"{OnFloor(map, cols, 0)} of {cols.Count} down after {ticksTotal - ticksLeft} ticks; bruised {cols.Count(HasBruise)}, downed {cols.Count(p => p.Downed)}; {Counts()}");
                     stage = "s_f5";
                     return true;
@@ -428,7 +428,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
 
-                // ---- F7: an upstairs colonist carries a downed one down to a bed by jumping (both bruised)
+                // ---- F7: an upstairs colonist carries a downed one down to a bed by jumping (one floor: neither bruised)
                 case "s_f7":
                 {
                     List<Pawn> cols = Colonists(map);
@@ -485,7 +485,7 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn carrier = ById(map, carrierId);
                     Pawn patient = map.mapPawns.AllPawns.FirstOrDefault(p => p.ThingID == patientId);
-                    Result("F7 a colonist upstairs carries a downed one down by jumping; both bruised (Q4)", carrier != null && patient != null && ProjectZ.FloorOf(patient.PositionHeld, map) == 0 && jumpsColonists - jumpsColAt >= 1 && HasBruise(carrier) && HasBruise(patient),
+                    Result("F7 a colonist upstairs carries a downed one down by jumping; one floor: neither bruised", carrier != null && patient != null && ProjectZ.FloorOf(patient.PositionHeld, map) == 0 && jumpsColonists - jumpsColAt >= 1 && !HasBruise(carrier) && !HasBruise(patient),
                         $"{carrier} at {carrier?.Position}; {patient} at {patient?.PositionHeld} in bed {patient?.InBed()}; bruises: carrier {HasBruise(carrier)}, patient {patient?.health.hediffSet.hediffs.Count(h => h.def.defName == "Bruise")}; {Counts()}");
                     stage = "s_f7_panic";
                     return true;
