@@ -46,6 +46,21 @@ namespace ProjectZ.Dev
         private static HashSet<int> fgE, fgEB, fgE2;
         private static readonly List<IntVec3> fgGap = new List<IntVec3>();
         private static readonly List<Pawn> fgActors = new List<Pawn>();
+        private static readonly Dictionary<Pawn, IntVec3> fgUpAt = new Dictionary<Pawn, IntVec3>();
+
+        // G5: every actor has stood on level 1 (its rim) at some check; the first cell each stood on.
+        private static bool FgSeenUp(Map map)
+        {
+            foreach (Pawn p in fgActors)
+            {
+                if (!fgUpAt.ContainsKey(p) && p.Spawned && ProjectZ.FloorOf(p.Position, map) == 1)
+                {
+                    fgUpAt[p] = p.Position;
+                }
+            }
+            return fgUpAt.Count == fgActors.Count;
+        }
+
         private static readonly List<IntVec3> fgWalkTo = new List<IntVec3>();
         private static readonly Dictionary<Pawn, IntVec3> fgActorTo = new Dictionary<Pawn, IntVec3>();
 
@@ -624,7 +639,13 @@ namespace ProjectZ.Dev
                     int left = FgFoggedIn(map, fgEB);
                     int changed = FgChanged(map, out _, out _);
                     Result("G2b colonists bridged the gap with slabs; nothing opened yet", built && changed == 0, $"slabs built {built}; fog changes {changed}; other plateau fogged {left}");
-                    fgPawn = fgActors.First();
+                    // (a builder on this side of the gap; one may have gone down for materials as the last slab was laid)
+                    fgPawn = fgActors.FirstOrDefault(p => p.Spawned && ProjectZ.FloorOf(p.Position, map) == 1) ?? fgActors.First();
+                    if (ProjectZ.FloorOf(fgPawn.Position, map) != 1)
+                    {
+                        Info($"G2b {fgPawn} is off the rim ({fgPawn.Position}): back to {fgU}");
+                        Teleport(fgPawn, fgU);
+                    }
                     fgStepRevealsAt = MountainFog.StepReveals;
                     Draft(fgPawn, true);
                     fgPawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, fgF), JobTag.Misc);
@@ -884,15 +905,27 @@ namespace ProjectZ.Dev
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
                     Info($"G5 enemy {raider} ({raider.Faction}) at {raider.Position} (jump target valid from {stand}) jumps to {rims[0]}; pods: wild {wild} -> {rims[1]}, guest {guest?.ToString() ?? "none (no friendly faction)"} ({guest?.Faction}) -> {rims[2]}, prisoner {prisoner} (host {prisoner.HostFaction}) -> {rims[3]}");
 
-                    TickUntil(2400, () => fgActors.All(p => p.Spawned && ProjectZ.FloorOf(p.Position, map) == 1), "fg_g5_up", 10);
+                    // (each one counts once it has stood on its rim: one may walk or jump down again before the last
+                    // one arrives)
+                    fgUpAt.Clear();
+                    TickUntil(2400, () => FgSeenUp(map), "fg_g5_up", 10);
                     return true;
                 }
                 case "fg_g5_up":
                 {
                     int changed = FgChanged(map, out _, out _);
-                    string where = string.Join("; ", fgActors.Select(p => $"{p} {(p.Spawned ? p.Position + " level " + ProjectZ.FloorOf(p.Position, map) : "not spawned")}"));
+                    string where = string.Join("; ", fgActors.Select(p => $"{p} {(fgUpAt.TryGetValue(p, out IntVec3 at) ? "up at " + at : "never up")}, now {(p.Spawned ? p.Position + " level " + ProjectZ.FloorOf(p.Position, map) : "not spawned")}"));
                     Result("G5 an enemy jumped onto a rim, a wild animal, a guest and a prisoner came out of pods on rims: no fog changed",
-                        fgActors.All(p => p.Spawned && ProjectZ.FloorOf(p.Position, map) == 1) && changed == 0, $"{where}; fog changes {changed}");
+                        fgUpAt.Count == fgActors.Count && changed == 0, $"{where}; fog changes {changed}");
+                    // (one that went down since walks from where it stood on its rim)
+                    foreach (Pawn p in fgActors)
+                    {
+                        if (p.Spawned && ProjectZ.FloorOf(p.Position, map) != 1 && fgUpAt.TryGetValue(p, out IntVec3 back))
+                        {
+                            Info($"G5 {p} left its rim ({p.Position}): back to {back} for the walk");
+                            Teleport(p, back);
+                        }
+                    }
                     // each walks along its rim (path steps next to the fog)
                     for (int i = 0; i < fgActors.Count; i++)
                     {
