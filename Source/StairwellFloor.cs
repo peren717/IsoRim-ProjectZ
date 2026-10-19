@@ -92,8 +92,7 @@ namespace ProjectZ
             foreach (IntVec3 c in site.OccupiedRect())
             {
                 IntVec3 up = StairShape.Above(c, map);
-                // (a bare natural top is no slab: it opens when the rock under it is mined from above, MineSide)
-                if (MustClear(up, map) && !Floors.UnbuiltNatural(up, map) && map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation) == null)
+                if (MustClear(up, map) && map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation) == null)
                 {
                     map.designationManager.AddDesignation(new Designation(up, DesignationDefOf.RemoveFoundation));
                     marks?.cells.Add(up);

@@ -24,9 +24,10 @@ namespace ProjectZ.Dev
     //      wood on the top fall into the pit (one floor: no injury, staggered); fog of the pit and its walls; the pit floor
     //      stays (nothing below the ground); saved and reloaded identical
     //   D3 the group rule at F: three marked rocks at a face reachable on the ground are mined there (vanilla), never from above
-    //   D5 stairs on ground rock under the plateau: placement accepted (fail-before: "Ceiling is rock"); builders on the
-    //      plateau mine the rock from above (the vanilla blocker job's place) and build the stairs from the rim; the exit
-    //      top stays; a colonist walks down into the pit and back up; deconstructed from above
+    //   D5 stairs: vanilla placement refuses them on unmined rock in the fog and on seen rock; the footprint marked with
+    //      vanilla Mine from the plateau is mined from above (cells open, revealed); the stairs placed in the pit (ground
+    //      view, stairs tool with the x-ray) are built from the rim with nobody going down; the exit top stays; a colonist
+    //      walks down into the pit and back up; deconstructed from above
     //   D6 falls: a one-floor jump (J1) does no harm but staggers; a two-floor jump (J2) hurts
     //   D7 IsoRim's x-ray: the stairs tool on the ground shows the floor above only; the Mine tool on the ground the floor
     //      above, on level 1 both ways; no tool nothing
@@ -506,16 +507,37 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ D5: stairs from above
                 case "md_d5":
                 {
-                    MdStart(map, MuRect(new[] { mdG0 }, map, 5), false);
+                    MdStart(map, MuRect(new[] { mdG0 }, map, 5), true);
+                    // vanilla placement: no stairs on unmined rock in the fog
+                    AcceptanceReport fogged = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, MdStairs, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
+                    Result("D5 stairs on unmined rock in the fog: refused as vanilla ('Cannot place in undiscovered areas')", !fogged.Accepted && fogged.Reason == "CannotPlaceInUndiscovered".Translate(),
+                        $"{MdStairs} fogged {map.fogGrid.IsFogged(MdStairs)}: '{(fogged.Accepted ? "ok" : fogged.Reason)}'");
+                    // the footprint marked with vanilla Mine (seen from the plateau): mined from above, the cells open
+                    new Designator_Mine().DesignateMultiCell(MdFoot);
+                    List<Pawn> crew = MdCrew(map);
+                    MdWork(map, crew, WorkTypeDefOf.Mining);
+                    MuRun(400, 43000, () => MdFoot.All(c => !MuRockOrOre(c, map)), "md_d5_dug");
+                    return true;
+                }
+
+                case "md_d5_dug":
+                {
+                    bool dug = MdFoot.All(c => !MuRockOrOre(c, map) && L1(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && !map.fogGrid.IsFogged(c));
+                    Result("D5 the stairs' footprint marked with vanilla Mine from the plateau is mined from above: the cells open and revealed",
+                        dug && MineUp.MinedFromAbove - mdMinedA == 3, $"{string.Join(", ", MdFoot.Select(c => $"{c} {(MuRockOrOre(c, map) ? "rock" : "open")} {(map.fogGrid.IsFogged(c) ? "fog" : "seen")} roof {MuRoof(c, map)}"))}; mined from above {MineUp.MinedFromAbove - mdMinedA}");
+                    // vanilla placement: no stairs on unmined (now seen) rock: the wall east of the pit
+                    IntVec3 wall = MdStairs + IntVec3.East;
+                    AcceptanceReport rock = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, wall, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
+                    Result("D5 stairs on unmined rock (seen): refused as vanilla ('Space already occupied')", !rock.Accepted && rock.Reason == "SpaceAlreadyOccupied".Translate() && !map.fogGrid.IsFogged(wall),
+                        $"{wall} {wall.GetEdifice(map)?.def.defName ?? "-"}, fogged {map.fogGrid.IsFogged(wall)}: '{(rock.Accepted ? "ok" : rock.Reason)}'");
                     AcceptanceReport place = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, MdStairs, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
-                    Result("D5 stairs on ground rock under the plateau's bare tops: placement accepted", place.Accepted, $"{MdStairs}: '{(place.Accepted ? "ok" : place.Reason)}'");
+                    Result("D5 stairs in the opened pit (ground view): placement accepted", place.Accepted, $"{MdStairs}: '{(place.Accepted ? "ok" : place.Reason)}'");
                     if (!place.Accepted)
                     {
                         MdEnd(map, "D5", "md_d6");
                         return true;
                     }
-                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, MdStairs, map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
-                    // the stairs tool on the ground with the x-ray of the level above (D7 shot), the blueprint in view
+                    // the stairs tool in the ground view (the x-ray of the level above shows where the exit lands)
                     FloorView.Set(0);
                     ShotAt(map, 0, MdStairs, 7f);
                     MuPointer(MdStairs);
@@ -541,6 +563,7 @@ namespace ProjectZ.Dev
                     muPointer = IntVec3.Invalid;
                     Find.UIRoot.screenshotMode.Active = false;
                     Find.DesignatorManager.Deselect();
+                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, MdStairs, map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
                     for (int i = 0; i < 4; i++)
                     {
                         Thing w = ThingMaker.MakeThing(ThingDefOf.WoodLog);
@@ -548,11 +571,10 @@ namespace ProjectZ.Dev
                         GenPlace.TryPlaceThing(w, L1(mdG0 + new IntVec3(0, 0, -3), map), map, ThingPlaceMode.Near);
                     }
                     List<Pawn> crew = MdCrew(map);
-                    MdWork(map, crew, WorkTypeDefOf.Mining, WorkTypeDefOf.Construction, WorkTypeDefOf.Hauling);
+                    MdWork(map, crew, WorkTypeDefOf.Construction, WorkTypeDefOf.Hauling);
                     mdFlag = false;    // a builder went down to the ground before the stairs stood
-                    mdFlag2 = false;   // the blocker mined from above (no designation)
                     mdNote = null;
-                    MuRun(500, 43000, () => MuStairs(map, MdStairs) != null, "md_d5_built", () =>
+                    MuRun(500, 43050, () => MuStairs(map, MdStairs) != null, "md_d5_built", () =>
                     {
                         foreach (Pawn p in MdCrew(map))
                         {
@@ -560,10 +582,6 @@ namespace ProjectZ.Dev
                             {
                                 mdFlag = true;
                                 mdNote = mdNote ?? $"{p} at {p.Position} ({p.CurJobDef?.defName})";
-                            }
-                            if (p.CurJobDef == PZMineDefOf.PZ_MineFromAbove && p.CurJob.ignoreDesignations)
-                            {
-                                mdFlag2 = true;
                             }
                         }
                     });
@@ -573,12 +591,8 @@ namespace ProjectZ.Dev
                 case "md_d5_built":
                 {
                     Building_Stairs st = MuStairs(map, MdStairs);
-                    bool rockGone = MdFoot.All(c => !MuRockOrOre(c, map));
-                    bool wellOpen = MdFoot.All(c => L1(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir);
                     IntVec3 e = L1(MdExitGround, map);
-                    Result("D5 builders on the plateau mined the rock under the stairs from above (the blocker job) and built the stairs from the rim: rock gone, the stairwell open",
-                        st != null && rockGone && wellOpen && mdFlag2 && MineUp.MinedFromAbove - mdMinedA == 3,
-                        $"built {st != null}, rock gone {rockGone}, well open {wellOpen}, blocker from above seen {mdFlag2}, mined from above {MineUp.MinedFromAbove - mdMinedA}; roofs {string.Join(" ", MdFoot.Select(c => MuRoof(c, map)))}");
+                    Result("D5 builders on the plateau built the stairs in the pit from the rim", st != null, $"built {st != null}; roofs {string.Join(" ", MdFoot.Select(c => MuRoof(c, map)))}");
                     Result("D5 no builder went down to the ground before the stairs stood", !mdFlag, mdNote ?? "none");
                     Result("D5 the exit is the plateau top (nothing laid), the stairs lead there", st != null && st.TopCell == e && TmTop(e, map),
                         $"exit {st?.TopCell} ({e.GetTerrain(map).defName})");

@@ -218,11 +218,7 @@ namespace ProjectZ
                     IntVec3 up = StairShape.Above(c, map);
                     if (StairwellFloor.MustClear(up, map))
                     {
-                        if (Floors.UnbuiltNatural(up, map))
-                        {
-                            Shaft.Open(c, map, this);   // a bare top over the stairs (the rock under it went with the spawn)
-                        }
-                        else if (ShipDeck.At(up, map))
+                        if (ShipDeck.At(up, map))
                         {
                             ShipStairs.ClearDeck(up, map);
                         }
@@ -437,13 +433,6 @@ namespace ProjectZ
     // impassable on it.
     public class PlaceWorker_Stairs : PlaceWorker
     {
-        // Stairs may be placed on natural rock (stairs from above: the builders mine it first, GenConstruct's blocker job,
-        // from above where MineSide says so). Where the ceiling over such rock can't open, ThickRoofCheck refuses.
-        public override bool ForceAllowPlaceOver(BuildableDef other)
-        {
-            return other is ThingDef td && td.mineable && td.building != null && td.building.isNaturalRock;
-        }
-
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
@@ -482,10 +471,9 @@ namespace ProjectZ
                         return "PZ_WellNotOpen".Translate();
                     }
                 }
-                else if (!StairwellFloor.CanClear(up, map) && !MineSide.SiteOpensFromAbove(c, map))
+                else if (!StairwellFloor.CanClear(up, map))
                 {
-                    // (a floor alone is taken up for the stairs, StairwellFloor; a bare top over rock opens when the rock
-                    // is mined from above, MineSide)
+                    // (a floor alone is taken up for the stairs, StairwellFloor)
                     return "PZ_WellNotOpen".Translate();
                 }
             }
@@ -535,10 +523,6 @@ namespace ProjectZ
         {
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
-                if (MineSide.SiteOpensFromAbove(c, map))
-                {
-                    continue;   // rock under a bare top: mined from above, its thick roof goes with the top (the stairwell)
-                }
                 string blocked = SlabSupport.StairsColumnBlocked(c, map);
                 if (blocked == "PZ_ThickRoof" && Mountains.On(map) && Floors.UnbuiltNatural(FloorRoof.Above(c, map), map))
                 {
@@ -611,59 +595,5 @@ namespace ProjectZ
 
         // Laying a floor while working on the ground: it goes on the floor above.
         public static string ViewFloorAbove() => "PZ_ViewFloorAbove".Translate(FloorView.KeyName(PZKeyDefOf.PZ_FloorUp));
-    }
-
-    // Stairs from above (basements design "Stairs"): stairs may be placed on rock in the fog under known bare tops (the
-    // lower level under a plateau is unexplored: the player places them guided by the x-ray of the level above, as vanilla
-    // Mine may mark rock in the fog). Vanilla refuses a fogged centre only; this asks one rule instead of that test:
-    // every footprint cell is rock whose top opens from above (MineSide.SiteOpensFromAbove) and every top over it is known.
-    [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanPlaceBlueprintAt_NewTemp))]
-    public static class CanPlaceBlueprint_StairsFog_Patch
-    {
-        public static bool Fogged(IntVec3 center, Map map, BuildableDef def, Rot4 rot)
-        {
-            return center.Fogged(map) && !InFogOk(def, center, rot, map);
-        }
-
-        public static bool InFogOk(BuildableDef def, IntVec3 center, Rot4 rot, Map map)
-        {
-            if (!StairDefs.Is(def) || map == null || !Mountains.On(map))
-            {
-                return false;
-            }
-            foreach (IntVec3 c in StairShape.Footprint(center, rot))
-            {
-                IntVec3 up = FloorRoof.Above(c, map);
-                if (!MineSide.SiteOpensFromAbove(c, map) || !up.IsValid || up.Fogged(map))
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
-        {
-            System.Reflection.MethodInfo fogged = AccessTools.Method(typeof(GridsUtility), nameof(GridsUtility.Fogged), new[] { typeof(IntVec3), typeof(Map) });
-            System.Reflection.MethodInfo ours = AccessTools.Method(typeof(CanPlaceBlueprint_StairsFog_Patch), nameof(Fogged));
-            bool done = false;
-            foreach (CodeInstruction ci in instructions)
-            {
-                if (!done && ci.Calls(fogged))
-                {
-                    // (the first fog test is the centre's: center, map are on the stack; add the def and the rotation)
-                    yield return new CodeInstruction(System.Reflection.Emit.OpCodes.Ldarg_0);
-                    yield return new CodeInstruction(System.Reflection.Emit.OpCodes.Ldarg_2);
-                    yield return new CodeInstruction(System.Reflection.Emit.OpCodes.Call, ours).MoveLabelsFrom(ci);
-                    done = true;
-                    continue;
-                }
-                yield return ci;
-            }
-            if (!done)
-            {
-                Log.Warning("[ProjectZ] stairs in the fog: the placement's fog test was not found; stairs need a discovered centre");
-            }
-        }
     }
 }
