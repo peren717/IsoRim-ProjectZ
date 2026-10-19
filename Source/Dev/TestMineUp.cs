@@ -185,6 +185,7 @@ namespace ProjectZ.Dev
         private static void MuShot(Map map, string name, int floor, IntVec3 g, float size, string next, bool mineTool = false)
         {
             ShotAt(map, floor, ProjectZ.GroundCellOf(g, map), size);
+            MuPointer(Levels.Cell(ProjectZ.GroundCellOf(g, map), floor, map));
             Find.UIRoot.screenshotMode.Active = true;
             if (mineTool)
             {
@@ -214,6 +215,13 @@ namespace ProjectZ.Dev
                 return;
             }
             muPointerPatched = true;
+            // (the cut-away under the pointer on, as minebody: tunnels inside the mountain are seen)
+            object st = HarmonyLib.AccessTools.Property(HarmonyLib.AccessTools.TypeByName("IsoRim.IsoRimMod"), "Settings")?.GetValue(null)
+                ?? HarmonyLib.AccessTools.Field(HarmonyLib.AccessTools.TypeByName("IsoRim.IsoRimMod"), "Settings")?.GetValue(null);
+            if (st != null)
+            {
+                HarmonyLib.Traverse.Create(st).Field("cutHover").SetValue(true);
+            }
             HarmonyLib.Harmony h = new HarmonyLib.Harmony("Peren.IsoRimProjectZ.test.mineup");
             h.Patch(HarmonyLib.AccessTools.Method(inter, "DesignatorMouseCell"), prefix: new HarmonyLib.HarmonyMethod(typeof(TestRunner), nameof(MuCellPrefix)));
             h.Patch(HarmonyLib.AccessTools.Method(cut, "Pointer"), prefix: new HarmonyLib.HarmonyMethod(typeof(TestRunner), nameof(MuPointerPrefix)));
@@ -246,7 +254,19 @@ namespace ProjectZ.Dev
             return CellRect.FromLimits(g.Min(c => c.x), g.Min(c => c.z), g.Max(c => c.x), g.Max(c => c.z)).ExpandedBy(expand);
         }
 
-        private static bool MuOpen(IntVec3 g, Map map) => g.InBounds(map) && g.Standable(map) && !g.Roofed(map) && !map.fogGrid.IsFogged(g) && g.GetEdifice(map) == null;
+        // (plants are allowed: they come and go with the frames before the test starts; MuClear takes them off)
+        private static bool MuOpen(IntVec3 g, Map map) => g.InBounds(map) && Mountains.WalkableRaw(g, map) && !g.Roofed(map) && !map.fogGrid.IsFogged(g) && g.GetEdifice(map) == null;
+
+        private static void MuClear(Map map, IEnumerable<IntVec3> cells)
+        {
+            foreach (IntVec3 c in cells)
+            {
+                foreach (Thing t in c.GetThingList(map).Where(t => t.def.category == ThingCategory.Plant).ToList())
+                {
+                    t.Destroy();
+                }
+            }
+        }
 
         // Tunnel A: open ground s, then 6 rock cells (thick roof, rock on level 1 above, natural top at 2 or more; t3's top at
         // exactly 2), a rock front wall t7 and rock side walls; three open cells behind s for stairs onto level 1 (M13).
@@ -254,10 +274,10 @@ namespace ProjectZ.Dev
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             Pawn any = Colonists(map).FirstOrDefault();
-            foreach (IntVec3 s in Near(RtHome(map), 110, map))
+            foreach (IntVec3 s in Near(new IntVec3(map.Size.x / 2, 0, a.groundZ / 2), 110, map))   // (a fixed point: the same sites every run)
             {
                 if (s.x < 6 || s.z < 6 || s.x >= map.Size.x - 6 || s.z >= a.groundZ - 6 || !MuOpen(s, map) || any == null
-                    || !map.reachability.CanReach(any.Position, s, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
+                    || !map.reachability.CanReachMapEdge(s, TraverseParms.For(TraverseMode.PassDoors)))   // (static: not where the colonists happen to be)
                 {
                     continue;
                 }
@@ -304,10 +324,10 @@ namespace ProjectZ.Dev
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             Pawn any = Colonists(map).FirstOrDefault();
-            foreach (IntVec3 s in Near(RtHome(map), 110, map))
+            foreach (IntVec3 s in Near(new IntVec3(map.Size.x / 2, 0, a.groundZ / 2), 110, map))   // (a fixed point: the same sites every run)
             {
                 if (s.x < 6 || s.z < 6 || s.x >= map.Size.x - 6 || s.z >= a.groundZ - 6 || !MuOpen(s, map) || any == null || muSA.IsValid && s.InHorDistOf(muSA, 20f)
-                    || !map.reachability.CanReach(any.Position, s, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
+                    || !map.reachability.CanReachMapEdge(s, TraverseParms.For(TraverseMode.PassDoors)))   // (static: not where the colonists happen to be)
                 {
                     continue;
                 }
@@ -425,7 +445,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     Result("V4 generation: the cell above every revealed walkable ground cell is revealed (count = recount, all unfogged)",
-                        VerticalFog.Off || VerticalFog.LastAboveRevealed == recount && open == recount, $"generation {VerticalFog.LastAboveRevealed}, recount {recount}, unfogged now {open}");
+                        VerticalFog.LastAboveRevealed == recount && open == recount, $"generation {VerticalFog.LastAboveRevealed}, recount {recount}, unfogged now {open}");
                     bool siteA = MuSiteA(map), siteB = MuSiteB(map);
                     Result("mineup sites: tunnel A (rock above, top at 2+) and tunnel B (bare level-1 tops)", siteA && siteB,
                         $"A {(siteA ? $"{muSA} dir {muDA}, tops {string.Join(",", muA.Take(6).Select(t => Column.NaturalTop(t, map)))}" : "none")}; B {(siteB ? $"{muSB} dir {muDB}" : "none")}");
@@ -434,6 +454,7 @@ namespace ProjectZ.Dev
                         Finish();
                         return true;
                     }
+                    MuClear(map, Enumerable.Range(0, 5).Select(i => muSA - muDA * i).Concat(new[] { muSB }));
                     // M2: the fog of every upper cell over tunnel A before digging
                     muFogBefore.Clear();
                     foreach (IntVec3 g in MuRect(muA, map, 6))
@@ -472,9 +493,9 @@ namespace ProjectZ.Dev
                     HashSet<IntVec3> opened = new HashSet<IntVec3>(muFogBefore.Where(kv => kv.Value && !map.fogGrid.IsFogged(kv.Key)).Select(kv => kv.Key));
                     bool allAbove = muA.Take(6).All(t => !map.fogGrid.IsFogged(MuUp(t, map)));
                     Result("M2 vertical reveal: every cell straight above tunnel A is unfogged, nothing else above it opened",
-                        VerticalFog.Off ? !allAbove : allAbove && opened.SetEquals(expect),
+                        allAbove && opened.SetEquals(expect),
                         $"above unfogged {muA.Take(6).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/6, opened {opened.Count} (expected {expect.Count}){(opened.Except(expect).Any() ? ", extra " + string.Join(" ", opened.Except(expect).Take(5)) : "")}, reveals {VerticalFog.Revealed}");
-                    Result("M2 tunnel B: the bare tops above it are unfogged", muB.Take(4).All(t => !map.fogGrid.IsFogged(MuUp(t, map))) != VerticalFog.Off, $"{muB.Take(4).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/4");
+                    Result("M2 tunnel B: the bare tops above it are unfogged", muB.Take(4).All(t => !map.fogGrid.IsFogged(MuUp(t, map))), $"{muB.Take(4).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/4");
                     foreach (Pawn p in Colonists(map))
                     {
                         Draft(p, false);
@@ -487,6 +508,7 @@ namespace ProjectZ.Dev
                 case "mu_save":
                     Find.UIRoot.screenshotMode.Active = false;
                     FloorView.Set(0);
+                    SetHour(map, 10);   // (daylight for the shots)
                     GameDataSaveLoader.SaveGame("pz_mineup");
                     stage = "mu_m1";
                     pendingLoad = "pz_mineup";
@@ -532,7 +554,7 @@ namespace ProjectZ.Dev
                     // shot: the Mine tool on level 1 over the tunnel, the x-ray and the marks
                     dm.DesignateMultiCell(muA.Skip(2).Take(2).Select(t => MuUp(t, map)));
                     MuPointer(MuUp(muA[3], map));
-                    MuShot(map, "mu_mark_xray", 1, muA[2], 10f, "mu_m1_end", mineTool: true);
+                    MuShot(map, "mu_mark_xray", 1, muA[2], 6f, "mu_m1_end", mineTool: true);
                     return true;
                 }
 
@@ -564,6 +586,16 @@ namespace ProjectZ.Dev
                     muAt = IntVec3.Invalid;
                     muFlag = false;
                     Info($"M3: rock {u1} over {muA[2]}, steel ore {u2} over {muA[4]}; miner {muP1}");
+                    MuShot(map, "mu_m3_marked", 1, muA[3], 6f, "mu_m3_go");
+                    return true;
+                }
+
+                case "mu_m3_go":
+                {
+                    Find.UIRoot.screenshotMode.Active = false;
+                    muPointer = IntVec3.Invalid;
+                    FloorView.Set(0);
+                    IntVec3 u1 = MuUp(muA[2], map), u2 = MuUp(muA[4], map);
                     MuRun(200, 33000, () => !MuRockOrOre(u1, map) && !MuRockOrOre(u2, map), "mu_m3_done", () =>
                     {
                         if (!muAt.IsValid && !MuRockOrOre(u2, map))
@@ -616,7 +648,13 @@ namespace ProjectZ.Dev
                     Result("M3 the miner worked from the cell below or next to it (B = the tunnel cell)", muFlag && (muAt2 == c1 || muAt2 == c2) && muWorkPos.InHorDistOf(muAt2, 1.5f) && ProjectZ.FloorOf(muWorkPos, map) == 0, $"working at B {muAt2} from {muWorkPos}");
                     MuOutside(map, "M3");
                     muNote = MuState(map, new[] { u1, u2, c1, c2 });
-                    MuShot(map, "mu_shaft_covered", 1, muA[3], 9f, "mu_m3_save", mineTool: true);
+                    MuShot(map, "mu_shaft_covered", 1, muA[3], 6f, "mu_m3_shot2", mineTool: true);
+                    return true;
+                }
+
+                case "mu_m3_shot2":
+                {
+                    MuShot(map, "mu_shaft_covered_notool", 1, muA[3], 6f, "mu_m3_save");
                     return true;
                 }
 
@@ -657,7 +695,7 @@ namespace ProjectZ.Dev
                     Result("M10 a cave-in over the shaft: the rocks land at its bottom (crushing what is there), none in the air, the thick roof stays",
                         rocksBottom && noneUp && MuThick(u1, map) && muSteel.Destroyed && ShaftCaveIn.Landed - muLanded == 1,
                         $"bottom {c1} {c1.GetEdifice(map)?.def.defName ?? "nothing"}, up {u1} {u1.GetEdifice(map)?.def.defName ?? "nothing"} {u1.GetTerrain(map).defName} roof {MuRoof(u1, map)}, wood crushed {muSteel.Destroyed}, landed {ShaftCaveIn.Landed - muLanded}");
-                    MuShot(map, "mu_cavein", 0, c1, 9f, "mu_m10_end");
+                    MuShot(map, "mu_cavein", 0, c1, 6f, "mu_m10_end");
                     return true;
                 }
 
@@ -701,7 +739,7 @@ namespace ProjectZ.Dev
 
                 case "mu_m4_shot":
                     // (the colonist at work under the top, mid-job)
-                    MuShot(map, "mu_removeroof_work", 0, muB[1], 8f, "mu_m4_resume");
+                    MuShot(map, "mu_removeroof_work", 0, muB[1], 6f, "mu_m4_resume");
                     return true;
 
                 case "mu_m4_resume":
@@ -726,7 +764,7 @@ namespace ProjectZ.Dev
                         $"colonist at {muP1.Position} L{ProjectZ.FloorOf(muP1.Position, map)}, injuries {muInt % 1000} -> {hurt}, bruised count {muInt / 1000} -> {Gravity.PawnsBruised}; steel at {muSteel.Position} L{ProjectZ.FloorOf(muSteel.Position, map)}");
                     Result("M4 the stool on the next top stays; nothing collapsed", muStool.Spawned && muStool.Position == muStoolAt && PZStats.slabCollapses == muCollapses,
                         $"stool {muStool.Position} (was {muStoolAt}), floor collapses {PZStats.slabCollapses - muCollapses}");
-                    MuShot(map, "mu_hole_sky", 1, c, 9f, "mu_m4_keep");
+                    MuShot(map, "mu_hole_sky", 1, c, 6f, "mu_m4_keep");
                     return true;
                 }
 
@@ -781,10 +819,11 @@ namespace ProjectZ.Dev
                     muFlag = false;
                     MuRun(400, 35000, () => muA.Take(4).All(t => !MuRockOrOre(MuUp(t, map), map)), "mu_m5_mined", () =>
                     {
-                        if (!muFlag && muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muP1.jobs.curDriver.CurToilIndex >= 1 && !muP1.pather.Moving
-                            && muP1.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints && muA.Take(4).Count(t => MuRockOrOre(MuUp(t, map), map)) <= 3)
+                        Pawn w = crew.FirstOrDefault(p => p.CurJobDef == PZMineDefOf.PZ_MineFromBelow && p.jobs.curDriver.CurToilIndex >= 1 && !p.pather.Moving && p.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints);
+                        if (!muFlag && w != null && muA.Take(4).Count(t => MuRockOrOre(MuUp(t, map), map)) <= 3)
                         {
                             muFlag = true;
+                            muP1 = w;
                             muInterrupt = "mu_m5_shot";
                         }
                     });
@@ -793,12 +832,12 @@ namespace ProjectZ.Dev
 
                 case "mu_m5_shot":
                     // a colonist mining from below (pose, facing, dust) with one shaft open: ground view, then level 1 with the Mine tool
-                    MuPointer(muP1.CurJob.targetA.Cell);
-                    MuShot(map, "mu_minefrombelow", 0, muP1.Position, 7f, "mu_m5_shot2");
+                    MuPose(muP1);
+                    MuShot(map, "mu_minefrombelow", 0, muP1.Position, 6f, "mu_m5_shot2");
                     return true;
 
                 case "mu_m5_shot2":
-                    MuShot(map, "mu_minefrombelow_up", 1, muP1.Position, 9f, "mu_m5_resume", mineTool: true);
+                    MuShot(map, "mu_minefrombelow_up", 1, muP1.Position, 6f, "mu_m5_resume", mineTool: true);
                     return true;
 
                 case "mu_m5_resume":
@@ -879,7 +918,7 @@ namespace ProjectZ.Dev
                     bool after = Combat.Los3D.CanSee(muA[0], e, map);
                     Result("M8 sight from the shaft bottom to the landing above: blocked before (rock), clear after", !muFlag2 && after, $"before {muFlag2}, after {after}");
                     Draft(muP3, true);
-                    MuShot(map, "mu_stairs_shaft", 1, muA[2], 9f, "mu_m7");
+                    MuShot(map, "mu_stairs_shaft", 1, muA[2], 6f, "mu_m7");
                     return true;
                 }
 
@@ -917,7 +956,7 @@ namespace ProjectZ.Dev
                     {
                         map.designationManager.AddDesignation(new Designation(st, DesignationDefOf.Deconstruct));
                     }
-                    MuShot(map, "mu_shaft_sky_up", 2, muA[2], 9f, "mu_m5_decon");
+                    MuShot(map, "mu_shaft_sky_up", 2, muA[2], 6f, "mu_m5_decon");
                     return true;
                 }
 
@@ -1000,7 +1039,7 @@ namespace ProjectZ.Dev
                 case "mu_m6_up":
                     Result("M6 a colonist walked up from the tunnel onto the plateau top", muP3.Position == muAt, $"{muP3} at {muP3.Position} (level {ProjectZ.FloorOf(muP3.Position, map)}), target {muAt}");
                     Draft(muP3, true);
-                    MuShot(map, "mu_stairs_plateau", 1, muB[2], 9f, "mu_m6_end");
+                    MuShot(map, "mu_stairs_plateau", 1, muB[2], 6f, "mu_m6_end");
                     return true;
 
                 case "mu_m6_end":
@@ -1048,7 +1087,13 @@ namespace ProjectZ.Dev
                     List<Pawn> crew = MuCrew(map, WorkTypeDefOf.Mining, 2);
                     muP1 = crew[0];
                     muP2 = crew.Count > 1 ? crew[1] : null;
-                    Func<Pawn, bool> working = p => p != null && p.CurJobDef == PZMineDefOf.PZ_MineFromBelow && p.jobs.curDriver.CurToilIndex >= 1 && p.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints;
+                    // (both start in the tunnel, so their work overlaps)
+                    Teleport(muP1, muA[0]);
+                    if (muP2 != null)
+                    {
+                        Teleport(muP2, muA[3]);
+                    }
+                    Func<Pawn, bool> working = p => p != null && p.CurJobDef == PZMineDefOf.PZ_MineFromBelow && p.jobs.curDriver.CurToilIndex >= 1;
                     MuRun(100, 37200, () => working(muP1) && working(muP2), "mu_m9b_both");
                     return true;
                 }
@@ -1117,7 +1162,7 @@ namespace ProjectZ.Dev
                     int thick = muA.Take(4).Count(t => MuThick(t, map));
                     bool ok = floors == drag.Count && MineUp.MinedFromBelow - muMined == 0 && thick == 4;
                     Result("M13 (a) a big Mine drag on level 1 over the tunnel, reachable by stairs: dug on its own level, the floor stays, no shaft",
-                        MineSide.NoGroup ? !ok : ok,
+                        ok,
                         $"{floors}/{drag.Count} cells dug with their floor kept, mined from below {MineUp.MinedFromBelow - muMined}, tunnel roofs thick {thick}/4");
                     MuEnd(map, "M13a", "mu_m13b");
                     return true;
@@ -1187,6 +1232,7 @@ namespace ProjectZ.Dev
                 {
                     CellRect all = new CellRect(0, 0, map.Size.x, map.Size.z);
                     double on = 0, off = 0;
+                    bool wasOff = VerticalFog.Off;
                     for (int k = 0; k < 2; k++)
                     {
                         map.fogGrid.Refog(all);
@@ -1195,7 +1241,7 @@ namespace ProjectZ.Dev
                         map.fogGrid.ClearAllFog();
                         off += sw.Elapsed.TotalMilliseconds;
                         map.fogGrid.Refog(all);
-                        VerticalFog.Off = false;
+                        VerticalFog.Off = wasOff;
                         sw.Restart();
                         map.fogGrid.ClearAllFog();
                         on += sw.Elapsed.TotalMilliseconds;
@@ -1211,6 +1257,20 @@ namespace ProjectZ.Dev
                 }
             }
             return false;
+        }
+
+        // (info) IsoRim's work pose for a pawn: is it animated, with a tool, and which way it faces.
+        private static void MuPose(Pawn p)
+        {
+            System.Reflection.MethodInfo m = HarmonyLib.AccessTools.Method(HarmonyLib.AccessTools.TypeByName("IsoRim.WorkAnimations"), "Animate");
+            if (m == null)
+            {
+                Info("pose: IsoRim's WorkAnimations not found");
+                return;
+            }
+            object[] args = { p, p.DrawPos, 0f, null, null, 0f, 0f };
+            bool on = (bool)m.Invoke(null, args);
+            Result("P7 IsoRim's work pose for a colonist mining from below: animated with a tool", on && args[3] != null, $"animated {on}, tool {(args[3] != null ? "yes" : "none")}, yaw {(float)args[2]:0}, lean {(float)args[5]:0.0}, pawn facing {p.Rotation}, job {p.CurJobDef?.defName}, at {p.Position} under {p.CurJob?.targetA.Cell}");
         }
 
         private static bool MuRockOrOre(IntVec3 c, Map map) => c.GetFirstMineable(map) != null;
