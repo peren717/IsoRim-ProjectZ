@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
   <PZ_MineFromBelow.reportString>开采TargetA。</PZ_MineFromBelow.reportString>
+  <PZ_MineFromAbove.reportString>开采TargetA。</PZ_MineFromAbove.reportString>
 </LanguageData>

@@ -11,6 +11,7 @@ namespace ProjectZ
     public static class PZMineDefOf
     {
         public static JobDef PZ_MineFromBelow;
+        public static JobDef PZ_MineFromAbove;
 
         static PZMineDefOf()
         {
@@ -18,15 +19,27 @@ namespace ProjectZ
         }
     }
 
-    // Tall mountains phase 3, mine up (isorim-pz-phase3-mineup-plan.md, "Revision: vanilla commands"). No new command:
-    // the player marks rock on an upper level with vanilla Mine. Rock the pawns can dig on its own level (counting the
-    // other rock marked with it) is vanilla mining there; rock they can't reach up there is mined from the cell right
-    // below it (C, and its 8-ring), and the ceiling opens (a shaft, Shaft.Open). One deterministic rule decides per rock
-    // (FromBelow); vanilla's Miner is not patched: it never sees a rock with no walkable neighbour on its own level, and
-    // both jobs reserve the rock.
+    // Where a marked rock is mined from: its own level (vanilla), the cell right below it (mine up) or the cell right
+    // above it (mine down).
+    public enum MineDir
+    {
+        Own,
+        FromBelow,
+        FromAbove
+    }
+
+    // Tall mountains, vertical mining (isorim-pz-phase3-mineup-plan.md "Revision: vanilla commands"; mine down: the
+    // mirror). No new command: the player marks rock with vanilla Mine on any level. Rock the pawns can dig on its own
+    // level (counting the other rock marked with it) is vanilla mining there; rock they can't reach there is mined from the
+    // cell right below it (C and its 8-ring; its floor opens, mine up) or, where no one can stand below, from the cell right
+    // above it (its ceiling opens, mine down). Both open one boundary with Shaft.Open. One deterministic rule decides per
+    // rock (Get): own level, else from below, else from above. Rock under a stairs site is mined from above whenever its top
+    // can open (the hole is the stairwell), never from below (that would take the floor the stairs stand on).
+    // Vanilla's Miner is not patched: it never reaches a rock with no reachable neighbour on its own level, and every
+    // mining job reserves the rock.
     public static class MineSide
     {
-        private static readonly Dictionary<IntVec3, bool> memo = new Dictionary<IntVec3, bool>();
+        private static readonly Dictionary<IntVec3, MineDir> memo = new Dictionary<IntVec3, MineDir>();
         private static int memoTick = -1;
         private static Map memoMap;
         private static readonly Queue<IntVec3> open = new Queue<IntVec3>();
@@ -44,21 +57,23 @@ namespace ProjectZ
         // test only (-projectzminenogroup): each rock decided alone (no marked group), to show the trap the group rule closes
         public static bool NoGroup;
 
-        // A marked rock (Mine or MineVein) on an upper level.
+        // A marked rock (Mine or MineVein).
         public static bool Marked(IntVec3 c, Map map)
         {
             DesignationManager dm = map.designationManager;
             return dm.DesignationAt(c, DesignationDefOf.Mine) != null || dm.DesignationAt(c, DesignationDefOf.MineVein) != null;
         }
 
-        // The rock at upper-level cell u is mined from below: the pawns can't walk to it (or to the rock marked with it) on
-        // its own level from the cell below it, the cell below is no rock or wall, and someone can stand there or next to it.
-        // Memoised per tick.
-        public static bool FromBelow(IntVec3 u, Map map)
+        public static bool FromBelow(IntVec3 u, Map map) => Get(u, map) == MineDir.FromBelow;
+
+        public static bool FromAbove(IntVec3 u, Map map) => Get(u, map) == MineDir.FromAbove;
+
+        // The side the rock at u is mined from. Memoised per tick.
+        public static MineDir Get(IntVec3 u, Map map)
         {
             if (map == null || !u.IsValid || !Mountains.On(map))
             {
-                return false;
+                return MineDir.Own;
             }
             int tick = Find.TickManager?.TicksGame ?? 0;
             if (tick != memoTick || !ReferenceEquals(map, memoMap))
@@ -67,7 +82,7 @@ namespace ProjectZ
                 memoTick = tick;
                 memoMap = map;
             }
-            if (memo.TryGetValue(u, out bool r))
+            if (memo.TryGetValue(u, out MineDir r))
             {
                 return r;
             }
@@ -79,26 +94,20 @@ namespace ProjectZ
         // (the memo dropped: a test changing the map inside one tick)
         public static void Forget() => memo.Clear();
 
-        private static bool Compute(IntVec3 u, Map map)
+        // The rock cell under a stairs site whose ceiling opens when it is mined from above (placement and the rule).
+        public static bool SiteOpensFromAbove(IntVec3 c, Map map)
         {
-            Computed++;
-            if (ProjectZ.FloorOf(u, map) < 1 || u.GetFirstMineable(map) == null)
+            if (map == null || !Mountains.On(map) || !c.IsValid || !c.InBounds(map) || c.GetFirstMineable(map) == null)
             {
                 return false;
             }
-            IntVec3 c = FloorRoof.Below(u, map);
-            if (!c.IsValid || !c.InBounds(map))
-            {
-                return false;
-            }
-            Building ce = c.GetEdifice(map);
-            if (ce != null && ce.def.passability == Traversability.Impassable)
-            {
-                return false;   // rock or a wall below: mine that first
-            }
-            // where a pawn would stand: C, or a walkable cell of its 8-ring on its level (one per region)
-            stands.Clear();
-            seenRegions.Clear();
+            IntVec3 a = FloorRoof.Above(c, map);
+            return a.IsValid && Hole.TopBlocked(a, map) == null;
+        }
+
+        // Walkable cells on c's level, c and its 8-ring, one per region.
+        private static void Stands(IntVec3 c, Map map, List<IntVec3> into)
+        {
             for (int i = 0; i < 9; i++)
             {
                 IntVec3 s = c + GenAdj.AdjacentCellsAndInside[i];
@@ -107,13 +116,54 @@ namespace ProjectZ
                     Region reg = map.regionGrid.GetValidRegionAt_NoRebuild(s);
                     if (reg == null || seenRegions.Add(reg))
                     {
-                        stands.Add(s);
+                        into.Add(s);
                     }
                 }
             }
+        }
+
+        private static bool TwoWay(Map map, IntVec3 a, IntVec3 b, TraverseParms tp)
+        {
+            return map.reachability.CanReach(a, b, PathEndMode.OnCell, tp) && map.reachability.CanReach(b, a, PathEndMode.OnCell, tp);
+        }
+
+        private static MineDir Compute(IntVec3 u, Map map)
+        {
+            Computed++;
+            if (u.GetFirstMineable(map) == null || ProjectZ.FloorOf(u, map) < 0)
+            {
+                return MineDir.Own;
+            }
+            stands.Clear();
+            seenRegions.Clear();
+            // below: the cell under it, no rock or wall there (mine that first), and someone can stand there or next to it
+            int below = 0;
+            IntVec3 c = FloorRoof.Below(u, map);
+            bool site = Stairwell.StairThingAt(u, map);
+            if (!site && c.IsValid && c.InBounds(map))
+            {
+                Building ce = c.GetEdifice(map);
+                if (ce == null || ce.def.passability != Traversability.Impassable)
+                {
+                    Stands(c, map, stands);
+                    below = stands.Count;
+                }
+            }
+            // above: the top over it can open (a bare natural floor, nothing built on it), and someone can stand there or
+            // next to it. Never the ground surface: only rock is mined, and there is no level under the ground.
+            IntVec3 a = FloorRoof.Above(u, map);
+            if (a.IsValid && Hole.TopBlocked(a, map) == null)
+            {
+                Stands(a, map, stands);
+            }
+            int above = stands.Count - below;
+            if (site)
+            {
+                return above > 0 ? MineDir.FromAbove : MineDir.Own;
+            }
             if (stands.Count == 0)
             {
-                return false;
+                return MineDir.Own;
             }
             // the marked group: u and the marked rock 8-connected to it on its level
             group.Clear();
@@ -138,7 +188,7 @@ namespace ProjectZ
             {
                 open.Clear();
                 group.Clear();
-                return false;
+                return MineDir.Own;
             }
             // the walkable cells next to the group on its level (one per region)
             goals.Clear();
@@ -162,26 +212,52 @@ namespace ProjectZ
             bool own = false;
             if (goals.Count > 0)
             {
-                // "can a pawn standing below walk to the rock's level and dig to it" (no pawn: doors passable, the
-                // player's fog rule over floor links)
+                // "can a pawn standing below or above walk to the rock's level and dig to it, and walk back" (no pawn:
+                // doors passable, the player's fog rule over floor links). Both ways: a jump down into a pit is no way
+                // to the rock (the pawn could not come back up).
                 TraverseParms tp = TraverseParms.For(TraverseMode.PassDoors, Danger.Deadly, fogBlocked: true);
                 for (int i = 0; i < stands.Count && !own; i++)
                 {
                     for (int j = 0; j < goals.Count && !own; j++)
                     {
-                        own = map.reachability.CanReach(stands[i], goals[j], PathEndMode.OnCell, tp);
+                        own = TwoWay(map, stands[i], goals[j], tp);
+                    }
+                }
+                // (or colonists reach the rock's level there and back anyway: a face on the ground under an unexplored top; as
+                // vanilla's CanReachColony, by the colonists, but only those not stuck where they are: who can reach the map
+                // edge, so a colonist fallen into a pit is no way in for the rock next to it)
+                // (as the colonists walk: through the fog)
+                TraverseParms walk = TraverseParms.For(TraverseMode.PassDoors, Danger.Deadly);
+                var cols = map.mapPawns.FreeColonistsSpawned;
+                for (int i = 0; i < cols.Count && !own; i++)
+                {
+                    bool free = false;
+                    for (int j = 0; j < goals.Count && !own; j++)
+                    {
+                        if (TwoWay(map, cols[i].Position, goals[j], walk))
+                        {
+                            free = free || map.reachability.CanReachMapEdge(cols[i].Position, walk);
+                            own = free;
+                        }
                     }
                 }
             }
-            return !own;
+            if (own)
+            {
+                return MineDir.Own;
+            }
+            return below > 0 ? MineDir.FromBelow : MineDir.FromAbove;
         }
     }
 
-    // Mine from below (plan R1.4): the cells under marked upper-level rock that FromBelow gives to this side. The pawn
-    // works the cell's ceiling as vanilla's roof work does (ClosestTouch: on the cell or next to it), reserving the rock
-    // and the cell's ceiling. No button: the player's order is vanilla Mine on the rock.
-    public class WorkGiver_MineFromBelow : WorkGiver_Scanner
+    // Vertical mining jobs (plan R1.4, mirrored for mine down): the cells next to marked rock on the level below it (from
+    // below) or above it (from above) that MineSide gives to that side. The pawn works the boundary as vanilla's roof work
+    // does (ClosestTouch: on the cell or next to it; from above it stands next to it, not on the top that opens), reserving
+    // the rock and the ceiling of the lower cell. No button: the player's order is vanilla Mine on the rock.
+    public abstract class WorkGiver_MineVertical : WorkGiver_Scanner
     {
+        protected abstract MineDir Dir { get; }
+
         public override PathEndMode PathEndMode => PathEndMode.ClosestTouch;
 
         public override Danger MaxPathDanger(Pawn pawn) => Danger.Deadly;
@@ -192,6 +268,11 @@ namespace ProjectZ
             return !Mountains.On(map) || !map.designationManager.AnySpawnedDesignationOfDef(DesignationDefOf.Mine) && !map.designationManager.AnySpawnedDesignationOfDef(DesignationDefOf.MineVein);
         }
 
+        // The cell the miner works from for the rock at u (right below or right above it), and back.
+        public static IntVec3 WorkCell(IntVec3 u, Map map, MineDir dir) => dir == MineDir.FromBelow ? FloorRoof.Below(u, map) : FloorRoof.Above(u, map);
+
+        public static IntVec3 RockCell(IntVec3 c, Map map, MineDir dir) => dir == MineDir.FromBelow ? FloorRoof.Above(c, map) : FloorRoof.Below(c, map);
+
         public override IEnumerable<IntVec3> PotentialWorkCellsGlobal(Pawn pawn)
         {
             Map map = pawn.Map;
@@ -199,23 +280,19 @@ namespace ProjectZ
             {
                 foreach (Designation d in map.designationManager.SpawnedDesignationsOfDef(def))
                 {
-                    IntVec3 u = d.target.Cell;
-                    if (ProjectZ.FloorOf(u, map) >= 1)
+                    IntVec3 c = WorkCell(d.target.Cell, map, Dir);
+                    if (c.IsValid)
                     {
-                        IntVec3 c = FloorRoof.Below(u, map);
-                        if (c.IsValid)
-                        {
-                            yield return c;
-                        }
+                        yield return c;
                     }
                 }
             }
         }
 
-        // The marked rock over cell c (null: none).
-        public static Mineable RockAbove(IntVec3 c, Map map)
+        // The marked rock worked from cell c (null: none).
+        public static Mineable MarkedRock(IntVec3 c, Map map, MineDir dir)
         {
-            IntVec3 u = FloorRoof.Above(c, map);
+            IntVec3 u = RockCell(c, map, dir);
             if (!u.IsValid || !MineSide.Marked(u, map))
             {
                 return null;
@@ -223,15 +300,18 @@ namespace ProjectZ
             return u.GetFirstMineable(map);
         }
 
+        // (mine up: the marked rock over a cell)
+        public static Mineable RockAbove(IntVec3 c, Map map) => MarkedRock(c, map, MineDir.FromBelow);
+
         public override bool HasJobOnCell(Pawn pawn, IntVec3 c, bool forced = false)
         {
             Map map = pawn.Map;
-            Mineable rock = RockAbove(c, map);
-            if (rock == null || rock.IsForbidden(pawn) || !MineSide.FromBelow(rock.Position, map))
+            Mineable rock = MarkedRock(c, map, Dir);
+            if (rock == null || rock.IsForbidden(pawn) || MineSide.Get(rock.Position, map) != Dir)
             {
                 return false;
             }
-            if (!pawn.CanReserve(rock, 1, -1, null, forced) || !pawn.CanReserve(c, 1, -1, ReservationLayerDefOf.Ceiling, forced))
+            if (!MineVertical.CanReserve(pawn, rock, c, forced) || Dir == MineDir.FromAbove && !MineVertical.StandFor(pawn, c, map).IsValid)
             {
                 return false;
             }
@@ -240,23 +320,150 @@ namespace ProjectZ
 
         public override Job JobOnCell(Pawn pawn, IntVec3 c, bool forced = false)
         {
-            Mineable rock = RockAbove(c, pawn.Map);
-            if (rock == null)
+            Mineable rock = MarkedRock(c, pawn.Map, Dir);
+            return rock == null ? null : MineVertical.MakeJob(pawn, rock, c);
+        }
+    }
+
+    public class WorkGiver_MineFromBelow : WorkGiver_MineVertical
+    {
+        protected override MineDir Dir => MineDir.FromBelow;
+    }
+
+    public class WorkGiver_MineFromAbove : WorkGiver_MineVertical
+    {
+        protected override MineDir Dir => MineDir.FromAbove;
+    }
+
+    public static class MineVertical
+    {
+        // The lower cell of the boundary a vertical job opens (its ceiling): the work cell from below, the rock's from above.
+        public static IntVec3 Lower(IntVec3 rock, IntVec3 work, Map map) => ProjectZ.FloorOf(work, map) < ProjectZ.FloorOf(rock, map) ? work : rock;
+
+        public static bool CanReserve(Pawn pawn, Thing rock, IntVec3 work, bool forced)
+        {
+            return pawn.CanReserve(rock, 1, -1, null, forced) && pawn.CanReserve(Lower(rock.Position, work, pawn.Map), 1, -1, ReservationLayerDefOf.Ceiling, forced);
+        }
+
+        // A = the rock, B = the work cell; from above C = where the miner stands: next to the top that opens (nearest the
+        // pawn, cells over other rock about to open last), else on it.
+        public static Job MakeJob(Pawn pawn, Thing rock, IntVec3 work)
+        {
+            Map map = pawn.Map;
+            bool down = ProjectZ.FloorOf(work, map) > ProjectZ.FloorOf(rock.Position, map);
+            Job job;
+            if (down)
             {
-                return null;
+                IntVec3 stand = StandFor(pawn, work, map);
+                if (!stand.IsValid)
+                {
+                    return null;
+                }
+                job = JobMaker.MakeJob(PZMineDefOf.PZ_MineFromAbove, rock, work, stand);
             }
-            Job job = JobMaker.MakeJob(PZMineDefOf.PZ_MineFromBelow, rock, c);
+            else
+            {
+                job = JobMaker.MakeJob(PZMineDefOf.PZ_MineFromBelow, rock, work);
+            }
             job.expiryInterval = 20000;   // (as vanilla's mining job)
             job.checkOverrideOnExpire = true;
             return job;
         }
+
+        public static IntVec3 StandFor(Pawn pawn, IntVec3 top, Map map)
+        {
+            IntVec3 best = IntVec3.Invalid;
+            int bestScore = int.MaxValue;
+            for (int i = 0; i < 8; i++)
+            {
+                IntVec3 n = top + GenAdj.AdjacentCells[i];
+                if (!n.InBounds(map) || !ProjectZ.SameBand(n, top, map) || !n.Standable(map) || !pawn.CanReach(n, PathEndMode.OnCell, Danger.Deadly))
+                {
+                    continue;
+                }
+                int score = (n - pawn.Position).LengthHorizontalSquared;
+                IntVec3 under = FloorRoof.Below(n, map);
+                if (under.IsValid && under.GetFirstMineable(map) != null && (MineSide.Marked(under, map) || Stairwell.StairThingAt(under, map)))
+                {
+                    score += 100000;   // (its own top opens later)
+                }
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = n;
+                }
+            }
+            if (!best.IsValid && top.Standable(map) && pawn.CanReach(top, PathEndMode.OnCell, Danger.Deadly))
+            {
+                best = top;
+            }
+            return best;
+        }
+
+        // Rock under a stairs site that is mined from above (the vanilla blocker job is a horizontal Mine): the vertical job
+        // instead, without a designation (as vanilla's blocker mining).
+        public static Job BlockerJob(Pawn worker, Thing rock, bool forced)
+        {
+            Map map = worker.Map;
+            if (worker.WorkTypeIsDisabled(WorkTypeDefOf.Mining) || worker.workSettings != null && !worker.workSettings.WorkIsActive(WorkTypeDefOf.Mining))
+            {
+                JobFailReason.Is("IncapableOfMining".Translate());
+                return null;
+            }
+            IntVec3 top = FloorRoof.Above(rock.Position, map);
+            if (!top.IsValid || !CanReserve(worker, rock, top, forced) || !worker.CanReach(top, PathEndMode.ClosestTouch, forced ? Danger.Deadly : worker.NormalMaxDanger()))
+            {
+                return null;
+            }
+            Job job = MakeJob(worker, rock, top);
+            if (job != null)
+            {
+                job.ignoreDesignations = true;
+            }
+            return job;
+        }
     }
 
-    // The job (plan R2): A = the rock above, B = the cell under it. Vanilla's mining per pick hit (its own damage step,
-    // so the 80/40 hits, the yield share, the last hit's DestroyMined and the vein flood are vanilla), the yield at the
-    // miner's cell; then the ceiling opens (Shaft.Open). If the rule flips while working (stairs finished up there, a face
-    // mined open) the job ends at the next hit and vanilla's Miner takes the rock (it keeps its hit points).
-    public class JobDriver_MineFromBelow : JobDriver_Mine
+    // Stairs placed on rock (stairs design "Stairs from above"): the rock under the site is the construction's blocker, as
+    // in vanilla; where MineSide gives it to the level above, the builder mines it from there (the stairwell opens).
+    [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.HandleBlockingThingJob))]
+    public static class HandleBlocking_MineFromAbove_Patch
+    {
+        public static void Postfix(Thing constructible, Pawn worker, bool forced, ref Job __result)
+        {
+            if (constructible == null || worker == null || !Stairwell.IsStairThing(constructible) || !constructible.Spawned || !Mountains.On(constructible.Map))
+            {
+                return;
+            }
+            Thing b = GenConstruct.FirstBlockingThing(constructible, worker);
+            if (b is Mineable && MineSide.FromAbove(b.Position, b.Map))
+            {
+                __result = MineVertical.BlockerJob(worker, b, forced);
+            }
+        }
+    }
+
+    // The other half of "one side per rock": vanilla's Miner leaves a marked rock that MineSide gives to another level.
+    // Without this a rock next to a pit dug from above counts as reachable for vanilla (a jump down is a path), and the
+    // miner would jump into the pit and be stuck there.
+    [HarmonyPatch(typeof(WorkGiver_Miner), nameof(WorkGiver_Miner.JobOnThing))]
+    public static class Miner_OwnLevelOnly_Patch
+    {
+        public static void Postfix(Pawn pawn, Thing t, ref Job __result)
+        {
+            if (__result != null && t is Mineable && pawn?.Map != null && Mountains.On(pawn.Map) && MineSide.Get(t.Position, pawn.Map) != MineDir.Own)
+            {
+                __result = null;
+            }
+        }
+    }
+
+    // The job (plan R2, both ways): A = the rock, B = the work cell (below it: mine up; above it: mine down), C = where a
+    // miner from above stands. Vanilla's mining per pick hit (its own damage step, so the 80/40 hits, the yield share, the
+    // last hit's DestroyMined and the vein flood are vanilla), the yield at the miner's cell; then the boundary between the
+    // two levels opens (Shaft.Open on the lower cell). If the rule flips while working (stairs finished, a face mined open)
+    // the job ends at the next hit and the other side takes the rock (it keeps its hit points).
+    public class JobDriver_MineVertical : JobDriver_Mine
     {
         private static readonly AccessTools.FieldRef<JobDriver_Mine, int> ticksRef = AccessTools.FieldRefAccess<JobDriver_Mine, int>("ticksToPickHit");
 
@@ -272,7 +479,7 @@ namespace ProjectZ
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
-            return pawn.Reserve(Rock, job, 1, -1, null, errorOnFailed) && pawn.Reserve(Cell, job, 1, -1, ReservationLayerDefOf.Ceiling, errorOnFailed);
+            return pawn.Reserve(Rock, job, 1, -1, null, errorOnFailed) && pawn.Reserve(MineVertical.Lower(Rock.Position, Cell, Map), job, 1, -1, ReservationLayerDefOf.Ceiling, errorOnFailed);
         }
 
         private void ResetTicks()
@@ -289,8 +496,17 @@ namespace ProjectZ
         {
             this.FailOnDespawnedNullOrForbidden(TargetIndex.A);
             this.FailOn(() => pawn.IsPlayerControlled && !job.ignoreDesignations && Rock != null && !MineSide.Marked(Rock.Position, Map));
-            yield return Toils_Goto.Goto(TargetIndex.B, PathEndMode.ClosestTouch);
-            Toil mine = ToilMaker.MakeToil("MineFromBelow");
+            bool down = ProjectZ.FloorOf(Cell, Map) > ProjectZ.FloorOf(Rock.Position, Map);
+            MineDir side = down ? MineDir.FromAbove : MineDir.FromBelow;
+            if (down && job.GetTarget(TargetIndex.C).IsValid)
+            {
+                yield return Toils_Goto.GotoCell(TargetIndex.C, PathEndMode.OnCell);
+            }
+            else
+            {
+                yield return Toils_Goto.Goto(TargetIndex.B, PathEndMode.ClosestTouch);
+            }
+            Toil mine = ToilMaker.MakeToil("MineVertical");
             mine.tickIntervalAction = delegate (int delta)
             {
                 Pawn actor = mine.actor;
@@ -310,9 +526,9 @@ namespace ProjectZ
                 }
                 IntVec3 pos = rock.Position;
                 Map map = Map;
-                if (!MineSide.FromBelow(pos, map))
+                if (MineSide.Get(pos, map) != side)
                 {
-                    // the rock is reachable on its own level now: vanilla mines it there
+                    // the rule gave the rock to another side now (vanilla on its own level, or the other way)
                     EndJobWith(JobCondition.Incompletable);
                     return;
                 }
@@ -346,13 +562,21 @@ namespace ProjectZ
                 {
                     TaleRecorder.RecordTale(TaleDefOf.CaravanRemoteMining, pawn, def.building.mineableThing);
                 }
-                MineUp.MinedFromBelow++;
-                Shaft.Open(Cell, map, actor);
+                if (down)
+                {
+                    MineUp.MinedFromAbove++;
+                }
+                else
+                {
+                    MineUp.MinedFromBelow++;
+                }
+                Shaft.Open(MineVertical.Lower(pos, Cell, map), map, actor);
                 ReadyForNextToil();
             };
             mine.defaultCompleteMode = ToilCompleteMode.Never;
             mine.WithProgressBar(TargetIndex.B, () => Rock == null ? 1f : 1f - (float)Rock.HitPoints / Rock.MaxHitPoints);
-            mine.FailOnCannotTouch(TargetIndex.B, PathEndMode.ClosestTouch);
+            // (from above: next to the top, Touch; ClosestTouch would mean standing on it, a standable cell)
+            mine.FailOnCannotTouch(TargetIndex.B, down ? PathEndMode.Touch : PathEndMode.ClosestTouch);
             mine.activeSkill = () => SkillDefOf.Mining;
             mine.AddFinishAction(delegate
             {
@@ -363,13 +587,23 @@ namespace ProjectZ
         }
     }
 
+    // (the mine-up driver's name, kept for its JobDef and for saves)
+    public class JobDriver_MineFromBelow : JobDriver_MineVertical
+    {
+    }
+
+    public class JobDriver_MineFromAbove : JobDriver_MineVertical
+    {
+    }
+
     public static class MineUp
     {
         // counters (tests)
-        public static int MinedFromBelow, YieldsMoved;
+        public static int MinedFromBelow, MinedFromAbove, YieldsMoved;
 
-        // The yield of a rock mined from below lands at the miner's cell (plan §5): inside this scope the centre of every
-        // near placement is the miner's cell (GenPlace_MineYield_Patch), so the same-floor rules keep it on the miner's floor.
+        // The yield of a rock mined from another level lands at the miner's cell (plan §5): inside this scope the centre of
+        // every near placement is the miner's cell (GenPlace_MineYield_Patch), so the same-floor rules keep it on the
+        // miner's floor.
         [ThreadStatic] private static int yieldDepth;
         [ThreadStatic] private static IntVec3 yieldAt;
 
@@ -420,13 +654,19 @@ namespace ProjectZ
             {
                 return "";
             }
-            IntVec3 u = FloorRoof.Above(c, map);
-            if (!u.IsValid || !Floors.UnbuiltNatural(u, map))
+            Building ce = c.GetEdifice(map);
+            if (ce != null && (ce.def.passability == Traversability.Impassable || ce.def.building != null && ce.def.building.isNaturalRock))
             {
                 return "";
             }
-            Building ce = c.GetEdifice(map);
-            if (ce != null && (ce.def.passability == Traversability.Impassable || ce.def.building != null && ce.def.building.isNaturalRock))
+            return TopBlocked(FloorRoof.Above(c, map), map);
+        }
+
+        // The same for the top u itself (also mine down: the top over a rock mined from above): a bare natural floor with
+        // nothing kept on it (no rock, nothing built, no stairs exit). Pawns, items and filth on it are fine: they fall.
+        public static string TopBlocked(IntVec3 u, Map map)
+        {
+            if (!u.IsValid || !u.InBounds(map) || !Floors.UnbuiltNatural(u, map))
             {
                 return "";
             }

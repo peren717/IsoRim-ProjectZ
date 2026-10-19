@@ -3,4 +3,7 @@
   <PZ_MineFromBelow.label>从下方开采</PZ_MineFromBelow.label>
   <PZ_MineFromBelow.gerund>开采</PZ_MineFromBelow.gerund>
   <PZ_MineFromBelow.verb>开采</PZ_MineFromBelow.verb>
+  <PZ_MineFromAbove.label>从上方开采</PZ_MineFromAbove.label>
+  <PZ_MineFromAbove.gerund>开采</PZ_MineFromAbove.gerund>
+  <PZ_MineFromAbove.verb>开采</PZ_MineFromAbove.verb>
 </LanguageData>
