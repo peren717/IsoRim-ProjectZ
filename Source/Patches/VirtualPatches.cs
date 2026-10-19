@@ -10,8 +10,11 @@ namespace ProjectZ.Patches
     // (a - b).LengthHorizontalSquared with no shared root to patch, and a global change would be wrong (work ordering
     // should prefer the pawn's own floor). So each decision that must see the virtual 3D position calls ProjectZ.Virtual.
 
-    // Facing while aiming or shooting (the stance's focus): the target on another floor is faced where it really is.
-    // Face/FaceCell are small enough to be inlined into UpdateRotation, so the busy branch is taken here.
+    // Facing a target on another floor where it really is (its column on the pawn's floor): while aiming or shooting
+    // (the stance's focus), and standing on a job that faces its target (the game's FaceTarget). A drafted pawn waiting
+    // on an attack order (AttackStatic, no line of sight yet) keeps facing its target instead of the game's turn south
+    // (user decision 2026-10-18); other drafted jobs turn south as in the game. Face/FaceCell are small enough to be
+    // inlined into UpdateRotation, so the branches are taken here.
     [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.UpdateRotation))]
     public static class Pawn_UpdateRotation_Patch
     {
@@ -22,24 +25,63 @@ namespace ProjectZ.Patches
             {
                 return true;
             }
-            if (!(pawn.stances.curStance is Stance_Busy busy) || !busy.focusTarg.IsValid || pawn.jobs.HandlingFacing
-                || pawn.stances.stunner.Stunned && pawn.stances.stunner.DisableRotation)
+            if (pawn.jobs.HandlingFacing || pawn.stances.stunner.Stunned && pawn.stances.stunner.DisableRotation)
             {
                 return true;
             }
             Map map = pawn.Map;
-            IntVec3 at = busy.focusTarg.HasThing ? busy.focusTarg.Thing.PositionHeld : busy.focusTarg.Cell;
-            if (!ProjectZ.HasAnnex(map) || !Combat.Heights.CrossFloor(pawn.Position, at, map))
+            if (!ProjectZ.HasAnnex(map))
             {
                 return true;
             }
-            Vector3 to = busy.focusTarg.HasThing ? busy.focusTarg.Thing.DrawPos : busy.focusTarg.Cell.ToVector3Shifted();
+            if (pawn.stances.curStance is Stance_Busy busy && busy.focusTarg.IsValid)
+            {
+                IntVec3 at = busy.focusTarg.HasThing ? busy.focusTarg.Thing.PositionHeld : busy.focusTarg.Cell;
+                if (!Combat.Heights.CrossFloor(pawn.Position, at, map))
+                {
+                    return true;
+                }
+                Face(pawn, busy.focusTarg.HasThing ? busy.focusTarg.Thing.DrawPos : busy.focusTarg.Cell.ToVector3Shifted(), map);
+                return false;
+            }
+            if (pawn.pather != null && pawn.pather.Moving || pawn.jobs.curJob == null || pawn.jobs.curDriver == null)
+            {
+                return true;
+            }
+            LocalTargetInfo t = pawn.CurJob.GetTarget(pawn.jobs.curDriver.rotateToFace);
+            if (!t.IsValid)
+            {
+                return true;
+            }
+            Thing th = null;
+            if (t.HasThing)
+            {
+                th = t.Thing.Spawned ? t.Thing : ThingOwnerUtility.GetFirstSpawnedParentThing(t.Thing);
+                if (th == null || !th.Spawned || th.Map != map)
+                {
+                    return true;
+                }
+            }
+            IntVec3 cell = th != null ? th.Position : t.Cell;
+            if (!Combat.Heights.CrossFloor(pawn.Position, cell, map))
+            {
+                return true;
+            }
+            Face(pawn, th != null ? th.DrawPos : cell.ToVector3Shifted(), map);
+            if (pawn.Drafted && pawn.CurJobDef != JobDefOf.AttackStatic)
+            {
+                pawn.Rotation = Rot4.South;
+            }
+            return false;
+        }
+
+        private static void Face(Pawn pawn, Vector3 to, Map map)
+        {
             Vector3 d = ProjectZ.Virtual(to, map) - ProjectZ.Virtual(pawn.DrawPos, map);
             if (d.x * d.x + d.z * d.z > 0.0001f)
             {
                 pawn.Rotation = Pawn_RotationTracker.RotFromAngleBiased(d.AngleFlat());
             }
-            return false;
         }
     }
 

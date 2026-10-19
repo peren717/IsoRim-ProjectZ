@@ -79,13 +79,15 @@ namespace ProjectZ.Combat
         }
     }
 
-    // The one line-of-sight check behind every shot: AI target picking, CanHitTarget, TryFindShootLineFromTo.
+    // The one line-of-sight check behind every shot: AI target picking, CanHitTarget, TryFindShootLineFromTo (targeting,
+    // warm-up, cast spots, the shot report). Between floors Los3D (with the game's corner walks for full-fill targets);
+    // on one floor the game's own code.
     [HarmonyPatch(typeof(Verb), "CanHitCellFromCellIgnoringRange")]
     public static class Verb_CanHitCell_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Verb __instance, IntVec3 __0, IntVec3 __1, ref bool __result)
+        public static bool Prefix(Verb __instance, IntVec3 __0, IntVec3 __1, bool __2, ref bool __result)
         {
             Map map = __instance.caster?.Map;
             if (map == null || !Heights.CrossFloor(__0, __1, map))
@@ -98,7 +100,7 @@ namespace ProjectZ.Combat
                 __result = false;
                 return false;
             }
-            __result = !vp.requireLineOfSight || Heights.CanSee(__0, __1, map);
+            __result = !vp.requireLineOfSight || Los3D.CanSee(__0, __1, map, __2);
             return false;
         }
     }
@@ -107,8 +109,8 @@ namespace ProjectZ.Combat
     // own lean cells and AttackTargetFinder.CanSee). The game picks the lean cells from the direction to the target in
     // map rows, where another floor is a whole band of rows away (always "north" or "south"); between floors it gets
     // the direction over the ground instead (the target's column on the shooter's floor). Lean cells off the shooter's
-    // floor (the void rows past a band's edge) are dropped. Each lean cell then goes through the height line of sight
-    // (Verb_CanHitCell_Patch, Heights.CanSee): an upper end must lean out at its slab's edge.
+    // floor (the void rows past a band's edge) are dropped. Each lean cell then goes through Los3D (Verb_CanHitCell_Patch,
+    // Heights.CanSeeLeaning).
     [HarmonyPatch(typeof(ShootLeanUtility), nameof(ShootLeanUtility.LeanShootingSourcesFromTo))]
     public static class ShootLean_Patch
     {
@@ -166,7 +168,8 @@ namespace ProjectZ.Combat
     }
 
     // The hit report between floors: distance over the ground, the height accuracy bonus when shooting down, cover by
-    // height. Verb_LaunchProjectile.TryCastShot uses this report, so the tooltip and the real shot agree.
+    // height, blind smoke on the cells the line is in. Verb_LaunchProjectile.TryCastShot uses this report, so the tooltip
+    // and the real shot agree.
     [HarmonyPatch(typeof(ShotReport), nameof(ShotReport.HitReportFor))]
     public static class ShotReport_Patch
     {
@@ -175,6 +178,8 @@ namespace ProjectZ.Combat
         private static readonly AccessTools.StructFieldRef<ShotReport, float> equipmentFactor = AccessTools.StructFieldRefAccess<ShotReport, float>("factorFromEquipment");
         private static readonly AccessTools.StructFieldRef<ShotReport, List<CoverInfo>> covers = AccessTools.StructFieldRefAccess<ShotReport, List<CoverInfo>>("covers");
         private static readonly AccessTools.StructFieldRef<ShotReport, float> coversBlock = AccessTools.StructFieldRefAccess<ShotReport, float>("coversOverallBlockChance");
+        private static readonly AccessTools.StructFieldRef<ShotReport, float> gasFactor = AccessTools.StructFieldRefAccess<ShotReport, float>("factorFromCoveringGas");
+        private static readonly AccessTools.StructFieldRef<ShotReport, ShootLine> line = AccessTools.StructFieldRefAccess<ShotReport, ShootLine>("shootLine");
 
         public static bool Prepare() => CombatGate.Enabled;
 
@@ -198,6 +203,7 @@ namespace ProjectZ.Combat
             }
             shooterFactor(ref __result) = shooter;
             equipmentFactor(ref __result) = verb.verbProps.GetHitChanceFactor(verb.EquipmentSource, d);
+            gasFactor(ref __result) = SmokeFactor(verb, line(ref __result), map);
             if (target.HasThing && !target.Thing.def.CanBenefitFromCover)
             {
                 covers(ref __result) = new List<CoverInfo>();
@@ -206,6 +212,38 @@ namespace ProjectZ.Combat
             }
             covers(ref __result) = HeightCover.For(target, caster.Position, map, out float block);
             coversBlock(ref __result) = block;
+        }
+
+        private static readonly List<IntVec3> lineCells = new List<IntVec3>();
+
+        // The game's blind smoke factor (0.7 when smoke is on the shoot line), with the cells the line is in between
+        // floors (the game's own walk would cross the map rows between the two bands).
+        private static float SmokeFactor(Verb verb, ShootLine sl, Map map)
+        {
+            if (!sl.Source.IsValid || !sl.Dest.IsValid || verb.EquipmentSource != null && verb.EquipmentSource.TryGetComp<CompUniqueWeapon>(out CompUniqueWeapon u) && u.IgnoreAccuracyMaluses)
+            {
+                return 1f;
+            }
+            if (!Los3D.CanSee(sl.Source, sl.Dest, map, out float aim))
+            {
+                aim = Los3D.AimChest;
+            }
+            Los3D.LineCells(sl.Source, sl.Dest, map, aim, lineCells);
+            try
+            {
+                for (int i = 0; i < lineCells.Count; i++)
+                {
+                    if (lineCells[i].InBounds(map) && lineCells[i].AnyGas(map, GasType.BlindSmoke))
+                    {
+                        return 0.7f;
+                    }
+                }
+                return 1f;
+            }
+            finally
+            {
+                lineCells.Clear();
+            }
         }
     }
 
@@ -236,20 +274,21 @@ namespace ProjectZ.Combat
         }
     }
 
-    // Seeing a target on another floor (target finder validators): the same height line of sight.
+    // Seeing a target on another floor (target finder validators): Los3D with the game's leaning and its validator
+    // (blind smoke for turrets).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.CanSee))]
     public static class AttackTargetFinder_CanSee_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Thing seer, Thing target, ref bool __result)
+        public static bool Prefix(Thing seer, Thing target, Func<IntVec3, bool> validator, ref bool __result)
         {
             Map map = seer?.Map;
             if (map == null || target == null || target.Map != map || !Heights.CrossFloor(seer.Position, target.Position, map))
             {
                 return true;
             }
-            __result = Heights.CanSeeLeaning(seer, target);
+            __result = Heights.CanSeeLeaning(seer, target, validator);
             return false;
         }
     }
@@ -307,6 +346,12 @@ namespace ProjectZ.Combat
             {
                 return;
             }
+            // the game's blind-smoke rule for sight (LOSBlockableByGas: turrets)
+            Func<IntVec3, bool> gas = null;
+            if ((flags & TargetScanFlags.LOSBlockableByGas) != 0 && !(verb.EquipmentSource != null && verb.EquipmentSource.TryGetComp<CompUniqueWeapon>(out CompUniqueWeapon uw) && uw.IgnoreAccuracyMaluses))
+            {
+                gas = c => !c.AnyGas(map, GasType.BlindSmoke);
+            }
             candidates.Clear();
             candidates.AddRange(map.attackTargetsCache.GetPotentialTargetsFor(searcher));
             IAttackTarget best = null;
@@ -336,7 +381,7 @@ namespace ProjectZ.Combat
                         continue;
                     }
                 }
-                if (!Valid(t, th, s, sp, searcher, flags, validator, verb, canBashDoors, canBashFences, map))
+                if (!Valid(t, th, s, sp, searcher, flags, validator, verb, canBashDoors, canBashFences, gas, map))
                 {
                     continue;
                 }
@@ -346,7 +391,7 @@ namespace ProjectZ.Combat
                     // from here counts when it can walk under it (to the target's column on its own floor), where the
                     // cast position search (CastSpots) finds it a spot within range. Only when the game found nothing.
                     if (__result == null && sp != null && (flags & TargetScanFlags.NeedReachableIfCantHitFromMyPos) != 0
-                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSeeLeaning(s, th))
+                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSeeLeaning(s, th, gas))
                         && CanWalkUnder(sp, th, ks, map))
                     {
                         float sn = Score(t, searcher, verb, s, th, d, map);
@@ -392,7 +437,7 @@ namespace ProjectZ.Combat
 
         // The game's target filters (AttackTargetFinder.BestAttackTarget's validator) that don't depend on distance.
         private static bool Valid(IAttackTarget t, Thing th, Thing s, Pawn sp, IAttackTargetSearcher searcher, TargetScanFlags flags, Predicate<Thing> validator,
-            Verb verb, bool canBashDoors, bool canBashFences, Map map)
+            Verb verb, bool canBashDoors, bool canBashFences, Func<IntVec3, bool> gas, Map map)
         {
             if (!s.HostileTo(th) || validator != null && !validator(th))
             {
@@ -414,6 +459,17 @@ namespace ProjectZ.Combat
             {
                 RoofDef roof = th.Position.GetRoof(map);
                 if (roof != null && roof.isThickRoof)
+                {
+                    return false;
+                }
+            }
+            if (gas != null && (flags & TargetScanFlags.NeedLOSToAll) != 0)
+            {
+                if (!gas(s.Position) || !gas(th.Position))
+                {
+                    return false;
+                }
+                if (!Heights.CanSeeLeaning(s, th, gas) && (th is Pawn ? (flags & TargetScanFlags.NeedLOSToPawns) != 0 : (flags & TargetScanFlags.NeedLOSToNonPawns) != 0))
                 {
                     return false;
                 }
@@ -496,9 +552,10 @@ namespace ProjectZ.Combat
     }
 
     // Projectiles between floors fly in the target's floor rows (so they hit and explode there), from the shooter's
-    // ground cell moved onto that floor; their height runs from the shooter's eye to the target's middle. Along the way
-    // they pass over anything lower than their height at that point (on the floor that height is on), and stop on a
-    // slab or roof they would cross. A shot that would come down on open air (a miss off an upper floor's edge) falls to
+    // ground cell moved onto that floor; their height runs from the shooter's eye (Los3D.Eye) to the clear aim height of
+    // its line of sight (aimed shots) or near the ground (misses). Along the way they pass over anything lower than their
+    // height at that point (on the floor that height is on). A miss stops on a slab or roof it would cross; an aimed shot
+    // with a clear line never does (Los3D found no plane on it). A shot that would come down on open air (a miss off an upper floor's edge) falls to
     // the floor below, and one past a floor's north edge lands on its top row, never in the void between floors. Not
     // saved: a projectile still in flight on load flies on as a plain one.
     public static class Flights
@@ -508,6 +565,40 @@ namespace ProjectZ.Combat
             public float hs;
             public float ht;
             public float last;
+            public bool clear;   // aimed along a clear line of sight
+        }
+
+        private static readonly List<IntVec3> dests = new List<IntVec3>();
+
+        // A clear line of sight from the shoot line's source to the target's cell, or to one of its lean cells (the game's
+        // shoot line may end on one); aim = its clear aim height (cells over the target's floor).
+        public static bool ClearLine(IntVec3 source, IntVec3 dest, LocalTargetInfo target, Map map, out float aim)
+        {
+            bool corners = target.HasThing && target.Thing.def.Fillage == FillCategory.Full;
+            if (Los3D.CanSee(source, dest, map, out aim, corners))
+            {
+                return true;
+            }
+            if (!target.HasThing || !target.Thing.Spawned)
+            {
+                return false;
+            }
+            try
+            {
+                ShootLeanUtility.CalcShootableCellsOf(dests, target.Thing, source);
+                for (int i = 0; i < dests.Count; i++)
+                {
+                    if (dests[i] != dest && Los3D.CanSee(source, dests[i], map, out aim, corners))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            finally
+            {
+                dests.Clear();
+            }
         }
 
         public static readonly ConditionalWeakTable<Projectile, Flight> table = new ConditionalWeakTable<Projectile, Flight>();
@@ -562,6 +653,7 @@ namespace ProjectZ.Combat
             {
                 return;
             }
+            IntVec3 spawn = __instance.Position;   // the shoot line's source
             IntVec3 oc = ___origin.ToIntVec3();
             IntVec3 dc = ___destination.ToIntVec3();
             int ko = ProjectZ.FloorOf(oc, map);
@@ -620,12 +712,18 @@ namespace ProjectZ.Combat
             if (!__instance.def.projectile.flyOverhead)
             {
                 bool aimed = land == kd && (__instance.usedTarget.HasThing || __instance.intendedTarget.HasThing);
-                float hs = ko * Heights.Storey + Heights.Eye;
+                // An aimed shot along a clear line of sight (Los3D from the shoot line's source, the spawn cell) flies at
+                // its heights (eye to the clear aim height) and never stops on a slab or roof: the line crossed none.
+                float aim = Los3D.AimChest;
+                bool clear = aimed && Flights.ClearLine(spawn, dc, __instance.usedTarget, map, out aim);
+                float wall = IsoRimBridge.WallHeight;
+                float hs = ko * Heights.Storey + Los3D.Eye / wall;
                 Flights.table.AddOrUpdate(__instance, new Flights.Flight
                 {
                     hs = hs,
-                    ht = land * Heights.Storey + (aimed ? Heights.Middle : 0.1f),
-                    last = hs
+                    ht = land * Heights.Storey + (aimed ? (clear ? aim : Los3D.AimChest) / wall : 0.1f),
+                    last = hs,
+                    clear = clear
                 });
             }
             PZCombatStats.crossFloorShots++;
@@ -677,7 +775,7 @@ namespace ProjectZ.Combat
             float hi = Mathf.Max(f.last, h);
             bool down = f.last > h;
             f.last = h;
-            for (int k = a.MinLevel + 1; k <= a.MaxLevel + 1; k++)
+            for (int k = a.MinLevel + 1; k <= a.MaxLevel + 1 && !f.clear; k++)
             {
                 float level = k * Heights.Storey;
                 if (level >= lo && level <= hi && Column.PlaneSolid(g, k, map))

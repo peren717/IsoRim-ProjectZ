@@ -52,4 +52,6 @@
   <PZ_ShipNotEnoughFloors>这里的楼层不够放下飞船上层甲板</PZ_ShipNotEnoughFloors>
   <PZ_ShipFloorAbove>被上方的楼层阻挡</PZ_ShipFloorAbove>
   <PZ_ShipStairsOnDeck>飞船楼梯必须建在逆重飞船甲板上，顶端出口也要在甲板上方</PZ_ShipStairsOnDeck>
+  <PZ_NoLineOfSight>没有视线</PZ_NoLineOfSight>
+  <PZ_CannotHitNoLineOfSight>无法击中目标：没有视线</PZ_CannotHitNoLineOfSight>
 </LanguageData>
