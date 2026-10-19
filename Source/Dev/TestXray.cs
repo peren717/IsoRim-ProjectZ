@@ -14,7 +14,7 @@ namespace ProjectZ.Dev
     // rock above the tunnel's fifth cell, and shots are taken:
     //   X1 Mine tool in hand: the x-ray is drawn (outline, pawns, crosshair)      xray_tool.png, xray_tool_wide.png
     //   X2 no tool: nothing drawn                                                  xray_none.png
-    //   X3 tool in hand, the ground viewed: nothing drawn                          xray_ground.png
+    //   X3 tool in hand, the ground viewed: only the floor above (two-way x-ray)  xray_ground.png
     // Read from IsoRim by name (MineXray.Shown, OutlineQuads, BuildMs).
     public static partial class TestRunner
     {
@@ -175,7 +175,7 @@ namespace ProjectZ.Dev
                     return true;
 
                 case "xr_ground_check":
-                    Result("xray X3: nothing with the ground viewed", !(bool)XrGet("Shown"), $"shown {XrGet("Shown")}");
+                    Result("xray X3: the ground viewed: no floor below, the floor above shown (two-way x-ray)", XrGet("ShownDown") is bool dn && !dn && XrGet("ShownUp") is bool upx && upx, $"shown {XrGet("Shown")}, down {XrGet("ShownDown")}, up {XrGet("ShownUp")}");
                     Find.DesignatorManager.Deselect();
                     Finish();
                     return true;
