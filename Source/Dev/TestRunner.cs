@@ -121,6 +121,8 @@ namespace ProjectZ.Dev
     //                                   debris: IsoRim's collapse debris (a slab collapse and a roof drop filmed with the pieces
     //                                   stepped, frame time with and without them, a colonist deconstructing a slab's column);
     //                                   -projectzfloors=2 (TestDebris)
+    //                                   debrisstale: the debris of a slab falling while its floor is hidden (no stale mesh
+    //                                   index in IsoRim); -projectzfloors=2 (TestDebrisStale)
     //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
     //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
     //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)
@@ -269,7 +271,7 @@ namespace ProjectZ.Dev
             {
                 Seed = seed;
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -347,6 +349,7 @@ namespace ProjectZ.Dev
             if (kind == "ERROR")
             {
                 errors++;
+                DsSawError(text);
                 if (errors == 300 && stage != "done")
                 {
                     Append("[PZTest] 300 errors: giving up");
@@ -399,7 +402,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -671,6 +674,11 @@ namespace ProjectZ.Dev
                 StepSkyDrop(map);
                 return;
             }
+            if (stage.StartsWith("ds_"))
+            {
+                StepDebrisStale(map);
+                return;
+            }
             if (stage.StartsWith("db_"))
             {
                 StepDebris(map);
@@ -908,6 +916,10 @@ namespace ProjectZ.Dev
                     else if (mode == "debris")
                     {
                         stage = "db_setup";
+                    }
+                    else if (mode == "debrisstale")
+                    {
+                        stage = "ds_setup";
                     }
                     else if (mode == "shuttles")
                     {
