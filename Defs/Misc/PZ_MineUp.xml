@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Tall mountains, mine up: rock marked with vanilla Mine on an upper level that the pawns can't reach on its own
+       level is mined from the cell right below it, and its floor opens (ProjectZ.WorkGiver_MineFromBelow). No button. -->
+  <JobDef>
+    <defName>PZ_MineFromBelow</defName>
+    <driverClass>ProjectZ.JobDriver_MineFromBelow</driverClass>
+    <reportString>digging at TargetA.</reportString>
+    <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
+  </JobDef>
+
+  <WorkGiverDef>
+    <defName>PZ_MineFromBelow</defName>
+    <label>mine from below</label>
+    <giverClass>ProjectZ.WorkGiver_MineFromBelow</giverClass>
+    <workType>Mining</workType>
+    <priorityInType>99</priorityInType>
+    <verb>mine</verb>
+    <gerund>mining</gerund>
+    <tagToGive>Fieldwork</tagToGive>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+
+</Defs>
