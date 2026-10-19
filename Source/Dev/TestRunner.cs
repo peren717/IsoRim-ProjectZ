@@ -142,8 +142,8 @@ namespace ProjectZ.Dev
     //                                   (filmed, the magenta clothes counted); the same arguments as rocktop (TestMineBody)
     //                                   xray: IsoRim's x-ray of the floor below with the Mine tool upstairs (a tunnel dug by
     //                                   the real job, level 1 viewed); the same arguments as rocktop (TestXray)
-    //                                   minetint: IsoRim's tint of rock marked for mining on level 1 of a tall mountain
-    //                                   (the Mine and cancel designators); the same arguments as rocktop (TestMineTint)
+    //                                   minetint: IsoRim's marks on rock marked for mining on level 1 of a tall mountain
+    //                                   (tint, outline, the mark on the top, fogged rock); the same arguments as rocktop (TestMineTint)
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
