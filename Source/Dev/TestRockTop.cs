@@ -17,6 +17,9 @@ namespace ProjectZ.Dev
     //   T3 colonists mine a hall round a mountain-edge lip with a colonist, a wall, a stool and steel on the lip's top:
     //      the unsupported thin / floor roof falls with its floor (things fall, buildings break, rubble); thick-roofed
     //      cells drop collapsed rocks and keep their floors (vanilla; T4); supported floors stay
+    //      G2/G3 x rock-top (merge into compat): a natural floor cannot be taken up; steel and an animal put on the air
+    //      over a top fall onto it (bruised); the lip's fall lands where Column.Landing says; the air it leaves is air for
+    //      gravity; the hall's roof-holder checks run through BandRadial's clip
     //   T5/T6 colonists build stairs whose exit is a lip top: nothing is laid there; walk up; a wall and a bed on lip tops;
     //      T7 a wood floor laid on a top allows the game's drop finders there, an unbuilt top still refuses them, and
     //      ~440 finder calls never give an unbuilt top; walk down; the stairs deconstructed: the natural floor stays
@@ -353,6 +356,7 @@ namespace ProjectZ.Dev
                     }
                     RtSiteStart(map, CellRect.CenteredOn(rtL, 11));
                     rtU = Levels.Cell(rtL, 1, map);
+                    RtG2Probes(map, home);
                     rtWall = Levels.Cell(rtL + IntVec3.West, 1, map);
                     rtStool = Levels.Cell(rtL + IntVec3.East, 1, map);
                     IntVec3 steelAt = Levels.Cell(rtL + IntVec3.East * 2, 1, map);
@@ -389,11 +393,12 @@ namespace ProjectZ.Dev
                     Info($"T3 lip {rtL} (roof {map.roofGrid.RoofAt(rtL)?.defName}), top {rtU}; {rtCells.Count} rock cells within {R} designated; rider {rtRider} drafted on the top, wall {rtWall}, stool {rtStool}, steel {rtSteel.Position}; a supported top {rtFar}");
                     rtThick.Clear();
                     rtThick.AddRange(rtCells.Where(c => map.roofGrid.RoofAt(c)?.isThickRoof ?? false));
-                    TickUntil(400000, () => RtKeep(map) && (rtU.GetTerrain(map) == PZDefOf.PZ_OpenAir || rtCells.All(c => !RtRock(c, map))), "rt_t3_settle", 60);
+                    TickUntil(400000, () => RtG2AnimalCheck() && RtKeep(map) && (rtU.GetTerrain(map) == PZDefOf.PZ_OpenAir || rtCells.All(c => !RtRock(c, map))), "rt_t3_settle", 60);
                     return true;
                 }
                 case "rt_t3_settle":
                 {
+                    RtG2AnimalCheck();
                     string left = string.Join(" ", rtCells.Where(c => c.GetEdifice(map) is Mineable).Select(c => c + " desig " + (map.designationManager.DesignationAt(c, DesignationDefOf.Mine) != null)
                         + " fog " + map.fogGrid.IsFogged(c) + " roof " + map.roofGrid.RoofAt(c)?.defName + " standable near " + GenAdj.CellsAdjacentCardinal(c, Rot4.North, IntVec2.One).Count(n => n.InBounds(map) && n.Standable(map))));
                     Info($"T3 after {ticksTotal} ticks (rock cells left: {left}): lip top {rtU.GetTerrain(map).defName}");
@@ -421,6 +426,7 @@ namespace ProjectZ.Dev
                     Result("T3 a hall mined under a lip: once its thin or floor roof is unsupported it falls with the lip's floor; the colonist on it falls to the ground hurt (alive), rubble, a floor collapse",
                         fell && riderDown && hurt > 0 && !rtRider.Dead && rubble && PZStats.slabCollapses > rtCollapses,
                         $"lip top {rtU} {rtU.GetTerrain(map).defName}, roof under it {map.roofGrid.RoofAt(rtL)?.defName ?? "none"}; {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")} level {(rtRider.Spawned ? ProjectZ.FloorOf(rtRider.Position, map) : -9)}, dead {rtRider.Dead}, new injuries {hurt} ({string.Join(",", rtRider.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}); rubble {rubble}; floor collapses {PZStats.slabCollapses - rtCollapses}");
+                    RtG2AfterFall(map, fell);
                     // the rider is taken out of the hall (the rest of it is still being mined) and the mining goes on
                     if (rtRider.Spawned)
                     {
@@ -830,6 +836,148 @@ namespace ProjectZ.Dev
                 }
             }
             return false;
+        }
+
+        // ---- where compat G2 (gravity) and G3 (BandRadial) meet rock-top floors (merge of mountains into compat)
+        private static BandRadial.Row rtHolderRow;
+        private static int rtFell0, rtNoLanding0;
+
+        // At T3's start (before the hall is mined): a natural floor cannot be taken up; a stack and an animal put on the
+        // open air over a mountain top fall onto it (the top is a floor for the gravity rule; the animal bruised); BandRadial
+        // counts the roof-holder check the mining runs.
+        private static bool rtG2Probed;
+
+        private static void RtG2Probes(Map map, IntVec3 home)
+        {
+            if (!rtG2Probed)
+            {
+                rtG2Probed = true;   // (once: T3 may pick another lip after a reload)
+                RtG2Once(map, home);
+            }
+            rtHolderRow = BandRadial.Rows.FirstOrDefault(r => r.method == "ProcessRoofHolderDespawned");
+            if (rtHolderRow != null)
+            {
+                rtHolderRow.calls = rtHolderRow.cells = rtHolderRow.folded = rtHolderRow.skipped = 0;
+            }
+            BandRadial.Counting = true;
+            rtFell0 = Gravity.Fell;
+            rtNoLanding0 = Gravity.NoLanding;
+        }
+
+        private static void RtG2Once(Map map, IntVec3 home)
+        {
+            AcceptanceReport rfd = new Designator_RemoveFoundation().CanDesignateCell(rtU);
+            AcceptanceReport rfl = new Designator_RemoveFloor().CanDesignateCell(rtU);
+            Result("G2 x rock-top: a natural floor cannot be taken up (remove foundation and remove floor refused, not a slab)",
+                !rfd.Accepted && !rfl.Accepted && !Slab.At(rtU, map) && Floors.KindAt(rtU, map) == FloorKind.NaturalRock,
+                $"lip top {rtU} {rtU.GetTerrain(map).defName}: remove foundation {rfd.Accepted} ({rfd.Reason}), remove floor {rfl.Accepted} ({rfl.Reason}), slab {Slab.At(rtU, map)}");
+            IntVec3 top = IntVec3.Invalid, air = IntVec3.Invalid;
+            foreach (IntVec3 g in Near(home, 110, map))
+            {
+                if ((g - rtL).LengthHorizontal < 14f || TH(g, map) != 1)
+                {
+                    continue;
+                }
+                IntVec3 t = Levels.Cell(g, 1, map), u = Levels.Cell(g, 2, map);
+                IntVec3 t2 = Levels.Cell(g + IntVec3.East, 1, map), u2 = Levels.Cell(g + IntVec3.East, 2, map);
+                if (u.IsValid && u2.IsValid && TmTop(t, map) && TmTop(t2, map) && t.Standable(map) && t2.Standable(map) && Gravity.Air(u, map) && Gravity.Air(u2, map)
+                    && !map.roofGrid.Roofed(t) && !map.roofGrid.Roofed(t2) && !t.GetThingList(map).Any(x => x.def.category == ThingCategory.Item || x is Pawn)
+                    && !t2.GetThingList(map).Any(x => x.def.category == ThingCategory.Item || x is Pawn))
+                {
+                    top = t;
+                    air = u;
+                    break;
+                }
+            }
+            if (!air.IsValid)
+            {
+                Result("G2 x rock-top: open air over a mountain top", false, "none found");
+            }
+            else
+            {
+                int fell0 = Gravity.Fell, bruised0 = Gravity.PawnsBruised, broken0 = Gravity.RoofsBroken;
+                Thing steel = ThingMaker.MakeThing(ThingDefOf.Steel);
+                steel.stackCount = 7;
+                GenPlace.TryPlaceThing(steel, air, map, ThingPlaceMode.Near);
+                IntVec3 steelAt = steel.Spawned ? steel.Position : IntVec3.Invalid;
+                Rand.PushState(4711);
+                Pawn animal;
+                try
+                {
+                    animal = PawnGenerator.GeneratePawn(new PawnGenerationRequest(DefDatabase<PawnKindDef>.GetNamed("Muffalo"), null, forceGenerateNewPawn: true));
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
+                rtAnimalHurt0 = animal.health.hediffSet.hediffs.Count(h => h is Hediff_Injury);
+                GenSpawn.Spawn(animal, air + IntVec3.East, map);
+                IntVec3 animalAt = animal.Spawned ? animal.Position : IntVec3.Invalid;
+                bool steelOk = steelAt.IsValid && ProjectZ.FloorOf(steelAt, map) == 1 && Floors.KindAt(steelAt, map) == FloorKind.NaturalRock;
+                bool animalOk = animalAt.IsValid && ProjectZ.FloorOf(animalAt, map) == 1 && Floors.KindAt(animalAt, map) == FloorKind.NaturalRock;
+                Result("G2 x rock-top: steel and an animal put on the open air over a mountain top fall onto the top (one floor, the animal to be bruised, no roof broken)",
+                    steelOk && animalOk && Gravity.Fell >= fell0 + 2 && Gravity.PawnsBruised > bruised0 && Gravity.RoofsBroken == broken0,
+                    $"air {air} over top {top}: steel at {steelAt} (level {(steelAt.IsValid ? ProjectZ.FloorOf(steelAt, map) : -9)}), animal at {animalAt} (level {(animalAt.IsValid ? ProjectZ.FloorOf(animalAt, map) : -9)}); fell +{Gravity.Fell - fell0}, bruised +{Gravity.PawnsBruised - bruised0}, roofs broken +{Gravity.RoofsBroken - broken0}");
+                if (steel.Spawned)
+                {
+                    steel.Destroy();
+                }
+                // (the bruises come on the map's next tick, JumpGrid: checked once the hall is mined, RtG2AnimalCheck)
+                rtAnimal = animal.Spawned ? animal : null;
+            }
+        }
+
+        private static Pawn rtAnimal;
+        private static int rtAnimalHurt0;
+
+        // (always true: it rides in T3's tick condition and checks once, on its first test, 60 ticks after the fall)
+        private static bool RtG2AnimalCheck()
+        {
+            if (rtAnimal == null)
+            {
+                return true;
+            }
+            int hurt = rtAnimal.health.hediffSet.hediffs.Count(h => h is Hediff_Injury) - rtAnimalHurt0;
+            Result("G2 x rock-top: the animal that fell onto the top took the fall bruises", hurt > 0 && !rtAnimal.Dead,
+                $"{rtAnimal}: new injuries {hurt} ({string.Join(",", rtAnimal.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}), dead {rtAnimal.Dead}");
+            if (rtAnimal.Spawned)
+            {
+                rtAnimal.Destroy();
+            }
+            rtAnimal = null;
+            return true;
+        }
+
+        // At T3's fall: the lip's floor fell on the one collapse path (SlabCollapse under Gravity.Suspend, landing by
+        // Column.Landing); the open air it left is air for the gravity rule (a stack put there falls into the hall); the
+        // mining's roof-holder checks ran band-clipped (BandRadial on a mountain map).
+        private static void RtG2AfterFall(Map map, bool fell)
+        {
+            BandRadial.Counting = false;
+            BandRadial.Row row = rtHolderRow;
+            Result("G3 x rock-top: BandRadial on a mountain map: the mined hall's roof-holder checks (RoofCollapseCellsFinder) ran through the band clip",
+                row != null && row.target != null && row.swaps == row.expected && row.calls > 0 && row.cells > 0,
+                row == null ? "no row" : $"{row.Name}: patched {row.target != null}, swaps {row.swaps}/{row.expected}, calls {row.calls}, cells {row.cells}, folded to the void wall {row.folded}, skipped {row.skipped}");
+            if (!fell)
+            {
+                return;
+            }
+            IntVec3 land = Column.Landing(rtU, map, true, false, out int fallen, out _);
+            bool riderAtLanding = rtRider.Spawned && land.IsValid && rtRider.Position.DistanceTo(land) <= 1.5f;
+            Result("G2 x rock-top: the lip's floor fell on the slab-collapse path: the colonist landed where Column.Landing puts things from the lip top",
+                riderAtLanding && fallen == 1, $"landing {land} (fallen {fallen}), {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")}; gravity hooks during the fall: fell +{Gravity.Fell - rtFell0}, no landing +{Gravity.NoLanding - rtNoLanding0}");
+            int fell0 = Gravity.Fell;
+            Thing probe = ThingMaker.MakeThing(ThingDefOf.Steel);
+            probe.stackCount = 3;
+            GenPlace.TryPlaceThing(probe, rtU, map, ThingPlaceMode.Near);
+            IntVec3 at = probe.Spawned ? probe.Position : IntVec3.Invalid;
+            Result("G2 x rock-top: the open air left by the fallen lip is air for the gravity rule (steel put there falls into the hall below)",
+                at.IsValid && ProjectZ.FloorOf(at, map) == 0 && Gravity.Fell > fell0,
+                $"steel put on {rtU} ({rtU.GetTerrain(map).defName}) is at {at} (level {(at.IsValid ? ProjectZ.FloorOf(at, map) : -9)}); fell +{Gravity.Fell - fell0}");
+            if (probe.Spawned)
+            {
+                probe.Destroy();
+            }
         }
     }
 }
