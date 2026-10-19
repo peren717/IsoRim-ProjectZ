@@ -148,7 +148,8 @@ namespace ProjectZ.Patches
     // Region breadth-first searches (GenClosest, job scans, flee and exit searches, CanReach's helpers ...): right after
     // a region is taken from the open queue, its stair and jump partners are queued like linked neighbours (same entry
     // test, J2). A search starting upstairs so reaches the ground over a jump; one starting on the ground never goes up
-    // without stairs.
+    // without stairs. These searches do not know their traveller, so no partner here enters fog (StairRegions.FogBlocks:
+    // the stricter rule; reachability itself applies it per traveller).
     [HarmonyPatch]
     public static class BFSWorker_Patch
     {

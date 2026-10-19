@@ -382,7 +382,7 @@ namespace ProjectZ.Patches
             RegionGrid rg = map.regionGrid;
             Region from = start.InBounds(map) ? rg.GetValidRegionAt_NoRebuild(start) : null;
             StairGrid g = StairGrid.For(map);
-            if (from == null || g == null)
+            if (from == null)   // (g null: no stairs, so no stairs hop is found below; jumps only)
             {
                 return -1;
             }
