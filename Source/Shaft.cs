@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HarmonyLib;
 using RimWorld;
 using Verse;
 
@@ -169,6 +170,71 @@ namespace ProjectZ
             {
                 cells = new HashSet<IntVec3>();
             }
+        }
+    }
+}
+
+namespace ProjectZ
+{
+    // Mine up P5 (plan §8, Q7): a thick roof over open shaft air that caves in (vanilla's cave-in for an unsupported mined
+    // area) drops its rocks at the shaft's bottom instead of into the air: the cell is taken off the game's collapse list
+    // and vanilla's own first phase (the crush and the CollapsedRocks) runs on the landing cell (Column.Landing), with the
+    // thick roof's def there for that one call. The thick roof itself stays (vanilla: it never vanishes).
+    public static class ShaftCaveIn
+    {
+        public static int Landed;
+
+        private static readonly AccessTools.FieldRef<RoofGrid, RoofDef[]> gridRef = AccessTools.FieldRefAccess<RoofGrid, RoofDef[]>("roofGrid");
+
+        private delegate void PhaseOneFn(IntVec3 c, Map map, List<Thing> outCrushedThings);
+
+        private static readonly PhaseOneFn phaseOne = AccessTools.MethodDelegate<PhaseOneFn>(AccessTools.Method(typeof(RoofCollapserImmediate), "DropRoofInCellPhaseOne"));
+
+        private static bool Over(IntVec3 c, Map map)
+        {
+            return c.InBounds(map) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false) && Gravity.Air(c, map) && !ProjectZ.IsVoid(c, map);
+        }
+
+        public static List<IntVec3> Redirect(List<IntVec3> cells, Map map, List<Thing> outCrushedThings)
+        {
+            bool any = false;
+            for (int i = 0; i < cells.Count && !any; i++)
+            {
+                any = Over(cells[i], map);
+            }
+            if (!any)
+            {
+                return cells;
+            }
+            List<IntVec3> keep = new List<IntVec3>(cells.Count);
+            RoofDef[] grid = gridRef(map.roofGrid);
+            foreach (IntVec3 c in cells)
+            {
+                if (!Over(c, map))
+                {
+                    keep.Add(c);
+                    continue;
+                }
+                IntVec3 land = Column.Landing(c, map, false, false, out _, out _);
+                if (!land.IsValid || !land.InBounds(map))
+                {
+                    continue;   // nothing below holds: no rocks in the air
+                }
+                int idx = map.cellIndices.CellToIndex(land);
+                RoofDef was = grid[idx];
+                grid[idx] = map.roofGrid.RoofAt(c);
+                try
+                {
+                    phaseOne(land, map, outCrushedThings);
+                }
+                finally
+                {
+                    grid[idx] = was;
+                }
+                Landed++;
+                ProjectZ.DebugLog($"cave-in over the shaft at {c}: rocks landed at {land}");
+            }
+            return keep;
         }
     }
 }

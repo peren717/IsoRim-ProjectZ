@@ -298,6 +298,10 @@ namespace ProjectZ
                         SlabCollapse.BufferCollapse(c, map, outCrushedThings);
                     }
                 }
+                if (Mountains.On(map))
+                {
+                    cells = ShaftCaveIn.Redirect(cells, map, outCrushedThings);
+                }
                 if (cells.Any(c => c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof))
                 {
                     cells = cells.Where(c => !c.InBounds(map) || map.roofGrid.RoofAt(c) != PZDefOf.PZ_StairwellRoof).ToList();
