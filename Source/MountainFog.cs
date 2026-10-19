@@ -221,3 +221,71 @@ namespace ProjectZ
         }
     }
 }
+
+namespace ProjectZ
+{
+    // Mine up, vertical fog (isorim-pz-phase3-mineup-plan.md §6): the cell right above every revealed walkable cell is
+    // revealed (rock, ore or a top), one cell, never a flood; it does not mark a level reached. Hooks: a cell unfogged
+    // (V1: vanilla floods, MountainFog.Reveal, doors, ClearAllFog), rock removed (V2: a tunnel reveals the rock above it as
+    // it goes), a floor laid on open air (V3, TerrainChanged_FloorRoof_Patch), and generation (V4, Mountains.Generate).
+    public static class VerticalFog
+    {
+        // counters (tests)
+        public static int Revealed, LastAboveRevealed;
+
+        public static void RevealAbove(IntVec3 c, Map map)
+        {
+            if (map == null || !c.IsValid || Current.ProgramState != ProgramState.Playing || !Mountains.On(map) || !c.InBounds(map))
+            {
+                return;
+            }
+            FogGrid fog = map.fogGrid;
+            if (fog.IsFogged(c) || !c.Walkable(map))
+            {
+                return;
+            }
+            IntVec3 up = FloorRoof.Above(c, map);
+            if (up.IsValid && up.InBounds(map) && fog.IsFogged(up))
+            {
+                Revealed++;
+                fog.Unfog(up);
+            }
+        }
+    }
+
+    // V1
+    [HarmonyPatch(typeof(FogGrid), nameof(FogGrid.Unfog))]
+    public static class FogUnfog_VerticalFog_Patch
+    {
+        private static readonly AccessTools.FieldRef<FogGrid, Map> mapRef = AccessTools.FieldRefAccess<FogGrid, Map>("map");
+
+        internal static Map MapOf(FogGrid g) => mapRef(g);
+
+        public static void Postfix(FogGrid __instance, IntVec3 c)
+        {
+            if (!BandRadial.AnyAnnex)
+            {
+                return;
+            }
+            VerticalFog.RevealAbove(c, mapRef(__instance));
+        }
+    }
+
+    // V2
+    [HarmonyPatch(typeof(FogGrid), nameof(FogGrid.Notify_FogBlockerRemoved))]
+    public static class FogBlockerRemoved_VerticalFog_Patch
+    {
+        public static void Postfix(FogGrid __instance, Thing thing)
+        {
+            if (!BandRadial.AnyAnnex || thing == null)
+            {
+                return;
+            }
+            Map map = FogUnfog_VerticalFog_Patch.MapOf(__instance);
+            foreach (IntVec3 c in thing.OccupiedRect())
+            {
+                VerticalFog.RevealAbove(c, map);
+            }
+        }
+    }
+}

@@ -400,6 +400,24 @@ namespace ProjectZ
 
         private static bool IsPlainRock(ThingDef d) => d?.building != null && d.building.isNaturalRock && !d.building.isResourceRock && d.building.naturalTerrain != null;
 
+        // Walkable before the path grid is built (generation): passable terrain, no impassable building.
+        internal static bool WalkableRaw(IntVec3 c, Map map)
+        {
+            if (c.GetTerrain(map)?.passability == Traversability.Impassable)
+            {
+                return false;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].def.passability == Traversability.Impassable)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // Called from the FinalizeInit prefix (full size restored, annex filled with open air, elevation handed over).
         internal static void Generate(Map map, AnnexMapComponent a)
         {
@@ -468,6 +486,18 @@ namespace ProjectZ
                 fog[L] = BandFog(h, L, sx, gz, out int rim, out int holes);
                 LastRim += rim;
                 LastHoles += holes;
+            }
+            // mine up V4 (vertical fog): the cell right above every revealed walkable ground cell (vanilla's revealed caves
+            // under the mountain) is revealed; on the bands the walkable cells are tops with open air above
+            VerticalFog.LastAboveRevealed = 0;
+            for (int i = 0; i < n && cap >= 1; i++)
+            {
+                IntVec3 g = new IntVec3(i % sx, 0, i / sx);
+                if (fog[1][i] && !map.fogGrid.IsFogged(g) && WalkableRaw(g, map))
+                {
+                    fog[1][i] = false;
+                    VerticalFog.LastAboveRevealed++;
+                }
             }
             Patches.AnnexGen.FillRule rule = (c, m) =>
             {
