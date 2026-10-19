@@ -1147,7 +1147,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     new Designator_Mine().DesignateMultiCell(drag);
-                    MuCrew(map, WorkTypeDefOf.Mining, 2);
+                    MuCrew(map, WorkTypeDefOf.Mining, 3);   // (more miners than faces: without the group rule the third holes the floor)
                     muInt = drag.Count;
                     muNote = string.Join(";", drag);
                     Info($"M13a: stairs {st?.Position} exit {st?.TopCell} ({st?.TopCell.GetTerrain(map)?.defName}); drag {drag.Count} rock: {muNote}");
