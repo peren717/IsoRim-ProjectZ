@@ -55,4 +55,6 @@
   <PZ_ShipStairsOnDeck>Ship stairs must stand on the gravship's deck, their exit over it</PZ_ShipStairsOnDeck>
   <PZ_NoLineOfSight>No line of sight</PZ_NoLineOfSight>
   <PZ_CannotHitNoLineOfSight>Cannot hit target: no line of sight</PZ_CannotHitNoLineOfSight>
+  <PZ_MineAboveFirst>Mine the rock above first</PZ_MineAboveFirst>
+  <PZ_BuiltAbove>Something is built above</PZ_BuiltAbove>
 </LanguageData>

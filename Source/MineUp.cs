@@ -400,3 +400,94 @@ namespace ProjectZ
         }
     }
 }
+
+namespace ProjectZ
+{
+    // Vanilla Remove roof under a bare natural top opens it (plan R3): the no-roof area on a tunnel cell whose ceiling is
+    // a mountain top with nothing on it makes a hole to the sky (Shaft.Open), in vanilla's roof-removal time, no stone.
+    public static class Hole
+    {
+        public static int Opened;
+
+        // Why the ceiling of cell c can't be opened by Remove roof, or null when it can. Reasons for the player only where
+        // rock or something built stands above ("" for every other refusal: not a bare natural top, a stairs exit, ...).
+        public static string Blocked(IntVec3 c, Map map)
+        {
+            if (map == null || !Mountains.On(map) || !c.IsValid || !c.InBounds(map))
+            {
+                return "";
+            }
+            IntVec3 u = FloorRoof.Above(c, map);
+            if (!u.IsValid || !Floors.UnbuiltNatural(u, map))
+            {
+                return "";
+            }
+            Building ce = c.GetEdifice(map);
+            if (ce != null && (ce.def.passability == Traversability.Impassable || ce.def.building != null && ce.def.building.isNaturalRock))
+            {
+                return "";
+            }
+            List<Thing> list = u.GetThingList(map);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Thing t = list[i];
+                if (t is Mineable)
+                {
+                    return "PZ_MineAboveFirst";
+                }
+                if (t is Building || t is Blueprint || t is Frame)
+                {
+                    return "PZ_BuiltAbove";
+                }
+            }
+            if (StairwellFloor.IsStairsExit(u, map))
+            {
+                return "PZ_BuiltAbove";
+            }
+            return null;
+        }
+
+        public static bool CanOpen(IntVec3 c, Map map) => Blocked(c, map) == null;
+    }
+
+    // (1) The no-roof area may be painted under a bare natural top (vanilla: "nothing can remove thick roofs").
+    [HarmonyPatch(typeof(Designator_AreaNoRoof), nameof(Designator_AreaNoRoof.CanDesignateCell))]
+    public static class NoRoofDesignate_Hole_Patch
+    {
+        public static void Postfix(Designator_AreaNoRoof __instance, IntVec3 c, ref AcceptanceReport __result)
+        {
+            Map map = __instance.Map;
+            if (__result.Accepted || map == null || !Mountains.On(map) || !c.InBounds(map) || c.Fogged(map) || !(map.roofGrid.RoofAt(c)?.isThickRoof ?? false))
+            {
+                return;
+            }
+            string why = Hole.Blocked(c, map);
+            if (why == null)
+            {
+                __result = !map.areaManager.NoRoof[c];
+            }
+            else if (why.Length > 0)
+            {
+                __result = why.Translate();
+            }
+        }
+    }
+
+    // (3) The work done: the ceiling opens (instead of the roof just going).
+    [HarmonyPatch(typeof(JobDriver_RemoveRoof), "DoEffect")]
+    public static class RemoveRoofEffect_Hole_Patch
+    {
+        public static bool Prefix(JobDriver_RemoveRoof __instance)
+        {
+            Map map = __instance.pawn?.Map;
+            IntVec3 c = __instance.job.targetA.Cell;
+            if (map == null || !FloorRoof.FloorAbove(c, map) || !Hole.CanOpen(c, map))
+            {
+                return true;
+            }
+            Hole.Opened++;
+            Shaft.Open(c, map, __instance.pawn);
+            return false;
+        }
+    }
+}

@@ -232,14 +232,14 @@ namespace ProjectZ
         }
     }
 
-    // No roof-removal jobs under a floor, nor on a stairwell's roof (an opening: under stairs or a covered shaft; the
-    // stairwell rule would only put it back).
+    // No roof-removal jobs under a floor (except a bare natural top in a tall mountain: it opens, Hole), nor on a
+    // stairwell's roof (an opening: under stairs or a covered shaft; the stairwell rule would only put it back).
     [HarmonyPatch(typeof(WorkGiver_RemoveRoof), nameof(WorkGiver_RemoveRoof.HasJobOnCell))]
     public static class RemoveRoof_FloorRoof_Patch
     {
         public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
         {
-            if (__result && (FloorRoof.FloorAbove(c, pawn.Map) || pawn.Map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof))
+            if (__result && (FloorRoof.FloorAbove(c, pawn.Map) && !Hole.CanOpen(c, pawn.Map) || pawn.Map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof))
             {
                 __result = false;
             }
