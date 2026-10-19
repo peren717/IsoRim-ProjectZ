@@ -10,7 +10,7 @@ namespace ProjectZ.Patches
 {
     // The Floors row on vanilla's Create World page (Page_CreateWorldParams). It is drawn as the last row of the
     // page's left column, 40 px under vanilla's last row (Advanced settings; Odyssey's landmark and Biotech's
-    // pollution rows come before it), then the Tall mountains row (40 px lower) and the floors warning under both. The
+    // pollution rows come before it), the floors warning right under its slider, then the Tall mountains row. The
     // right column (factions) is untouched.
     public static class WorldPage
     {
@@ -33,12 +33,13 @@ namespace ProjectZ.Patches
             Rect slider = new Rect(200f, y, width, 30f);
             PageFloors = Mathf.RoundToInt(Widgets.HorizontalSlider(slider, PageFloors, 1f, ProjectZSettings.MaxFloors, middleAlignment: true, PageFloors.ToString(), null, null, 1f));
             TooltipHandler.TipRegion(new Rect(0f, y, slider.xMax, slider.height), "PZ_WorldFloorsTip".Translate());
+            // The floors warning right under its slider; the Tall mountains row moves down by its height.
+            float warning = FloorsUI.DrawWarning(new Rect(200f, y + 34f, width, 200f), PageFloors);
             // Tall mountains: a checkbox (greyed with one floor, nothing to rise into)
-            float y2 = y + 40f;
+            float y2 = y + 40f + (warning > 0f ? warning + 4f : 0f);
             Widgets.Label(new Rect(0f, y2, 200f, 30f), "PZ_TallMountains".Translate());
             Widgets.Checkbox(new Vector2(200f, y2 + 3f), ref PageMountains, 24f, disabled: PageFloors <= 1);
             TooltipHandler.TipRegion(new Rect(0f, y2, 230f, 30f), "PZ_TallMountainsTip".Translate());
-            FloorsUI.DrawWarning(new Rect(200f, y2 + 34f, width, 200f), PageFloors);
         }
     }
 
