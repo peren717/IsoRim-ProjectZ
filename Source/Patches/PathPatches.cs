@@ -60,9 +60,13 @@ namespace ProjectZ.Patches
         public static bool SplitFloor(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
-            if (a == null || busy || !start.IsValid || !dest.IsValid || start.z < a.groundZ || !start.InBounds(map) || !dest.Cell.InBounds(map))
+            if (a == null || busy || !start.IsValid || !dest.IsValid || !start.InBounds(map) || !dest.Cell.InBounds(map))
             {
                 return false;
+            }
+            if (start.z < a.groundZ)
+            {
+                return dest.Cell.z < a.groundZ && GroundParts.Split(map, start, dest, peMode);
             }
             int f = ProjectZ.FloorOf(start, map);
             if (f < 1 || f != ProjectZ.FloorOf(dest.Cell, map))
@@ -835,6 +839,93 @@ namespace ProjectZ.Patches
             IndexRef(joined) = joined.NodesReversed.Count - 1;
             CostRef(joined) = cost;
             return joined;
+        }
+    }
+
+    // The ground's own parts: regions joined on the ground by region links alone (no stairs or jumps, no traveller
+    // test), numbered by a flood from the first region asked about, kept until the regions change. Two places on the
+    // ground in different parts are joined only over the floors (up the stairs, a jump down into a walled pocket):
+    // reachability (StairRegions.Links) says yes there, so the router must take the path, not the game's path finder,
+    // which can only fail after searching the whole ground. Most requests stay in one district and never get here.
+    internal static class GroundParts
+    {
+        private static Map map;
+        private static readonly Dictionary<Region, int> part = new Dictionary<Region, int>();
+        private static int next;
+        private static readonly List<Region> goals = new List<Region>();
+
+        internal static void Dirty(Map m)
+        {
+            if (ReferenceEquals(m, map))
+            {
+                part.Clear();
+            }
+        }
+
+        internal static bool Split(Map m, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode)
+        {
+            District ds = RegionAndRoomQuery.DistirctAtFast(start, m);
+            if (ds == null || ds == RegionAndRoomQuery.DistirctAtFast(dest.Cell, m))
+            {
+                return false;
+            }
+            if (!ReferenceEquals(m, map))
+            {
+                map = m;
+                part.Clear();
+            }
+            RegionGrid rg = m.regionGrid;
+            Region from = rg.GetValidRegionAt_NoRebuild(start);
+            if (from == null)
+            {
+                return false;
+            }
+            int id = PartOf(from);
+            goals.Clear();
+            CellRect rect = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+            if (peMode != PathEndMode.OnCell)
+            {
+                rect = rect.ExpandedBy(1);
+            }
+            bool any = false;
+            foreach (IntVec3 c in rect)
+            {
+                Region r = c.InBounds(m) ? rg.GetValidRegionAt_NoRebuild(c) : null;
+                if (r != null && r.type.Passable())
+                {
+                    any = true;
+                    if (part.TryGetValue(r, out int p) && p == id)
+                    {
+                        return false;
+                    }
+                }
+            }
+            // (every region of from's part is numbered: a destination region not numbered with it is in another part)
+            return any;
+        }
+
+        private static int PartOf(Region from)
+        {
+            if (part.TryGetValue(from, out int id))
+            {
+                return id;
+            }
+            id = ++next;
+            int n = id;
+            StairRegions.suppress++;
+            try
+            {
+                RegionTraverser.BreadthFirstTraverse(from, (Region _, Region r) => r.type.Passable(), delegate(Region r)
+                {
+                    part[r] = n;
+                    return false;
+                }, 1000000);
+            }
+            finally
+            {
+                StairRegions.suppress--;
+            }
+            return id;
         }
     }
 

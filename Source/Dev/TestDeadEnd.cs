@@ -16,6 +16,7 @@ namespace ProjectZ.Dev
     // the bed is reachable (over the second stairs); the colonists must take the second stairs with the wood and build
     // the bed, not stand with the wood in hand while every path over the first stairs fails.
     //   -projectzgreedyroute: the route keeps the first stairs it can get onto (the old router), to show the failure.
+    // Part 2 (TestDeadEndRoutes.cs): unreachable, fogged and 4th-best-stairs targets.
     public static partial class TestRunner
     {
         public static bool GreedyRoute;
@@ -37,6 +38,10 @@ namespace ProjectZ.Dev
 
         private static bool StepDeadEnd(Map map)
         {
+            if (stage.StartsWith("k_r_"))
+            {
+                return StepRouteCases(map);
+            }
             switch (stage)
             {
                 case "k_setup":
@@ -84,7 +89,7 @@ namespace ProjectZ.Dev
                     return true;
                 case "k_shot2_take":
                     Capture("deadend_f1_stairs");
-                    stage = "k_end";
+                    stage = "k_r_setup";   // part 2: TestDeadEndRoutes.cs
                     return true;
                 case "k_end":
                     Finish();

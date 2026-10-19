@@ -55,6 +55,7 @@ namespace ProjectZ
         public void Dirty()
         {
             byRegion.Clear();
+            Patches.GroundParts.Dirty(map);
         }
 
         private void Listen()
