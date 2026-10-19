@@ -664,5 +664,11 @@ namespace ProjectZ.Dev
         public static int jumpRoutes;
         public static int rimRoutes;
         public static int slabCollapses;
+        public static int finds;              // StairRouter.Find calls
+        public static long findLegs;          // path finder legs run by them
+        public static double findMsMax;       // the slowest, ms
+        public static int routeUnreachable;   // answered "no" by reachability at once
+        public static int routeBudgetOuts;    // the stair search ran out of legs
+        public static int regionRoutes;       // routes found by the region-graph fallback
     }
 }
