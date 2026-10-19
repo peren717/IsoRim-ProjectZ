@@ -41,6 +41,9 @@ namespace ProjectZ
         // counters (tests)
         public static int Computed, LastGroup;
 
+        // test only (-projectzminenogroup): each rock decided alone (no marked group), to show the trap the group rule closes
+        public static bool NoGroup;
+
         // A marked rock (Mine or MineVein) on an upper level.
         public static bool Marked(IntVec3 c, Map map)
         {
@@ -117,7 +120,7 @@ namespace ProjectZ
             open.Clear();
             group.Add(u);
             open.Enqueue(u);
-            while (open.Count > 0 && group.Count < MaxGroup)
+            while (!NoGroup && open.Count > 0 && group.Count < MaxGroup)
             {
                 IntVec3 x = open.Dequeue();
                 for (int i = 0; i < 8; i++)

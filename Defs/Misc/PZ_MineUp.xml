@@ -16,6 +16,8 @@
     <giverClass>ProjectZ.WorkGiver_MineFromBelow</giverClass>
     <workType>Mining</workType>
     <priorityInType>99</priorityInType>
+    <scanThings>false</scanThings>
+    <scanCells>true</scanCells>
     <verb>mine</verb>
     <gerund>mining</gerund>
     <tagToGive>Fieldwork</tagToGive>

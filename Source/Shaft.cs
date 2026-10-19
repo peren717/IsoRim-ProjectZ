@@ -162,10 +162,27 @@ namespace ProjectZ
 
         public void Add(IntVec3 c) => cells.Add(c);
 
+        // (loading makes the map's components anew from the save: the instance cached before that is stale)
+        private void Cache()
+        {
+            lastMap = map;
+            last = this;
+        }
+
+        public override void FinalizeInit()
+        {
+            base.FinalizeInit();
+            Cache();
+        }
+
         public override void ExposeData()
         {
             base.ExposeData();
             Scribe_Collections.Look(ref cells, "cells", LookMode.Value);
+            if (Scribe.mode == LoadSaveMode.LoadingVars)
+            {
+                Cache();
+            }
             if (cells == null)
             {
                 cells = new HashSet<IntVec3>();

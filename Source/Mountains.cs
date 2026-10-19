@@ -490,7 +490,7 @@ namespace ProjectZ
             // mine up V4 (vertical fog): the cell right above every revealed walkable ground cell (vanilla's revealed caves
             // under the mountain) is revealed; on the bands the walkable cells are tops with open air above
             VerticalFog.LastAboveRevealed = 0;
-            for (int i = 0; i < n && cap >= 1; i++)
+            for (int i = 0; i < n && cap >= 1 && !VerticalFog.Off; i++)
             {
                 IntVec3 g = new IntVec3(i % sx, 0, i / sx);
                 if (fog[1][i] && !map.fogGrid.IsFogged(g) && WalkableRaw(g, map))

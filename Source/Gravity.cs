@@ -193,7 +193,7 @@ namespace ProjectZ
                 return false;
             }
             p.Position = to;
-            p.Notify_Teleported(endCurrentJob: !keepJob || fallen > 0, resetTweenedPos: fallen > 0);
+            p.Notify_Teleported(endCurrentJob: !keepJob, resetTweenedPos: fallen > 0);
             Bruise(p, fallen);
             return true;
         }

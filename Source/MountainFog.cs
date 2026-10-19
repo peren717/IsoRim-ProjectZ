@@ -233,9 +233,12 @@ namespace ProjectZ
         // counters (tests)
         public static int Revealed, LastAboveRevealed;
 
+        // test only (-projectznovfog): no vertical reveal, to show the old fog
+        public static bool Off;
+
         public static void RevealAbove(IntVec3 c, Map map)
         {
-            if (map == null || !c.IsValid || Current.ProgramState != ProgramState.Playing || !Mountains.On(map) || !c.InBounds(map))
+            if (Off || map == null || !c.IsValid || Current.ProgramState != ProgramState.Playing || !Mountains.On(map) || !c.InBounds(map))
             {
                 return;
             }
