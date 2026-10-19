@@ -45,7 +45,8 @@ namespace ProjectZ.Dev
             return f;
         }
 
-        // A timed path request from the colonist to the filth, as the game makes it (FindPathNow -> StairRouter.Find):
+        // A timed path request from the colonist to the filth, as the game makes it (FindPathNow -> StairRouter.Find; the
+        // other router calls of the phase, e.g. the colonist wandering, are reported but not judged):
         // ms and found.
         private static (double ms, bool found) CTimedPath(Map map, Thing t)
         {
@@ -82,7 +83,7 @@ namespace ProjectZ.Dev
                     bool reach = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
                     (double ms, bool found) = CTimedPath(map, cFilth);
                     Result("routes: a filth walled in on the upper floor is not reachable, never given as a job, and the router says no at once",
-                        !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5 && PZStats.findMsMax < 5,
+                        !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5,
                         $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen}, filth left {!cFilth.Destroyed}; {CStats()}");
                     cFilth.Destroy();
                     // r_fog: the pocket's landing fogged
@@ -99,7 +100,7 @@ namespace ProjectZ.Dev
                     bool reach = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
                     (double ms, bool found) = CTimedPath(map, cFilth);
                     Result("routes: a place reachable only by a jump into fog is not reachable for the player's pawns, never given as a job, and the router says no at once",
-                        !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5 && PZStats.findMsMax < 5,
+                        !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5,
                         $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen}, filth left {!cFilth.Destroyed}; {CStats()}");
                     map.fogGrid.Unfog(cA);
                     bool reach2 = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
