@@ -487,7 +487,9 @@ namespace ProjectZ
         }
     }
 
-    // A slab falls when the roof under it collapses (§7, replacing "a floor's roof never collapses"). The roof under a
+    // A slab falls when the roof under it collapses (§7, replacing "a floor's roof never collapses"); so does a natural
+    // rock floor over a thin rock roof or a support (floor) roof (rock-top floors: FloorRoof's DropRoofCellList patch), on this
+    // same path (the gravity hooks suspended, the landing Column.Landing). The roof under a
     // slab (PZ_FloorRoof) follows the game's support rules like any built roof, so a slab goes on the game's own collapse
     // paths: the collapse buffer (a support taken away: RoofCollapseBufferResolver -> DropRoofInCells) and the silent
     // removal of unsupported roofs (no-roof work, tornadoes, gravship landings: RoofCollapseCellsFinder in removal
@@ -693,7 +695,7 @@ namespace ProjectZ
             Dev.PZStats.slabCollapses++;
         }
 
-        // Where things falling from upper floor cell u come down: the first floor below with ground or a slab there,
+        // Where things falling from upper floor cell u come down: the first floor below (ground, slab, deck or mountain top),
         // on that cell or the nearest standable one on that floor.
         // (Column.Landing, the gravity rule's walk; the collapse's roofs are the game's collapse buffer's, so none broken here)
         public static IntVec3 FallTo(IntVec3 u, Map map, out int fallen)

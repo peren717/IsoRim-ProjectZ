@@ -963,9 +963,10 @@ namespace ProjectZ.Dev
                 return;
             }
             IntVec3 land = Column.Landing(rtU, map, true, false, out int fallen, out _);
-            bool riderAtLanding = rtRider.Spawned && land.IsValid && rtRider.Position.DistanceTo(land) <= 1.5f;
+            Thing body = rtRider.Spawned ? (Thing)rtRider : rtRider.Corpse != null && rtRider.Corpse.Spawned ? rtRider.Corpse : null;   // (crushed in the collapse: its corpse)
+            bool riderAtLanding = body != null && land.IsValid && body.Position.DistanceTo(land) <= 1.5f;
             Result("G2 x rock-top: the lip's floor fell on the slab-collapse path: the colonist landed where Column.Landing puts things from the lip top",
-                riderAtLanding && fallen == 1, $"landing {land} (fallen {fallen}), {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")}; gravity hooks during the fall: fell +{Gravity.Fell - rtFell0}, no landing +{Gravity.NoLanding - rtNoLanding0}");
+                riderAtLanding && fallen == 1, $"landing {land} (fallen {fallen}), {rtRider}{(rtRider.Dead ? " (dead)" : "")} at {(body != null ? body.Position.ToString() : "-")}; gravity hooks during the fall: fell +{Gravity.Fell - rtFell0}, no landing +{Gravity.NoLanding - rtNoLanding0}");
             int fell0 = Gravity.Fell;
             Thing probe = ThingMaker.MakeThing(ThingDefOf.Steel);
             probe.stackCount = 3;
