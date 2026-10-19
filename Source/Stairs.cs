@@ -513,15 +513,21 @@ namespace ProjectZ
             return AcceptanceReport.WasAccepted;
         }
 
-        // No stairs where the stairwell (the footprint, whose roof becomes the stairwell's), the landing or the cell under
-        // the landing has a thick roof (SlabSupport.ThickRoof), and none on a gravship or with its landing over one
+        // No stairs where the stairwell (the footprint, whose roof becomes the stairwell's) or the cell under the landing
+        // has a thick roof (SlabSupport.ThickRoof), and none on a gravship or with its landing over one
         // (SlabSupport.Gravship). The cell under the landing is a "use" (F4, SlabSupport.LandingBlocked): a natural rock
-        // floor there is landed on as it is. Placement and construction both ask.
+        // floor there is landed on as it is. Only roofs the stairs would replace count: the landing's own roof is never
+        // written by them (mine up §7: stairs may end in a dug shaft or tunnel under rock). Placement and construction
+        // both ask. Under a natural ceiling in a tall mountain the refusal says how to open it (mine it, or remove roof).
         public static AcceptanceReport ThickRoofCheck(IntVec3 loc, Rot4 rot, Map map)
         {
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
                 string blocked = SlabSupport.StairsColumnBlocked(c, map);
+                if (blocked == "PZ_ThickRoof" && Mountains.On(map) && Floors.UnbuiltNatural(FloorRoof.Above(c, map), map))
+                {
+                    blocked = "PZ_CeilingIsRock";
+                }
                 if (blocked != null)
                 {
                     return blocked.Translate();
@@ -530,7 +536,7 @@ namespace ProjectZ
             IntVec3 top = StairShape.Exit(loc, rot, map);
             if (top.IsValid)
             {
-                string blocked = SlabSupport.ThickRoof(top, map) ? "PZ_ThickRoof" : SlabSupport.LandingBlocked(top, map);
+                string blocked = SlabSupport.LandingBlocked(top, map);
                 if (blocked != null)
                 {
                     return blocked.Translate();

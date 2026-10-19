@@ -57,4 +57,5 @@
   <PZ_CannotHitNoLineOfSight>无法击中目标：没有视线</PZ_CannotHitNoLineOfSight>
   <PZ_MineAboveFirst>先开采上方的岩石</PZ_MineAboveFirst>
   <PZ_BuiltAbove>上方有建筑</PZ_BuiltAbove>
+  <PZ_CeilingIsRock>上方是岩石：先开采或移除屋顶</PZ_CeilingIsRock>
 </LanguageData>

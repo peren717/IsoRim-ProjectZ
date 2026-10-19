@@ -57,4 +57,5 @@
   <PZ_CannotHitNoLineOfSight>Cannot hit target: no line of sight</PZ_CannotHitNoLineOfSight>
   <PZ_MineAboveFirst>Mine the rock above first</PZ_MineAboveFirst>
   <PZ_BuiltAbove>Something is built above</PZ_BuiltAbove>
+  <PZ_CeilingIsRock>Ceiling is rock: mine it, or remove roof</PZ_CeilingIsRock>
 </LanguageData>
