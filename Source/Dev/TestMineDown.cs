@@ -253,7 +253,7 @@ namespace ProjectZ.Dev
                     // (the drafted colonist on the top that opens in D2: the third of the crew, or another colonist)
                     Pawn victim = all.FirstOrDefault(p => !crew.Contains(p)) ?? (crew.Count >= 3 ? crew[2] : null);
                     mdVictimId = victim?.thingIDNumber ?? -1;
-                    MountainFog.Reveal(L1(mdG0 + new IntVec3(0, 0, -3), map), map);
+                    ReachFog.Run(map);
                     MdEdge(map, crew[0], 1, true, out mdJ1, out mdJ1Down);
                     MdEdge(map, crew[0], 2, false, out mdJ2, out mdJ2Down);
                     Info($"setup: P {mdG0} (m1 {MdM1}, m2 {MdM2}, stairs {MdStairs}), F {string.Join(" ", mdF)}, X {mdX}; crew {string.Join(", ", crew.Select(p => $"{p} at {p.Position}"))}; victim {victim}; edge J1 {mdJ1} -> {mdJ1Down}, J2 {mdJ2} -> {mdJ2Down}");
@@ -717,7 +717,7 @@ namespace ProjectZ.Dev
                     Pawn p = MdCrew(map).Skip(1).FirstOrDefault() ?? muP1;
                     muP2 = p;
                     Teleport(p, mdJ2);
-                    MountainFog.Reveal(mdJ2, map);
+                    ReachFog.Run(map);
                     Draft(p, true);
                     mdHurt0 = MdInjury(p);
                     mdHurts = JumpGrid.HurtLandings;

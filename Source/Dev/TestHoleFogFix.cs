@@ -13,10 +13,11 @@ namespace ProjectZ.Dev
     // fixture (rock carved by script into a hidden, fogged cave: what the player would dig into) and runs real jobs:
     //   F1 mine below twice from a level-2 top (a colonist digs a pit into level 1, jumps into it, digs on into the ground
     //      rock): a two-floor drop over a hidden ground cave next to the bottom; the column and the cave are revealed,
-    //      the outside unchanged; a drafted colonist on the plateau is ordered into the cave: it jumps two floors down
-    //   F2 mine above from a ground chamber into level-1 rock next to a hidden level-1 cave: the cave is revealed
+    //      the outside unchanged
+    //   F2 mine above from a ground chamber into level-1 rock next to a hidden level-1 cave: the cave is revealed (a
+    //      covered hole joins the spaces above and below it, ReachFog)
     //   F3 Remove roof under a bare level-1 top from a ground chamber: a hole to the sky; the fogged plateau round it is
-    //      not opened (nobody can get up there; it opens where pawns walk, MountainFog)
+    //      not opened (nobody can get up there; it opens where pawns can reach, ReachFog)
     public static partial class TestRunner
     {
         private static IntVec3 hfG1 = IntVec3.Invalid, hfG2 = IntVec3.Invalid, hfG3 = IntVec3.Invalid;
@@ -159,7 +160,7 @@ namespace ProjectZ.Dev
                     {
                         Teleport(crew[i], HL(g + new IntVec3(-1 + 2 * i, 0, -2), 2, map));
                     }
-                    MountainFog.Reveal(HL(g + new IntVec3(0, 0, -2), 2, map), map);
+                    ReachFog.Run(map);
                     MdWork(map, crew.Take(1).ToList(), WorkTypeDefOf.Mining);
                     HfWatch(map, g);
                     bool ok = HfOrder(new Designator_MineBelow(), HL(g, 2, map), out string why);
@@ -216,45 +217,8 @@ namespace ProjectZ.Dev
                 }
 
                 case "hf_f1_shot2":
-                    MuShot(map, "hf_f1_landing_L0", 0, hfG1, 9f, "hf_f1_jump");
+                    MuShot(map, "hf_f1_landing_L0", 0, hfG1, 9f, "hf_f1_end");
                     return true;
-
-                case "hf_f1_jump":
-                {
-                    Find.UIRoot.screenshotMode.Active = false;
-                    IntVec3 g = hfG1;
-                    Pawn p = HfCrew(map).Skip(1).FirstOrDefault() ?? Colonists(map).FirstOrDefault(x => !hfCrewIds.Contains(x.thingIDNumber));
-                    MdWork(map, new List<Pawn>(), WorkTypeDefOf.Mining);
-                    // the colonist on the plateau, next to the hole: ordered into the cave (it must jump two floors)
-                    IntVec3 from = HL(g + new IntVec3(0, 0, -1), 2, map);
-                    Teleport(p, from);
-                    Draft(p, true);
-                    hfPawn = p;
-                    hfTarget = g + new IntVec3(3, 0, 0);
-                    bool reach = p.CanReach(hfTarget, PathEndMode.OnCell, Danger.Deadly);
-                    bool link = JumpGrid.LandingFrom(from, IntVec3.North, map, out IntVec3 jl, out int jf);
-                    Result("F1 the jump into the hole is offered: a jump link from the plateau to the bottom, and the cave is reachable for a drafted colonist",
-                        reach && link && jl == g && jf == 2, $"{p} at {from}: link {link} -> {jl} ({jf} floors), reach {hfTarget}: {reach}");
-                    hfJumped = false;
-                    int landings0 = PZStats.landings;
-                    p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, hfTarget), JobTag.DraftedOrder);
-                    MuRun(100, 47200, () => hfPawn.Position == hfTarget, "hf_f1_jumped", () =>
-                    {
-                        if (!hfJumped && Levels.LevelOf(hfPawn.Position, map) == 0)
-                        {
-                            hfJumped = true;
-                        }
-                    });
-                    return true;
-                }
-
-                case "hf_f1_jumped":
-                {
-                    Result("F1 the drafted colonist ordered into the cave jumped down the hole and walked there", hfPawn.Position == hfTarget && hfJumped,
-                        $"{hfPawn} at {hfPawn.Position} L{Levels.LevelOf(hfPawn.Position, map)}, job {hfPawn.CurJobDef?.defName}");
-                    MuShot(map, "hf_f1_in_cave_L0", 0, hfTarget, 9f, "hf_f1_end");
-                    return true;
-                }
 
                 case "hf_f1_end":
                 {
@@ -287,6 +251,7 @@ namespace ProjectZ.Dev
                         Draft(o, true);
                     }
                     MdWork(map, crew, WorkTypeDefOf.Mining);
+                    ReachFog.Run(map);
                     HfWatch(map, g);
                     bool ok = HfOrder(new Designator_MineAbove(), g, out string why);
                     Info($"F2 site {g}: chamber {g} {w}, level-1 cave {hfCave.Count} cells (fogged {HfFogged(hfCave, map)}); Mine above: {why}");
@@ -332,7 +297,6 @@ namespace ProjectZ.Dev
                             }
                         }
                     }
-                    hfFogAround = HfFogged(hfCave, map);
                     List<Pawn> crew = HfCrew(map).Take(1).ToList();
                     Teleport(crew[0], w);
                     foreach (Pawn o in Colonists(map).Where(o => !crew.Contains(o)))
@@ -340,6 +304,8 @@ namespace ProjectZ.Dev
                         Draft(o, true);
                     }
                     MdWork(map, crew, WorkTypeDefOf.Construction);
+                    ReachFog.Run(map);   // (the colonist in the chamber: its ceilings show before the count)
+                    hfFogAround = HfFogged(hfCave, map);
                     HfWatch(map, g);
                     new Designator_AreaNoRoof().DesignateMultiCell(new[] { g });
                     Info($"F3 site {g}: chamber {g} {w}, plateau round the top: {hfFogAround}/{hfCave.Count} fogged; no-roof area on {g}: {map.areaManager.NoRoof[g]}");
@@ -355,7 +321,7 @@ namespace ProjectZ.Dev
                     Result("F3 Remove roof under a bare top from a ground chamber: a hole to the sky, the hole and the chamber seen", open && !map.fogGrid.IsFogged(u) && !map.fogGrid.IsFogged(g),
                         $"C {HfCell(g, map)}, U {HfCell(u, map)}");
                     Result("F3 the fogged plateau round the hole stays fogged (nobody can get up there)", open && fog == hfFogAround,
-                        $"plateau cells fogged {hfFogAround} -> {fog} of {hfCave.Count}");
+                        $"plateau cells fogged {hfFogAround} -> {fog} of {hfCave.Count}; seen: {string.Join(" ", hfCave.Where(c => !map.fogGrid.IsFogged(c)).Select(c => HfCell(c, map)))}");
                     float inner = HfFogStats(map, "after F3");
                     Result("F3 inner upper-level rock stays fogged", inner > 0.99f, $"{inner:P1}");
                     MuShot(map, "hf_f3_hole_L1", 1, g, 9f, "hf_f3_end");

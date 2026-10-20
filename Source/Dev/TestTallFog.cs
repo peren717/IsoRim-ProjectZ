@@ -19,8 +19,8 @@ namespace ProjectZ.Dev
     //   G2 colonists build stairs from the ground onto a lip on the rim: on completion (nobody walked up) the plateau
     //      behind opens with the rock faces next to it, inner rock and ore stay fogged, nothing else changes; level 1 now
     //      counts as reached (HUD)
-    //   G2b colonists put on one plateau bridge a gap of open air to another with slabs; nothing opens until a drafted
-    //      colonist ordered into the other plateau's fog steps onto its rim (stepping next to fog), then it opens
+    //   G2b colonists put on one plateau bridge a gap of open air to another with slabs: the other plateau opens when
+    //      the bridge is done (ReachFog: it is a place the colonists can walk to now)
     //   G3 a colonist with a jump pack jumps from the ground onto a rim cell (close to the cliff and further off): the
     //      plateau opens on landing
     //   G4 a drop pod with only a tame animal, one with only a colony mech, each onto a rim cell: nothing opens while the
@@ -32,7 +32,7 @@ namespace ProjectZ.Dev
     //      "CannotPlaceInUndiscovered", before any other reason)
     //   G7 colonists on an opened plateau mine a cliff face: vanilla reveals the rock behind, nothing on another level
     //   G8 a colonist skips onto a rim (Royalty): the plateau opens
-    //   G9 cost: every Reveal timed; the step check's cost per 1000 steps
+    //   G9 cost: ReachFog runs (the slowest this mode, a full run, a walk-only run)
     public static partial class TestRunner
     {
         private static bool[] fgBefore;
@@ -42,7 +42,7 @@ namespace ProjectZ.Dev
         private static Rot4 fgRot;
         private static Pawn fgPawn;
         private static Verb fgVerb;
-        private static int fgVariant, fgStepRevealsAt;
+        private static int fgVariant;
         private static HashSet<int> fgE, fgEB, fgE2;
         private static readonly List<IntVec3> fgGap = new List<IntVec3>();
         private static readonly List<Pawn> fgActors = new List<Pawn>();
@@ -99,7 +99,7 @@ namespace ProjectZ.Dev
 
         // The cells a reveal from `start` (an upper band cell) is expected to open: its plateau, the band's non-rock cells
         // (tops, slabs, landings, fogged holes) 4-connected to it through tops and fogged open air (the open sky stops it),
-        // and the rock 8-adjacent to them (vanilla's faces). Read from the map, not from MountainFog.
+        // and the rock 8-adjacent to them (vanilla's faces). Read from the map, not from ReachFog.
         private static HashSet<int> FgExpected(Map map, IntVec3 start, out int fogged)
         {
             HashSet<int> e = new HashSet<int>();
@@ -188,7 +188,7 @@ namespace ProjectZ.Dev
         private static void FgEnd(Map map, string check, string next, string load = "pz_tallfog")
         {
             int n = FgChanged(map, out int outside, out string first);
-            Result($"{check}: no fog changed outside the expected cells", outside == 0, $"{n} cells changed, {outside} outside{(first == null ? "" : ", first " + first)}; last reveal {MountainFog.LastMs:0.00} ms ({MountainFog.LastWalked} cells walked, {MountainFog.LastFloods} floods), slowest so far {MountainFog.MaxMs:0.00} ms");
+            Result($"{check}: no fog changed outside the expected cells", outside == 0, $"{n} cells changed, {outside} outside{(first == null ? "" : ", first " + first)}; last reach fog run {ReachFog.LastMs:0.00} ms ({ReachFog.LastRegions} regions reached, {ReachFog.LastScanned} scanned), slowest so far {ReachFog.MaxMs:0.00} ms");
             tickWatch = null;
             if (next == null)
             {
@@ -510,7 +510,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     Result("G2 colonists built stairs onto the rim: on completion (nobody up there yet) the plateau behind opened with the rock faces next to it",
-                        built && left == 0 && up == 0, $"built {built}; expected cells still fogged {left} of {fgE.Count}; colonists upstairs {up}; reveal {MountainFog.LastMs:0.00} ms over {MountainFog.LastWalked} cells");
+                        built && left == 0 && up == 0, $"built {built}; expected cells still fogged {left} of {fgE.Count}; colonists upstairs {up}; reach fog run {ReachFog.LastMs:0.00} ms over {ReachFog.LastRegions} regions");
                     Result("G2 inner rock and ore near the plateau stay fogged", innerRock > 0 && innerRock == innerRockFogged && innerOre == innerOreFogged,
                         $"fogged rock not on a face within 3 cells of the plateau: {innerRockFogged} of {innerRock} still fogged (ore {innerOreFogged} of {innerOre})");
                     Result("G2 level 1 counts as reached", a.Reached(1) && a.reachedLevels.Count == 1, $"reached [{string.Join(",", a.reachedLevels)}]");
@@ -626,6 +626,7 @@ namespace ProjectZ.Dev
                     {
                         GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_UpperFloor, c, map, Rot4.North, Faction.OfPlayer, null);
                     }
+                    ReachFog.Run(map);   // (their arrival opened the first plateau: before the snapshot)
                     FgStart(map, fgEB);
                     FgWork(map, fgActors, WorkTypeDefOf.Construction);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
@@ -637,27 +638,11 @@ namespace ProjectZ.Dev
                 {
                     bool built = fgGap.All(c => c.GetTerrain(map) != PZDefOf.PZ_OpenAir);
                     int left = FgFoggedIn(map, fgEB);
-                    int changed = FgChanged(map, out _, out _);
-                    Result("G2b colonists bridged the gap with slabs; nothing opened yet", built && changed == 0, $"slabs built {built}; fog changes {changed}; other plateau fogged {left}");
-                    // (a builder on this side of the gap; one may have gone down for materials as the last slab was laid)
-                    fgPawn = fgActors.FirstOrDefault(p => p.Spawned && ProjectZ.FloorOf(p.Position, map) == 1) ?? fgActors.First();
-                    if (ProjectZ.FloorOf(fgPawn.Position, map) != 1)
-                    {
-                        Info($"G2b {fgPawn} is off the rim ({fgPawn.Position}): back to {fgU}");
-                        Teleport(fgPawn, fgU);
-                    }
-                    fgStepRevealsAt = MountainFog.StepReveals;
-                    Draft(fgPawn, true);
-                    fgPawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, fgF), JobTag.Misc);
-                    Info($"G2b {fgPawn} (drafted) ordered to {fgF} in the fog of the other plateau");
-                    TickUntil(6000, () => FgFoggedIn(map, fgEB) == 0 || fgPawn.Position == fgF, "fg_g2b_walked", 5);
-                    return true;
-                }
-                case "fg_g2b_walked":
-                {
-                    int left = FgFoggedIn(map, fgEB);
-                    Result("G2b a drafted colonist sent into the fog stepped onto the other plateau's rim: it opened (stepping next to fog)",
-                        left == 0 && MountainFog.StepReveals > fgStepRevealsAt, $"{fgPawn} at {fgPawn.Position}; plateau cells still fogged {left} of {fgEB.Count}; step reveals {MountainFog.StepReveals - fgStepRevealsAt}");
+                    int changed = FgChanged(map, out int outside, out _);
+                    // (ReachFog: the bridge makes the other plateau a place the colonists can walk to; it opens on
+                    // completion, nobody has to step next to its fog)
+                    Result("G2b colonists bridged the gap with slabs: the other plateau opened on completion (now reachable)", built && left == 0,
+                        $"slabs built {built}; fog changes {changed} ({outside} outside the other plateau); other plateau still fogged {left} of {fgEB.Count}");
                     FgEnd(map, "G2b", "fg_g3");
                     return true;
                 }
@@ -1157,58 +1142,26 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G9 cost
                 case "fg_g9":
                 {
-                    Pawn p = Colonists(map).First();
-                    // the step check on the ground (the common case) and on an open band cell with no fog next to it (one call
-                    // first: its compile is not timed)
-                    MountainFog.Stepped(p);
-                    double ground = FgStepMs(p);
-                    Stopwatch sw = Stopwatch.StartNew();
-                    int sink = 0;
-                    for (int i = 0; i < 100000; i++)
+                    // (ReachFog has no per-step check: it runs on changes. Its cost: the slowest run this mode saw, a full
+                    // run as after a load, and a walk-only run with every region known clear)
+                    double slowest = ReachFog.MaxMs;
+                    ReachFogMap.For(map)?.Forget();
+                    ReachFog.Run(map);
+                    double full = ReachFog.LastMs;
+                    double walk = 0;
+                    for (int i = 0; i < 10; i++)
                     {
-                        sink += p.Map != null ? 1 : 0;
+                        ReachFog.Run(map);
+                        walk += ReachFog.LastMs;
                     }
-                    double floor = sw.Elapsed.TotalMilliseconds / 100.0;
-                    IntVec3 upCell = IntVec3.Invalid;
-                    foreach (IntVec3 g in Near(RtHome(map), 90, map))
-                    {
-                        IntVec3 c = Levels.Cell(g, 1, map);
-                        if (c.IsValid && TmTop(c, map) && !map.fogGrid.IsFogged(c) && c.Standable(map) && GenAdj.CardinalDirections.All(d => !(c + d).InBounds(map) || !map.fogGrid.IsFogged(c + d) || FgBlocker(c + d, map)))
-                        {
-                            upCell = c;
-                            break;
-                        }
-                    }
-                    double band = -1;
-                    if (upCell.IsValid)
-                    {
-                        Teleport(p, upCell);
-                        band = FgStepMs(p);
-                    }
-                    Info($"PERF step check: {ground:0.0000} ms per 1000 steps on the ground (pawn.Map alone {floor:0.0000}, {sink}), {band:0.0000} ms per 1000 steps on an open band cell ({upCell}); reveals {MountainFog.Reveals} this run, slowest {MountainFog.MaxMs:0.00} ms in all, slowest walk (without the vanilla floods) {MountainFog.MaxWalkMs:0.00} ms");
-                    Result("G9 the step check costs under 0.05 ms per 1000 steps; a reveal's walk under 5 ms", ground < 0.05 && band >= 0 && band < 0.05 && MountainFog.MaxWalkMs < 5.0,
-                        $"ground {ground:0.0000}, band {band:0.0000} ms per 1000 steps; slowest walk {MountainFog.MaxWalkMs:0.00} ms, slowest reveal with its floods {MountainFog.MaxMs:0.00} ms");
+                    walk /= 10;
+                    Info($"PERF reach fog: slowest run this mode {slowest:0.00} ms, full run {full:0.00} ms ({ReachFog.LastRegions} regions reached), walk only {walk:0.00} ms; runs {ReachFog.Runs}");
+                    Result("G9 a reach fog run with every region known clear under 5 ms, a full run under 100 ms", walk < 5.0 && full < 100.0, $"walk {walk:0.00} ms, full {full:0.00} ms, slowest this mode {slowest:0.00} ms");
                     Finish();
                     return true;
                 }
             }
             return false;
-        }
-
-        // ms per 1000 calls of the step check for pawn p where it stands: the best of 5 runs of 20000 calls.
-        private static double FgStepMs(Pawn p)
-        {
-            double best = double.MaxValue;
-            for (int r = 0; r < 5; r++)
-            {
-                Stopwatch sw = Stopwatch.StartNew();
-                for (int i = 0; i < 20000; i++)
-                {
-                    MountainFog.Stepped(p);
-                }
-                best = System.Math.Min(best, sw.Elapsed.TotalMilliseconds / 20.0);
-            }
-            return best;
         }
 
         private static void FgG3Next(Map map)

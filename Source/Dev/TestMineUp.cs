@@ -426,7 +426,7 @@ namespace ProjectZ.Dev
                         Finish();
                         return true;
                     }
-                    Info($"mineup: map {map.Size}, tile {map.Tile} {map.TileInfo?.hilliness}, floors {a.floors}; rock {Mountains.LastRock}, tops {Mountains.LastTops}; vertical fog {(VerticalFog.Off ? "OFF (test)" : "on")}");
+                    Info($"mineup: map {map.Size}, tile {map.Tile} {map.TileInfo?.hilliness}, floors {a.floors}; rock {Mountains.LastRock}, tops {Mountains.LastTops}; reach fog {(ReachFog.Off ? "OFF (test)" : "on")}");
                     // V4: the generation count against a recount (revealed walkable ground cells whose level-1 cell the rim rule
                     // left fogged), and those level-1 cells unfogged now
                     int sx = map.Size.x, gz = a.groundZ, recount = 0, open = 0;
@@ -443,8 +443,8 @@ namespace ProjectZ.Dev
                             }
                         }
                     }
-                    Result("V4 generation: the cell above every revealed walkable ground cell is revealed (count = recount, all unfogged)",
-                        VerticalFog.LastAboveRevealed == recount && open == recount, $"generation {VerticalFog.LastAboveRevealed}, recount {recount}, unfogged now {open}");
+                    Result("V4 after generation (the first ReachFog run): the cell above every revealed walkable ground cell is revealed",
+                        open == recount, $"recount {recount}, unfogged now {open}");
                     bool siteA = MuSiteA(map), siteB = MuSiteB(map);
                     Result("mineup sites: tunnel A (rock above, top at 2+) and tunnel B (bare level-1 tops)", siteA && siteB,
                         $"A {(siteA ? $"{muSA} dir {muDA}, tops {string.Join(",", muA.Take(6).Select(t => Column.NaturalTop(t, map)))}" : "none")}; B {(siteB ? $"{muSB} dir {muDB}" : "none")}");
@@ -493,7 +493,7 @@ namespace ProjectZ.Dev
                     bool allAbove = muA.Take(6).All(t => !map.fogGrid.IsFogged(MuUp(t, map)));
                     Result("M2 vertical reveal: every cell straight above tunnel A is unfogged, nothing else above it opened",
                         allAbove && opened.SetEquals(expect),
-                        $"above unfogged {muA.Take(6).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/6, opened {opened.Count} (expected {expect.Count}){(opened.Except(expect).Any() ? ", extra " + string.Join(" ", opened.Except(expect).Take(5)) : "")}, reveals {VerticalFog.Revealed}");
+                        $"above unfogged {muA.Take(6).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/6, opened {opened.Count} (expected {expect.Count}){(opened.Except(expect).Any() ? ", extra " + string.Join(" ", opened.Except(expect).Take(5)) : "")}, reach fog runs {ReachFog.Runs}");
                     Result("M2 tunnel B: the bare tops above it are unfogged", muB.Take(4).All(t => !map.fogGrid.IsFogged(MuUp(t, map))), $"{muB.Take(4).Count(t => !map.fogGrid.IsFogged(MuUp(t, map)))}/4");
                     foreach (Pawn p in Colonists(map))
                     {
@@ -1228,27 +1228,18 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ M12
                 case "mu_m12":
                 {
-                    CellRect all = new CellRect(0, 0, map.Size.x, map.Size.z);
-                    double on = 0, off = 0;
-                    bool wasOff = VerticalFog.Off;
+                    // (the reach fog's full run: every reached region scanned again, as after a load)
+                    double full = 0;
                     for (int k = 0; k < 2; k++)
                     {
-                        map.fogGrid.Refog(all);
-                        VerticalFog.Off = true;
-                        System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-                        map.fogGrid.ClearAllFog();
-                        off += sw.Elapsed.TotalMilliseconds;
-                        map.fogGrid.Refog(all);
-                        VerticalFog.Off = wasOff;
-                        sw.Restart();
-                        map.fogGrid.ClearAllFog();
-                        on += sw.Elapsed.TotalMilliseconds;
+                        ReachFogMap.For(map)?.Forget();
+                        ReachFog.Run(map);
+                        full += ReachFog.LastMs;
                     }
-                    on /= 2;
-                    off /= 2;
+                    full /= 2;
                     List<double> opens = muOpenMs.OrderBy(x => x).ToList();
                     double median = opens.Count == 0 ? 0 : opens[opens.Count / 2];
-                    Result("M12 the vertical reveal adds at most 60 ms to a whole-map ClearAllFog", on - off <= 60, $"{map.Size.x}x{map.Size.z}: on {on:0.0} ms, off {off:0.0} ms, added {on - off:0.0} ms");
+                    Result("M12 the reach fog's full run (as after a load) takes at most 60 ms", full <= 60, $"{map.Size.x}x{map.Size.z}: {full:0.0} ms over {ReachFog.LastRegions} regions");
                     Result("M12 Shaft.Open takes at most 1 ms (median over the checks)", median <= 1.0, $"median {median:0.000} ms, max {Shaft.MaxOpenMs:0.000} ms over {opens.Count} check(s) (last per check), opened {Shaft.Opened}");
                     Finish();
                     return true;

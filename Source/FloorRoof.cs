@@ -155,11 +155,7 @@ namespace ProjectZ
                 FloorHeat.Dirty();
                 SlabPeel.Dirty(map);
                 ShownLevels.FloorChanged(c, map, oldTerr == PZDefOf.PZ_OpenAir);
-                if (oldTerr == PZDefOf.PZ_OpenAir)
-                {
-                    // (mine up V3: a floor laid on open air, a landing in a shaft: the cell above it is revealed)
-                    VerticalFog.RevealAbove(c, map);
-                }
+                // (fog: the regions change with it, ReachFog)
             }
         }
     }

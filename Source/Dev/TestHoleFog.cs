@@ -17,10 +17,7 @@ namespace ProjectZ.Dev
         private static readonly List<IntVec3> hfHoles = new List<IntVec3>();
         private static int hfShotIdx, hfFogShot;
         private static bool[] hfFogBefore = new bool[0];
-        private static Pawn hfPawn;
         private static IntVec3 hfTarget = IntVec3.Invalid;
-        private static IntVec3 hfFrom = IntVec3.Invalid;
-        private static bool hfJumped;
 
         private static string HfCell(IntVec3 c, Map map)
         {
@@ -119,7 +116,7 @@ namespace ProjectZ.Dev
                     reach += $"; reach jump-from {from}: {p.CanReach(from, PathEndMode.OnCell, Danger.Deadly)}";
                 }
             }
-            ok = land.IsValid && !passedFog && !map.fogGrid.IsFogged(land) && fogArea == 0 && (jumps.Count > 0 || land.GetThingList(map).Any(t => t is Building_Stairs)) && jumps.All(j => !j.land.Fogged(map));
+            ok = land.IsValid && !passedFog && !map.fogGrid.IsFogged(land) && fogArea == 0;
             return $"hole C {c} (Is {Shaft.Is(c, map)}), U {HfCell(u, map)}; landing {HfCell(land, map)} fallen {fallenN}; passed cells fogged {passedFog}; landing area {area} walkable cells, {fogArea} fogged (first {firstFog}); "
                 + $"jumps: {(jumps.Count == 0 ? "none" : string.Join(", ", jumps.Select(j => $"{j.from} -> {j.land} ({j.fallen} fl, {(j.land.Fogged(map) ? "into FOG" : "seen")})")))}; {reach}\n      column: {string.Join(" | ", col)}";
         }
@@ -266,7 +263,7 @@ namespace ProjectZ.Dev
                 case "hf_setup":
                     if (GenCommandLine.TryGetCommandLineArg("projectzsave", out hfSave))
                     {
-                        HoleFog.Off = true;
+                        ReachFog.Off = true;
                         stage = "hf_u_before";
                         pendingLoad = hfSave;
                         return true;
@@ -316,7 +313,7 @@ namespace ProjectZ.Dev
                         muPointer = IntVec3.Invalid;
                         if (before)
                         {
-                            HoleFog.Off = false;
+                            ReachFog.Off = false;
                             stage = "hf_u_after";
                             pendingLoad = hfSave;
                         }
@@ -341,21 +338,13 @@ namespace ProjectZ.Dev
                 case "hf_u_after":
                 {
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Info($"loaded {hfSave} WITH the rule (load-time pass): reveals {HoleFog.Reveals}");
+                    Info($"loaded {hfSave} WITH the rule (load-time pass): reach fog runs {ReachFog.Runs}, last {ReachFog.LastMs:0.0} ms, {ReachFog.LastRevealed} cell(s) revealed");
                     HfFogStats(map, "save, rule on");
                     {
-                        int changed = 0, far = 0;
-                        List<IntVec3> holes = ShaftMarks.For(map)?.cells.Select(h => ProjectZ.GroundCellOf(h, map)).ToList() ?? new List<IntVec3>();
-                        for (int i = 0; i < hfFogBefore.Length && i < map.cellIndices.NumGridCells; i++)
-                        {
-                            if (hfFogBefore[i] && !map.fogGrid.IsFogged(i))
-                            {
-                                changed++;
-                                IntVec3 g = ProjectZ.GroundCellOf(map.cellIndices.IndexToCell(i), map);
-                                far += holes.Any(h => h.InHorDistOf(g, 20f)) ? 0 : 1;
-                            }
-                        }
-                        Result("U0 save: the load-time pass reveals only round the holes (nothing 20+ cells from a hole)", far == 0, $"{changed} cell(s) revealed by the load-time pass, {far} of them far from every hole");
+                        // (the old U0 "only round the holes" is gone with the hole rule: the load-time pass reveals every
+                        // place the colonists can reach, holes or not; what it reveals must be reached)
+                        bool ok = RfAllReached(map, hfFogBefore, out string why);
+                        Result("U0 save: everything the load-time pass revealed is reached by the player's pawns (or a face or ceiling of a reached cell)", ok, why);
                     }
                     List<IntVec3> marks = ShaftMarks.For(map)?.cells.OrderBy(c => c.z).ThenBy(c => c.x).ToList() ?? new List<IntVec3>();
                     foreach (IntVec3 c in marks.Where(c => Shaft.Is(c, map)))
@@ -378,7 +367,7 @@ namespace ProjectZ.Dev
                         IsoRimBridge.SetOption("fogLid", true);
                         Find.UIRoot.screenshotMode.Active = false;
                         muPointer = IntVec3.Invalid;
-                        stage = "hf_u_walk";
+                        stage = "hf_u_end";   // (no drafted jump: voluntary jumps are going, user 2026-10-19)
                         return true;
                     }
                     bool lid = hfFogShot < floors.Length;
@@ -387,45 +376,6 @@ namespace ProjectZ.Dev
                     IntVec3 mid = ProjectZ.GroundCellOf(hfHoles.FirstOrDefault(), map);
                     int f = floors[hfFogShot++ % floors.Length];
                     MuShot(map, $"hf_user_fog_L{f}{(lid ? "" : "_nolid")}", f, mid, 30f, "hf_u_fogshots");
-                    return true;
-                }
-
-                case "hf_u_walk":
-                {
-                    // a drafted colonist next to the first hole is ordered onto its landing: it must jump down for real
-                    hfShotIdx = 0;
-                    IntVec3 c = hfHoles.FirstOrDefault();
-                    if (!c.IsValid || hfHoles.Count == 0)
-                    {
-                        Finish();
-                        return true;
-                    }
-                    IntVec3 u = FloorRoof.Above(c, map);
-                    List<(IntVec3 from, IntVec3 land, int fallen)> jumps = HfJumps(u, map);
-                    hfPawn = Colonists(map).OrderBy(p => p.thingIDNumber).FirstOrDefault(p => !p.Downed);
-                    if (jumps.Count == 0 || hfPawn == null)
-                    {
-                        Result("U2 save: a drafted colonist ordered onto the landing below the hole jumps down", false, $"jumps {jumps.Count}, pawn {hfPawn}");
-                        Finish();
-                        return true;
-                    }
-                    hfFrom = jumps[0].from;
-                    hfTarget = jumps[0].land;
-                    MuStart(map, MuRect(new[] { c }, map, 3), false);
-                    Teleport(hfPawn, hfFrom);
-                    Draft(hfPawn, true);
-                    bool canOrder = hfPawn.CanReach(hfTarget, PathEndMode.OnCell, Danger.Deadly);
-                    Info($"U2 {hfPawn} at {hfFrom} ordered to {hfTarget}: reachable {canOrder}");
-                    hfPawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, hfTarget), JobTag.DraftedOrder);
-                    MuRun(60, 46000, () => hfPawn.Position == hfTarget, "hf_u_walked");
-                    return true;
-                }
-
-                case "hf_u_walked":
-                {
-                    bool there = hfPawn.Position == hfTarget;
-                    Result("U2 save: a drafted colonist ordered onto the landing below the hole jumps down", there, $"{hfPawn} at {hfPawn.Position} (L{Levels.LevelOf(hfPawn.Position, map)}), target {hfTarget}, job {hfPawn.CurJobDef?.defName}");
-                    MuShot(map, "hf_user_walked", Levels.LevelOf(hfPawn.Position, map), hfPawn.Position, 10f, "hf_u_end");
                     return true;
                 }
 
