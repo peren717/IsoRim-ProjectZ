@@ -80,6 +80,7 @@ namespace ProjectZ.Dev
             NoRoofCollapse(map);
             Find.Storyteller.storytellerComps.Clear();
             Find.PlaySettings.autoRebuild = false;
+            NoAmbushes(map);
             foreach (Pawn a in map.mapPawns.AllPawnsSpawned.Where(p => !p.IsColonist).ToList())
             {
                 a.Destroy();
