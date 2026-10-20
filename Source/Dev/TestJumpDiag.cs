@@ -47,6 +47,15 @@ namespace ProjectZ.Dev
         private static bool jdHaveLast;
         private static string jdFirstOff;
         private static int jdFails;
+        private static bool jdRaw;
+        private static float jdMaxT;
+        private static bool jdHaveT;
+        private static Vector3 jdLastT;
+        private static string jdMaxTAt;
+        private static readonly float[] JdShotAt = { 0.1f, 0.25f, 0.4f, 0.55f, 0.7f, 0.85f };   // progress points of the mid-flight shots
+
+        // game speed for the flights (-projectzjdspeed=1..4; 1 = Normal)
+        private static TimeSpeed JdSpeed => GenCommandLine.TryGetCommandLineArg("projectzjdspeed", out string sp) && int.TryParse(sp, out int n) ? (TimeSpeed)Mathf.Clamp(n, 1, 4) : TimeSpeed.Normal;
 
         private static IntVec3 JdO(int x, int z) => new IntVec3(jdO.x + x, 0, jdO.z + z);
 
@@ -167,10 +176,21 @@ namespace ProjectZ.Dev
                     jdShots = 0;
                     IntVec3 ga = ProjectZ.GroundCellOf(c.from, map), gb = ProjectZ.GroundCellOf(c.to, map);
                     ShotAt(map, c.view, new IntVec3((ga.x + gb.x) / 2, 0, (ga.z + gb.z) / 2), 12f);
+                    if (GenCommandLine.CommandLineArgPassed("projectzjdselect"))
+                    {
+                        Find.Selector.Select(p, playSound: false, forceDesignatorDeselect: false);   // as in play: the jumper selected
+                    }
+                    if (GenCommandLine.CommandLineArgPassed("projectzjdraw") && !jdRaw)
+                    {
+                        // signature check only: the game's own flight (JumpFlights.Recompute taken off)
+                        new Harmony("Peren.IsoRimProjectZ.jumpdiag").Unpatch(AccessTools.Method(typeof(PawnFlyer), "RecomputePosition"), HarmonyPatchType.Postfix, "*");
+                        jdRaw = true;
+                        Info("jumpdiag: JumpFlights.Recompute removed (raw game flight)");
+                    }
                     v.OrderForceTarget(c.to);
                     jdFlyer = null;
                     jdFrames = 0;
-                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;   // the game ticks itself from here (real play)
+                    Find.TickManager.CurTimeSpeed = JdSpeed;   // the game ticks itself from here (real play)
                     Wait(1, "jd_fly");
                     return true;
                 }
@@ -187,7 +207,23 @@ namespace ProjectZ.Dev
                     if (jdFlyer != null && jdFlyer.Spawned)
                     {
                         float frac = (float)jdTicks(jdFlyer) / Mathf.Max(1, jdTotal(jdFlyer));
-                        if (jdShots == 0 && frac >= 0.4f || jdShots == 1 && frac >= 0.7f)
+                        // without the probe's own patches (-projectzjdnoobs): the flyer's fields as last computed this frame,
+                        // the ground point its effectivePos is shown over (its band's rows moved down onto the ground)
+                        Vector3 e = jdEff(jdFlyer);
+                        Vector3 gT = new Vector3(e.x, 0f, Levels.GroundZLoose(map, e.z));
+                        if (jdHaveT)
+                        {
+                            float d = (gT - jdLastT).magnitude;
+                            if (d > jdMaxT)
+                            {
+                                jdMaxT = d;
+                                jdMaxTAt = $"frame {Time.frameCount} tick {jdTicks(jdFlyer)}/{jdTotal(jdFlyer)}: {V(jdLastT)} -> {V(gT)}";
+                            }
+                        }
+                        jdLastT = gT;
+                        jdHaveT = true;
+                        JdLog($"{c.name}\tT\t{Time.frameCount}\t{Find.TickManager.TicksGame}\t{jdTicks(jdFlyer)}/{jdTotal(jdFlyer)}\t{jdFlyer.Position}\t{ProjectZ.FloorOf(jdFlyer.Position, map)}\t{V(jdGround(jdFlyer))}\t{V(e)}\tposed {JumpFlights.PoseOf(jdFlyer, out JumpFlights.Pose pp)} band {pp.band}\tshownGround {V(gT)}");
+                        if (jdShots < JdShotAt.Length && frac >= JdShotAt[jdShots])
                         {
                             ZCapture($"jd_{c.name}_s{jdShots}");
                             Info($"{c.name}: shot {jdShots} at tick {jdTicks(jdFlyer)}/{jdTotal(jdFlyer)}, flyer at {jdFlyer.Position}, eff {V(jdEff(jdFlyer))}");
@@ -200,6 +236,10 @@ namespace ProjectZ.Dev
                         bool there = p.Spawned && ProjectZ.FloorOf(p.Position, map) == ProjectZ.FloorOf(c.to, map) && p.Position.DistanceTo(c.to) <= 1.5f;
                         Result($"{c.name}: lands where asked", there, $"at {p.Position} (level {ProjectZ.FloorOf(p.Position, map)}), asked {c.to}; frames {jdFrames}");
                         Result($"{c.name}: the drawn pawn moves smoothly (no frame-to-frame jump > 3 cells)", jdMaxOff <= 3f, $"largest step {jdMaxOff:0.00} cells; {jdFirstOff ?? "none"}");
+                        Result($"{c.name}: the flyer's effectivePos stays over a smooth ground path (per frame, no probe patch needed)", jdMaxT <= 3f, $"largest step {jdMaxT:0.00} cells; {jdMaxTAt ?? "none"}");
+                        jdMaxT = 0f;
+                        jdHaveT = false;
+                        jdMaxTAt = null;
                         jdFlyer = null;
                         jdCase++;
                         Wait(5, "jd_case");
@@ -238,7 +278,7 @@ namespace ProjectZ.Dev
 
         private static void JdPatch()
         {
-            if (!jdPatched)
+            if (!jdPatched && !GenCommandLine.CommandLineArgPassed("projectzjdnoobs"))
             {
                 Harmony h = new Harmony("Peren.IsoRimProjectZ.jumpdiag");
                 h.Patch(AccessTools.Method(typeof(PawnFlyer), nameof(PawnFlyer.DynamicDrawPhaseAt)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(JdFlyerDrawn)));
@@ -339,7 +379,7 @@ namespace ProjectZ.Dev
             AnnexMapComponent an = ProjectZ.Annex(map);
             jdFile = Path.Combine(outDir, "frames.tsv");
             File.WriteAllText(jdFile, "case\tkind\tframe\ttick\tflight\tpos\tlevel\tgroundPos\teffectivePos\tband\trise\theight\tposeGround\tshown\tdrawn\n");
-            if (!jdPatched)
+            if (!jdPatched && !GenCommandLine.CommandLineArgPassed("projectzjdnoobs"))
             {
                 Harmony h = new Harmony("Peren.IsoRimProjectZ.jumpdiag");
                 h.Patch(AccessTools.Method(typeof(PawnFlyer), nameof(PawnFlyer.DynamicDrawPhaseAt)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(JdFlyerDrawn)));
@@ -446,6 +486,15 @@ namespace ProjectZ.Dev
                 new JdCase { name = "sang_down", from = JdUp(9, 10, 1, map), to = JdO(10, 3), who = "sang", view = 1 },
                 new JdCase { name = "sang_up", from = JdO(10, 3), to = JdUp(10, 11, 1, map), who = "sang", view = 1 },
             };
+            // -projectzjdrepeat=N: the whole list N times (long sessions)
+            if (GenCommandLine.TryGetCommandLineArg("projectzjdrepeat", out string rep) && int.TryParse(rep, out int nrep) && nrep > 1)
+            {
+                List<JdCase> one = jdCases.ToList();
+                for (int r = 1; r < nrep; r++)
+                {
+                    jdCases.AddRange(one.Select(c => new JdCase { name = c.name + "_r" + r, from = c.from, to = c.to, who = c.who, view = c.view }));
+                }
+            }
             jdCase = 0;
             Wait(10, "jd_case");
         }
