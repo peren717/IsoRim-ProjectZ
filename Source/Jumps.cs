@@ -57,6 +57,8 @@ namespace ProjectZ
         {
             byRegion.Clear();
             Patches.GroundParts.Dirty(map);
+            // (regions rebuilt or a column's landings changed: what can be reached may have changed)
+            ReachFog.Request(map);
         }
 
         private void Listen()

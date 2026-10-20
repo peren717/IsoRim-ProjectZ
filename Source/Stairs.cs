@@ -128,6 +128,7 @@ namespace ProjectZ
         {
             map.reachability?.ClearCache();
             SlabPeel.Dirty(map);
+            ReachFog.Request(map);
             ProjectZ.DebugLog($"stairs on {map}: {links.Count} link(s)");
         }
 
@@ -230,11 +231,6 @@ namespace ProjectZ
                 }
             }
             map.GetComponent<StairGrid>()?.Register(this, HighCell, top);
-            if (!respawningAfterLoad)
-            {
-                // (a) the band the stairs lead onto: what pawns can walk to from the exit is revealed (tall mountains)
-                MountainFog.Reveal(top, map);
-            }
         }
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
