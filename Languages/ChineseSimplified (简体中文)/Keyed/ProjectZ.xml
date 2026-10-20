@@ -60,7 +60,7 @@
   <PZ_BuiltAbove>上方有建筑</PZ_BuiltAbove>
   <PZ_CeilingIsRock>上方是岩石：先开采或移除屋顶</PZ_CeilingIsRock>
   <PZ_DesignatorMineAbove>开采上层</PZ_DesignatorMineAbove>
-  <PZ_DesignatorMineAboveDesc>从下方开采这些格子正上方的岩石。</PZ_DesignatorMineAboveDesc>
+  <PZ_DesignatorMineAboveDesc>从下方开采这些格子正上方的岩石，或挖开上方裸露的山顶。</PZ_DesignatorMineAboveDesc>
   <PZ_DesignatorMineBelow>开采下层</PZ_DesignatorMineBelow>
   <PZ_DesignatorMineBelowDesc>从上方开采这些格子正下方的岩石。</PZ_DesignatorMineBelowDesc>
   <PZ_NoRockAbove>上方没有岩石</PZ_NoRockAbove>

@@ -60,7 +60,7 @@
   <PZ_BuiltAbove>Something is built above</PZ_BuiltAbove>
   <PZ_CeilingIsRock>Ceiling is rock: mine it, or remove roof</PZ_CeilingIsRock>
   <PZ_DesignatorMineAbove>Mine above</PZ_DesignatorMineAbove>
-  <PZ_DesignatorMineAboveDesc>Mine the rock right above these cells, from below.</PZ_DesignatorMineAboveDesc>
+  <PZ_DesignatorMineAboveDesc>Mine the rock right above these cells from below, or open the bare mountain top above them.</PZ_DesignatorMineAboveDesc>
   <PZ_DesignatorMineBelow>Mine below</PZ_DesignatorMineBelow>
   <PZ_DesignatorMineBelowDesc>Mine the rock right below these cells, from above.</PZ_DesignatorMineBelowDesc>
   <PZ_NoRockAbove>No rock above</PZ_NoRockAbove>

@@ -78,6 +78,8 @@ namespace ProjectZ
             {
                 d.Delete();
             }
+            // (and C's Mine above mark: nothing is left above C to mine or open)
+            map.designationManager.TryRemoveDesignation(c, PZMineDefOf.PZ_MineAbove);
             List<Thing> list = u.GetThingList(map);
             for (int i = list.Count - 1; i >= 0; i--)
             {
@@ -177,7 +179,7 @@ namespace ProjectZ
             ProjectZ.DebugLog($"{p} stepped aside from opening top {u} to {best}");
         }
 
-        // A cell whose own top is set to open: marked Mine below, or a Remove roof hole under it.
+        // A cell whose own top is set to open: marked Mine below, or a Remove roof hole or a Mine above mark under it.
         private static bool AboutToOpen(IntVec3 n, Map map)
         {
             if (MineSide.MarkAt(n, map, MineDir.FromAbove))
@@ -185,7 +187,7 @@ namespace ProjectZ
                 return true;
             }
             IntVec3 b = FloorRoof.Below(n, map);
-            return b.IsValid && b.InBounds(map) && map.areaManager.NoRoof[b] && Hole.CanOpen(b, map);
+            return b.IsValid && b.InBounds(map) && (map.areaManager.NoRoof[b] || MineSide.MarkAt(b, map, MineDir.FromBelow)) && Hole.CanOpen(b, map);
         }
     }
 
