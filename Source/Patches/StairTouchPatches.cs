@@ -169,6 +169,7 @@ namespace ProjectZ.Patches
     // filth) could be reached to touch. Its own region, entered over the stair link, is a goal too. And the region of
     // the other end of a stair step from a target's cell (across a step), the rim of a stairs thing, and K2.
     [HarmonyPatch(typeof(TouchPathEndModeUtility), nameof(TouchPathEndModeUtility.AddAllowedAdjacentRegions))]
+    [PatchGroup(FailSoft.StairRouting)]
     public static class AddAllowedAdjacentRegions_Patch
     {
         private static readonly List<IntVec3> cells = new List<IntVec3>();
@@ -228,6 +229,7 @@ namespace ProjectZ.Patches
 
     // T2
     [HarmonyPatch(typeof(TouchPathEndModeUtility), nameof(TouchPathEndModeUtility.IsAdjacentOrInsideAndAllowedToTouch))]
+    [PatchGroup(FailSoft.StairRouting)]
     public static class IsAdjacentOrInsideAndAllowedToTouch_Patch
     {
         [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
@@ -253,6 +255,7 @@ namespace ProjectZ.Patches
 
     // T3: listed in the rim's regions too.
     [HarmonyPatch(typeof(RegionListersUpdater), nameof(RegionListersUpdater.GetTouchableRegions))]
+    [PatchGroup(FailSoft.StairRouting)]
     public static class GetTouchableRegions_Patch
     {
         private static readonly List<IntVec3> cells = new List<IntVec3>();
@@ -279,6 +282,7 @@ namespace ProjectZ.Patches
     // T3: a region rebuilt on an upper floor lists the stairs things below whose rim it holds (the game only lists things
     // standing in or next to the new region).
     [HarmonyPatch(typeof(RegionMaker), "RegisterThingsInRegionListers")]
+    [PatchGroup(FailSoft.StairRouting)]
     public static class RegisterThingsInRegionListers_Patch
     {
         private static readonly AccessTools.FieldRef<RegionMaker, Region> NewRegRef = AccessTools.FieldRefAccess<RegionMaker, Region>("newReg");
@@ -343,6 +347,7 @@ namespace ProjectZ.Patches
     // alone): the game's builders, haulers and cleaners stand on it. K2: stairs being taken up, from the side that stays
     // joined only.
     [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.TryFindGoodAdjacentSpotToTouch))]
+    [PatchGroup(FailSoft.StairRouting)]
     public static class TryFindGoodAdjacentSpotToTouch_Patch
     {
         [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)

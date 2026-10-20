@@ -88,24 +88,31 @@ namespace ProjectZ.Patches
         // (an ability comp's own method passes itself for its map; the permits' targeting closures use the current map)
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            bool comp = !original.IsStatic && typeof(CompAbilityEffect_WithDest).IsAssignableFrom(original.DeclaringType);
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(PermitRange_Patch), original, instructions, code =>
             {
-                if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && Equals(ci.operand, Raw))
+                bool comp = !original.IsStatic && typeof(CompAbilityEffect_WithDest).IsAssignableFrom(original.DeclaringType);
+                int n = 0;
+                for (int i = 0; i < code.Count; i++)
                 {
-                    if (comp)
+                    CodeInstruction ci = code[i];
+                    if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && Equals(ci.operand, Raw))
                     {
-                        yield return new CodeInstruction(OpCodes.Ldarg_0);
-                        ci.operand = OursOn;
+                        if (comp)
+                        {
+                            code.Insert(i, new CodeInstruction(OpCodes.Ldarg_0));
+                            i++;
+                            ci.operand = OursOn;
+                        }
+                        else
+                        {
+                            ci.operand = Ours;
+                        }
+                        ci.opcode = OpCodes.Call;
+                        n++;
                     }
-                    else
-                    {
-                        ci.operand = Ours;
-                    }
-                    ci.opcode = OpCodes.Call;
                 }
-                yield return ci;
-            }
+                return n > 0 ? null : "no distance call found";
+            });
         }
     }
 }

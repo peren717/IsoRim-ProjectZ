@@ -106,23 +106,22 @@ namespace ProjectZ.Patches
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo lump = AccessTools.Method(typeof(GridShapeMaker), nameof(GridShapeMaker.IrregularLump));
-            MethodInfo with = AccessTools.Method(typeof(GroundSpread), nameof(GroundSpread.GroundLump));
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(GroundLump_Patch), original, instructions, code =>
             {
-                if (ci.Calls(lump))
+                MethodInfo lump = AccessTools.Method(typeof(GridShapeMaker), nameof(GridShapeMaker.IrregularLump));
+                MethodInfo with = AccessTools.Method(typeof(GroundSpread), nameof(GroundSpread.GroundLump));
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = with;
-                    n++;
+                    if (ci.Calls(lump))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = with;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (n == 0)
-            {
-                Log.Warning("[ProjectZ] ground spread: no IrregularLump call in " + original.DeclaringType.Name + "." + original.Name + " (left as vanilla)");
-            }
+                return n > 0 ? null : "no IrregularLump call found";
+            });
         }
     }
 }

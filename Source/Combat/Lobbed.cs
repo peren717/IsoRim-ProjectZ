@@ -108,6 +108,7 @@ namespace ProjectZ.Combat
 
     // The verb launching: read by the launch (Projectile_Launch_Patch) to ask the rules about its projectile.
     [HarmonyPatch(typeof(Verb_LaunchProjectile), "TryCastShot")]
+    [PatchGroup(FailSoft.Combat)]
     public static class LobbedCast_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;

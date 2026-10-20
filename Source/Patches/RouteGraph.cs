@@ -1114,6 +1114,7 @@ namespace ProjectZ.Patches
 
     // A region was made: its floor's parts are numbered again (and everything keyed by the graph's version).
     [HarmonyPatch(typeof(RegionMaker), nameof(RegionMaker.TryGenerateRegionFrom))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class RegionMade_RouteGraph_Patch
     {
         public static void Postfix(Region __result)
@@ -1139,6 +1140,7 @@ namespace ProjectZ.Patches
     // Reach2 is cleared whenever the map's own cache is (the game knows when reachability changes: regions, doors,
     // forbidding, a pawn's faction ...).
     [HarmonyPatch(typeof(Reachability), nameof(Reachability.ClearCache))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class ReachClear_RouteGraph_Patch
     {
         public static void Postfix(Reachability __instance)
@@ -1151,6 +1153,7 @@ namespace ProjectZ.Patches
     }
 
     [HarmonyPatch(typeof(Reachability), nameof(Reachability.ClearCacheFor))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class ReachClearFor_RouteGraph_Patch
     {
         public static void Postfix(Reachability __instance, Pawn pawn)
@@ -1163,6 +1166,7 @@ namespace ProjectZ.Patches
     }
 
     [HarmonyPatch(typeof(Reachability), nameof(Reachability.ClearCacheForHostile))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class ReachClearHostile_RouteGraph_Patch
     {
         public static void Postfix(Reachability __instance, Thing hostileTo)

@@ -15,6 +15,7 @@ namespace ProjectZ.Patches
     // at once and an unanswered one is handed to the follower; the router answers it in RouteGraph's tick within a
     // per-tick budget (drafted pawns and forced jobs first). The follower waits for it as for the game's own requests.
     [HarmonyPatch(typeof(Pawn_PathFollower), "GenerateNewPathRequest")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class GenerateNewPathRequest_Patch
     {
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
@@ -61,6 +62,7 @@ namespace ProjectZ.Patches
     // the stairs route worked out (deferred, within the budget), and the cheaper of the two is walked. The common case
     // costs one small A* over estimates at request time and nothing else.
     [HarmonyPatch(typeof(Pawn_PathFollower), nameof(Pawn_PathFollower.PatherTick))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class PatherTick_Detour_Patch
     {
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
@@ -138,6 +140,7 @@ namespace ProjectZ.Patches
     // once (no budget: the caller needs the answer), or not found, instead of a full-map search that must fail. A
     // same-floor path the game found gets option C's check too.
     [HarmonyPatch(typeof(PathFinder), nameof(PathFinder.FindPathNow), new[] { typeof(IntVec3), typeof(LocalTargetInfo), typeof(TraverseParms), typeof(PathFinderCostTuning?), typeof(PathEndMode), typeof(PathRequest.IPathGridCustomizer) })]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class FindPathNow_Stairs_Patch
     {
         private static readonly AccessTools.FieldRef<PathFinder, Map> MapRef = AccessTools.FieldRefAccess<PathFinder, Map>("map");
@@ -218,6 +221,7 @@ namespace ProjectZ.Patches
 
     // A stair step takes its own time instead of a cell's walking cost (J5).
     [HarmonyPatch(typeof(Pawn_PathFollower), "SetupMoveIntoNextCell")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class SetupMoveIntoNextCell_Patch
     {
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
@@ -237,6 +241,7 @@ namespace ProjectZ.Patches
     // After the step the pawn is drawn at its new cell at once (no slide across the map between the floors' rows). Not
     // pawn.Notify_Teleported: that ends the job.
     [HarmonyPatch(typeof(Pawn_PathFollower), "TryEnterNextPathCell")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class TryEnterNextPathCell_Patch
     {
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");

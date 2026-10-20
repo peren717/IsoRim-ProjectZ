@@ -90,6 +90,7 @@ namespace ProjectZ.Combat
     // A shooter's ring: Verb.DrawHighlight (targeting), Command_VerbTarget and PawnAttackGizmoUtility (gizmo hover),
     // Command_Ability, Verb_CastAbility all draw it through VerbProperties.DrawRadiusRing.
     [HarmonyPatch(typeof(VerbProperties), nameof(VerbProperties.DrawRadiusRing))]
+    [PatchGroup(FailSoft.Combat)]
     public static class VerbProps_DrawRadiusRing_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -106,6 +107,7 @@ namespace ProjectZ.Combat
 
     // A selected turret's ring (its selection overlay).
     [HarmonyPatch(typeof(Building_TurretGun), nameof(Building_TurretGun.DrawExtraSelectionOverlays))]
+    [PatchGroup(FailSoft.Combat)]
     public static class TurretGun_SelectionRing_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;

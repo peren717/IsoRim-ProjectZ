@@ -291,24 +291,24 @@ namespace ProjectZ.Combat
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo inHor = AccessTools.Method(typeof(IntVec3), nameof(IntVec3.InHorDistOf), new[] { typeof(IntVec3), typeof(float) });
-            MethodInfo with = AccessTools.Method(typeof(SkyStrikes), nameof(SkyStrikes.GroundInHorDistOf));
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(ProjectileInterceptor_GroundDistance_Patch), original, instructions, code =>
             {
-                if (ci.Calls(inHor))
+                MethodInfo inHor = AccessTools.Method(typeof(IntVec3), nameof(IntVec3.InHorDistOf), new[] { typeof(IntVec3), typeof(float) });
+                MethodInfo with = AccessTools.Method(typeof(SkyStrikes), nameof(SkyStrikes.GroundInHorDistOf));
+                int n = 0;
+                for (int i = 0; i < code.Count; i++)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg_0).MoveLabelsFrom(ci);
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = with;
-                    n++;
+                    if (code[i].Calls(inHor))
+                    {
+                        code.Insert(i, new CodeInstruction(OpCodes.Ldarg_0).MoveLabelsFrom(code[i]));
+                        i++;
+                        code[i].opcode = OpCodes.Call;
+                        code[i].operand = with;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (n != 1)
-            {
-                Log.Warning($"[ProjectZ] sky strikes: {original.Name}: {n} distance calls swapped (expected 1)");
-            }
+                return n == 1 ? null : $"{n} distance calls found (expected 1)";
+            });
         }
     }
 
@@ -376,23 +376,22 @@ namespace ProjectZ.Combat
         private static readonly MethodInfo original = AccessTools.Method(typeof(Verb_LaunchProjectile), "GetForcedMissTarget");
         private static readonly System.Func<Verb_LaunchProjectile, float, IntVec3> vanilla = AccessTools.MethodDelegate<System.Func<Verb_LaunchProjectile, float, IntVec3>>(original);
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase method)
         {
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(ForcedMiss_Patch), method, instructions, code =>
             {
-                if (ci.Calls(original))
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(ForcedMiss_Patch), nameof(Pick));
-                    n++;
+                    if (ci.Calls(original))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(ForcedMiss_Patch), nameof(Pick));
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (n != 1)
-            {
-                Log.Warning($"[ProjectZ] sky strikes: {n} forced-miss picks swapped in Verb_LaunchProjectile.TryCastShot (expected 1)");
-            }
+                return n == 1 ? null : $"{n} forced-miss picks found (expected 1)";
+            });
         }
 
         // The shot's projectile, read before the cast (a mortar's loaded shell is used up before the miss is picked).

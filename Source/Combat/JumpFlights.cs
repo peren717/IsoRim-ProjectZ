@@ -217,6 +217,7 @@ namespace ProjectZ.Combat
     // The flyer of the jump checked: the jump verbs' own target checks (targeting, warm-up, AI validation) and the ordered
     // jump's cell search.
     [HarmonyPatch]
+    [PatchGroup(FailSoft.Combat)]
     public static class Jump_VerbFlyer_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -233,6 +234,7 @@ namespace ProjectZ.Combat
     }
 
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.OrderJump))]
+    [PatchGroup(FailSoft.Combat)]
     public static class Jump_OrderFlyer_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -243,6 +245,7 @@ namespace ProjectZ.Combat
     }
 
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.CanHitTargetFrom))]
+    [PatchGroup(FailSoft.Combat)]
     public static class Jump_CanHitTargetFrom_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -297,6 +300,7 @@ namespace ProjectZ.Combat
     // The warm-up's line (Verb.TryStartCastOn -> TryFindShootLineFromTo) for a jump between floors: the jump rule, not
     // the shooting one (which has the high-ground bonus and the slab-edge rule).
     [HarmonyPatch(typeof(Verb), nameof(Verb.TryFindShootLineFromTo))]
+    [PatchGroup(FailSoft.Combat)]
     public static class Jump_ShootLine_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -341,6 +345,7 @@ namespace ProjectZ.Combat
 
     // The game's AI jump toward its job's target (paramedic mechs: rescue, fire) measures and looks along the map rows.
     [HarmonyPatch(typeof(JobGiver_AIJumpToJobTarget), "TryGiveJob")]
+    [PatchGroup(FailSoft.Combat)]
     public static class AIJumpToJobTarget_Patch
     {
         private static readonly MethodInfo Dist = AccessTools.Method(typeof(IntVec3Utility), nameof(IntVec3Utility.DistanceTo), new[] { typeof(IntVec3), typeof(IntVec3) });
@@ -354,29 +359,28 @@ namespace ProjectZ.Combat
             JumpRules.SetAI(pawn?.Map, v != null ? JumpRules.FlyerOf(v) : null);
         }
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            int d = 0, s = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(AIJumpToJobTarget_Patch), original, instructions, code =>
             {
-                if (ci.Calls(Dist))
+                int d = 0, s = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(JumpRules), nameof(JumpRules.AIDistance));
-                    d++;
+                    if (ci.Calls(Dist))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(JumpRules), nameof(JumpRules.AIDistance));
+                        d++;
+                    }
+                    else if (ci.Calls(Sight))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(JumpRules), nameof(JumpRules.AISight));
+                        s++;
+                    }
                 }
-                else if (ci.Calls(Sight))
-                {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(JumpRules), nameof(JumpRules.AISight));
-                    s++;
-                }
-                yield return ci;
-            }
-            if (d != 1 || s != 1)
-            {
-                Log.Warning($"[ProjectZ] JobGiver_AIJumpToJobTarget changed (distance calls {d}, sight calls {s}): AI jumps between floors may be measured on the map rows.");
-            }
+                return d == 1 && s == 1 ? null : $"distance calls {d}, sight calls {s} (expected 1 each)";
+            });
         }
     }
 
@@ -662,6 +666,7 @@ namespace ProjectZ.Combat
     // The jump's range ring on the floor viewed (and the ground) when the jumper stands on another floor: the cells it
     // can land on there (the game draws its own ring on the jumper's floor).
     [HarmonyPatch]
+    [PatchGroup(FailSoft.Combat)]
     public static class Jump_DrawHighlight_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;

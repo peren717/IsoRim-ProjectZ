@@ -291,8 +291,8 @@ namespace ProjectZ.Patches
         }
     }
 
-    // The transpiler over the inventory (Dist3D.Rows).
-    [HarmonyPatch]
+    // The transpiler over the inventory (Dist3D.Rows), applied row by row (FailSoft entries "Dist3D:<Type>.<method>[/inner]":
+    // a row whose methods are missing or that swaps nothing stays the game's, the other rows apply).
     public static class Dist3D_Patch
     {
         private static readonly Dictionary<MethodBase, Dist3D.Row> rowOf = new Dictionary<MethodBase, Dist3D.Row>();
@@ -306,8 +306,12 @@ namespace ProjectZ.Patches
         private static readonly MethodInfo inHor = AccessTools.Method(typeof(IntVec3), nameof(IntVec3.InHorDistOf), new[] { typeof(IntVec3), typeof(float) });
         private static readonly MethodInfo rectDist = AccessTools.Method(typeof(CellRect), nameof(CellRect.ClosestDistSquaredTo), new[] { typeof(IntVec3) });
 
-        public static IEnumerable<MethodBase> TargetMethods()
+        public static string EntryName(Dist3D.Row row) => "Dist3D:" + row.type.Name + "." + row.outer + (row.inner == null ? "" : "/" + row.inner);
+
+        public static void Patch()
         {
+            HarmonyMethod tr = new HarmonyMethod(typeof(Dist3D_Patch), nameof(Transpiler));
+            FailSoft.BeginList("3D distance");
             foreach (Dist3D.Row row in Dist3D.Rows)
             {
                 foreach (MethodBase m in Dist3D.Resolve(row))
@@ -316,23 +320,28 @@ namespace ProjectZ.Patches
                     {
                         rowOf[m] = row;
                         row.targets.Add(m);
-                        yield return m;
                     }
                 }
-                if (row.targets.Count == 0)
-                {
-                    Log.Warning($"[ProjectZ] 3D distance: {row.type.Name}.{row.outer} {row.inner} not found");
-                }
+                Dist3D.Row r = row;
+                FailSoft.Entry(EntryName(row), row.targets, transpiler: tr, check: () => r.swaps > 0 ? null : "no distance call found");
             }
+            FailSoft.EndList();
         }
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
+            string entry = rowOf.TryGetValue(original, out Dist3D.Row row) ? EntryName(row) : null;
+            return FailSoft.Transpile(entry, original, instructions, code => Edit(code, original));
+        }
+
+        // (no anchor check per method, a row's method may have none: the row's entry check counts the row's swaps)
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             if (!rowOf.TryGetValue(original, out Dist3D.Row row))
             {
-                return code;
+                return null;
             }
+            row.swapsOf[original] = 0;
             CodeInstruction MapLoad() => MapSource(original);
             int n = 0;
             for (int i = 0; i < code.Count; i++)
@@ -387,7 +396,7 @@ namespace ProjectZ.Patches
             }
             row.swapsOf[original] = n;
             ProjectZ.DebugLog($"3D distance: {original.DeclaringType?.Name}.{original.Name}: {n} swapped ({row.name})");
-            return code;
+            return null;
         }
 
         // The object the helpers take their map from: the first Thing/Region/Map/IAttackTarget parameter; 'this' for the

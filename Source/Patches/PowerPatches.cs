@@ -143,10 +143,10 @@ namespace ProjectZ.Patches
             return clipped;
         }
 
-        // Replace calls to 'from' by calls to 'to'; 'extraArgs' are pushed right before the call. Logs if the count differs.
-        internal static List<CodeInstruction> Swap(IEnumerable<CodeInstruction> instructions, MethodInfo from, MethodInfo to, int expected, string where, params CodeInstruction[] extraArgs)
+        // Replace calls to 'from' by calls to 'to'; 'extraArgs' are pushed right before the call. Another count than
+        // expected: what is missing (FailSoft.Transpile then hands the IL back as it came).
+        internal static string Swap(List<CodeInstruction> list, MethodInfo from, MethodInfo to, int expected, params CodeInstruction[] extraArgs)
         {
-            List<CodeInstruction> list = new List<CodeInstruction>(instructions);
             int done = 0;
             for (int i = 0; i < list.Count; i++)
             {
@@ -162,11 +162,7 @@ namespace ProjectZ.Patches
                     done++;
                 }
             }
-            if (done != expected)
-            {
-                Log.Error($"[ProjectZ] {where} is not in the expected form ({done} of {expected} calls swapped): power may not cross floors correctly.");
-            }
-            return list;
+            return done == expected ? null : $"{done} of {expected} {from.Name} calls found";
         }
 
         internal static readonly MethodInfo CardinalThing = AccessTools.Method(typeof(GenAdj), nameof(GenAdj.CellsAdjacentCardinal), new[] { typeof(Thing) });
@@ -177,24 +173,27 @@ namespace ProjectZ.Patches
         internal static readonly MethodInfo ClipFloor = AccessTools.Method(typeof(PowerRisers), nameof(ClipInsideFloor));
     }
 
-    // Site 1.
+    // Site 1 (sites 1-3 work together: one failing turns the risers off, FailSoft group).
     [HarmonyPatch(typeof(PowerNetMaker), "ContiguousPowerBuildings")]
+    [PatchGroup("power risers", key: true)]
     public static class PowerNetMaker_Risers_Patch
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return PowerRisers.Swap(instructions, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1, "PowerNetMaker.ContiguousPowerBuildings");
+            return FailSoft.Transpile(nameof(PowerNetMaker_Risers_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1));
         }
     }
 
     // Sites 2 and 3.
     [HarmonyPatch(typeof(PowerNetManager), nameof(PowerNetManager.UpdatePowerNetsAndConnections_First))]
+    [PatchGroup("power risers", key: true)]
     public static class PowerNetManager_Risers_Patch
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> list = PowerRisers.Swap(instructions, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1, "PowerNetManager.UpdatePowerNetsAndConnections_First (register)");
-            return PowerRisers.Swap(list, PowerRisers.CardinalRect, PowerRisers.AdjacentRect, 1, "PowerNetManager.UpdatePowerNetsAndConnections_First (rebuild)", new CodeInstruction(OpCodes.Ldarg_0));
+            return FailSoft.Transpile(nameof(PowerNetManager_Risers_Patch), original, instructions, code =>
+                PowerRisers.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1)   // register
+                ?? PowerRisers.Swap(code, PowerRisers.CardinalRect, PowerRisers.AdjacentRect, 1, new CodeInstruction(OpCodes.Ldarg_0)));   // rebuild
         }
     }
 
@@ -202,9 +201,9 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(PowerConnectionMaker), nameof(PowerConnectionMaker.BestTransmitterForConnector))]
     public static class BestTransmitterForConnector_Floor_Patch
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return PowerRisers.Swap(instructions, PowerRisers.ClipMap, PowerRisers.ClipFloor, 2, "PowerConnectionMaker.BestTransmitterForConnector");
+            return FailSoft.Transpile(nameof(BestTransmitterForConnector_Floor_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 2));
         }
     }
 
@@ -216,9 +215,9 @@ namespace ProjectZ.Patches
             return AccessTools.EnumeratorMoveNext(AccessTools.Method(typeof(PowerConnectionMaker), "PotentialConnectorsForTransmitter"));
         }
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return PowerRisers.Swap(instructions, PowerRisers.ClipMap, PowerRisers.ClipFloor, 1, "PowerConnectionMaker.PotentialConnectorsForTransmitter");
+            return FailSoft.Transpile(nameof(PotentialConnectorsForTransmitter_Floor_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 1));
         }
     }
 }

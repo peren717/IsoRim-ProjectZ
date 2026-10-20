@@ -39,6 +39,7 @@ namespace ProjectZ
             public readonly string group, type, method, args, mapPath;
             public readonly int expected;
             public MethodBase target;
+            public string entry;   // its FailSoft entry name
             public int swaps;
             public int calls, cells, folded, skipped;
 
@@ -251,7 +252,7 @@ namespace ProjectZ
             }
             Stopwatch sw = Stopwatch.StartNew();
             Assembly game = typeof(Pawn).Assembly;
-            List<string> missing = new List<string>();
+            int missing = 0;
             for (int i = 0; i < rows.Length; i++)
             {
                 Row r = rows[i];
@@ -270,78 +271,61 @@ namespace ProjectZ
                 }
                 if (m == null || m.GetMethodBody() == null)
                 {
-                    missing.Add(r.Name + "(" + r.args + ")");
+                    missing++;
                     continue;
                 }
                 r.target = m;
                 idOf[m] = i;
             }
             ResolveMs = sw.Elapsed.TotalMilliseconds;
-            NotFound = missing.Count;
+            NotFound = missing;
             sw.Restart();
+            // entry by entry (FailSoft "BandRadial:<Type.method>"): a row not found (a game update? regenerate the list with
+            // tools\pz-radial-scan) or swapping nothing stays the game's, the other rows apply
             HarmonyMethod tr = new HarmonyMethod(typeof(BandRadial), nameof(Transpiler)) { priority = Priority.Last };
-            List<string> failed = new List<string>();
+            FailSoft.BeginList("radius clip");
             foreach (Row r in rows)
             {
-                if (r.target == null)
+                Row row = r;
+                r.entry = "BandRadial:" + r.Name + (rows.Count(x => x.Name == r.Name) > 1 ? "(" + r.args + ")" : "");
+                if (FailSoft.Entry(r.entry, r.target, transpiler: tr, check: () => row.swaps > 0 ? null : "no cell producer found"))
                 {
-                    continue;
-                }
-                try
-                {
-                    h.Patch(r.target, transpiler: tr);
                     Patched++;
                 }
-                catch (Exception e)
-                {
-                    failed.Add(r.Name + ": " + e.GetType().Name + " " + e.Message);
-                }
             }
-            try
-            {
-                h.Patch(AccessTools.Method(typeof(GenRadial), nameof(GenRadial.ProcessEquidistantCells)), transpiler: new HarmonyMethod(typeof(BandRadial), nameof(PecTranspiler)));
-            }
-            catch (Exception e)
-            {
-                failed.Add("GenRadial.ProcessEquidistantCells: " + e.Message);
-            }
+            FailSoft.Entry("BandRadial:GenRadial.ProcessEquidistantCells", AccessTools.Method(typeof(GenRadial), nameof(GenRadial.ProcessEquidistantCells)),
+                transpiler: new HarmonyMethod(typeof(BandRadial), nameof(PecTranspiler)), check: () => PecSwapped == 1 ? null : $"{PecSwapped} InBounds calls found (expected 1)");
+            FailSoft.EndList();
             PatchMs = sw.Elapsed.TotalMilliseconds;
-            List<string> odd = rows.Where(r => r.target != null && r.swaps != r.expected).Select(r => $"{r.Name} {r.swaps}/{r.expected}").ToList();
+            List<string> odd = rows.Where(r => r.target != null && r.swaps > 0 && r.swaps != r.expected).Select(r => $"{r.Name} {r.swaps}/{r.expected}").ToList();
             Unmatched = rows.Count(r => r.target != null && r.swaps == 0);
             SitesSwapped = rows.Sum(r => r.swaps);
-            if (missing.Count > 0)
-            {
-                Log.Warning("[ProjectZ] radius clip: listed method(s) not found (a game update? regenerate the list with tools\\pz-radial-scan): " + string.Join(", ", missing));
-            }
             if (odd.Count > 0)
             {
                 Log.Warning("[ProjectZ] radius clip: cell producers swapped / expected differ in: " + string.Join(", ", odd));
-            }
-            if (failed.Count > 0)
-            {
-                Log.Warning("[ProjectZ] radius clip: patch failed: " + string.Join("; ", failed));
-            }
-            if (PecSwapped != 1)
-            {
-                Log.Warning($"[ProjectZ] radius clip: GenRadial.ProcessEquidistantCells: {PecSwapped} InBounds calls swapped (expected 1)");
             }
             Log.Message($"[ProjectZ] radius clip: {Patched} of {rows.Length} listed methods patched, {SitesSwapped} cell producers swapped, {Unmatched} with none; resolve {ResolveMs:0.0} ms, patch {PatchMs:0} ms");
         }
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original, ILGenerator gen)
         {
-            List<CodeInstruction> code = instructions.ToList();
+            Row row = idOf.TryGetValue(original, out int id) ? rows[id] : null;
+            return FailSoft.Transpile(row?.entry, original, instructions, code => Edit(code, original, gen));
+        }
+
+        // (the row's own count is its entry's check: none swapped = the row stays the game's)
+        private static string Edit(List<CodeInstruction> code, MethodBase original, ILGenerator gen)
+        {
             if (!idOf.TryGetValue(original, out int id))
             {
-                return code;
+                return null;
             }
             Row row = rows[id];
+            row.swaps = 0;
             List<CodeInstruction> prologue = MapGetter(row, original, id, gen, out LocalBuilder mapLocal);
             if (prologue == null)
             {
-                Log.Warning($"[ProjectZ] radius clip: {row.Name}: map path '{row.mapPath}' not usable; left as the game's");
-                row.swaps = 0;
-                return code;
+                return $"map path '{row.mapPath}' not usable";
             }
             int n = 0;
             MethodInfo cp = AccessTools.Method(typeof(BandRadial), nameof(AddCP));
@@ -380,10 +364,10 @@ namespace ProjectZ
             row.swaps = n;
             if (n == 0)
             {
-                return code;
+                return null;
             }
             code.InsertRange(0, prologue);
-            return code;
+            return null;
         }
 
         // The op_Addition that combines the pattern element read at code[k] (ldsfld) with a centre (the scanner's shapes):
@@ -522,20 +506,26 @@ namespace ProjectZ
             return il;
         }
 
-        public static IEnumerable<CodeInstruction> PecTranspiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> PecTranspiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile("BandRadial:GenRadial.ProcessEquidistantCells", original, instructions, code =>
             {
-                if (ci.Calls(inBounds))
+                MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
+                int n = 0;
+                for (int i = 0; i < code.Count; i++)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg_0);   // center
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(BandRadial), nameof(InBoundsNear));
-                    PecSwapped++;
+                    if (code[i].Calls(inBounds))
+                    {
+                        code[i].opcode = OpCodes.Call;
+                        code[i].operand = AccessTools.Method(typeof(BandRadial), nameof(InBoundsNear));
+                        code.Insert(i, new CodeInstruction(OpCodes.Ldarg_0).MoveLabelsFrom(code[i]));   // center
+                        i++;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
+                PecSwapped = n;
+                return n == 1 ? null : $"{n} InBounds calls found (expected 1)";
+            });
         }
     }
 }

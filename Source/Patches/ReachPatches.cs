@@ -48,6 +48,7 @@ namespace ProjectZ.Patches
     }
 
     [HarmonyPatch(typeof(RegionTraverser), nameof(RegionTraverser.FloodAndSetDistricts))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class FloodAndSetDistricts_Patch
     {
         public static void Prefix()
@@ -62,6 +63,7 @@ namespace ProjectZ.Patches
     }
 
     [HarmonyPatch(typeof(RegionTraverser), nameof(RegionTraverser.FloodAndSetNewRegionIndex))]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class FloodAndSetNewRegionIndex_Patch
     {
         public static void Prefix()
@@ -78,6 +80,7 @@ namespace ProjectZ.Patches
     // Region breadth-first searches (GenClosest, job scans, flee and exit searches, CanReach's helpers ...): right after
     // a region is taken from the open queue, its stair partners are queued like linked neighbours (same entry test, J2).
     [HarmonyPatch]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class BFSWorker_Patch
     {
         private static Type workerType;
@@ -94,11 +97,15 @@ namespace ProjectZ.Patches
             return AccessTools.Method(workerType, "BreadthFirstTraverseWork");
         }
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
+        {
+            return FailSoft.Transpile(nameof(BFSWorker_Patch), original, instructions, Edit);
+        }
+
+        private static string Edit(List<CodeInstruction> list)
         {
             MethodInfo dequeue = AccessTools.Method(typeof(Queue<Region>), nameof(Queue<Region>.Dequeue));
             MethodInfo hook = AccessTools.Method(typeof(BFSWorker_Patch), nameof(AfterDequeue));
-            List<CodeInstruction> list = new List<CodeInstruction>(instructions);
             int done = 0;
             for (int i = 0; i + 1 < list.Count; i++)
             {
@@ -117,11 +124,7 @@ namespace ProjectZ.Patches
                     break;
                 }
             }
-            if (done != 1)
-            {
-                Log.Error("[ProjectZ] RegionTraverser.BFSWorker.BreadthFirstTraverseWork is not in the expected form: stairs are left out of region searches.");
-            }
-            return list;
+            return done == 1 ? null : "no Dequeue + store found (stairs would be left out of region searches)";
         }
 
         public static void AfterDequeue(object worker, Region region, RegionEntryPredicate entryCondition, RegionType types)
@@ -238,6 +241,7 @@ namespace ProjectZ.Patches
     }
 
     [HarmonyPatch(typeof(Reachability), nameof(Reachability.CanReach), new[] { typeof(IntVec3), typeof(LocalTargetInfo), typeof(PathEndMode), typeof(TraverseParms) })]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class CanReach_Ctx_Patch
     {
         public static void Prefix(IntVec3 start, LocalTargetInfo dest, PathEndMode peMode)
@@ -279,6 +283,7 @@ namespace ProjectZ.Patches
     // The cache read on maps with floors: ProjectZ's entries only; and "no route" remembered by the router (RouteGraph
     // memo) answers no for that traveller meanwhile.
     [HarmonyPatch(typeof(Reachability), "GetCachedResult")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class GetCachedResult_Patch
     {
         // __state: 0 the prefix did not run, 1 not ours (no floors, one floor), 2 + the answer between floors.
@@ -362,6 +367,7 @@ namespace ProjectZ.Patches
 
     // Reachability.CheckRegionBasedReachability on maps with floors (see StairRegions).
     [HarmonyPatch(typeof(Reachability), "CheckRegionBasedReachability")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class CheckRegionBasedReachability_Patch
     {
         public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref bool __result, out byte __state)
@@ -527,6 +533,7 @@ namespace ProjectZ.Patches
     // Traversal modes the game answers by a cell flood (breaking walls, or keeping out of water), between floors: the
     // dig parts' components over the stairs (wall breakers), or the stairs' ends with the floor-only instance (water).
     [HarmonyPatch(typeof(Reachability), "CheckCellBasedReachability")]
+    [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class CheckCellBasedReachability_Patch
     {
         private static readonly HashSet<int> sParts = new HashSet<int>();

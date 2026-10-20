@@ -38,6 +38,8 @@ namespace ProjectZ.Dev
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
     //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
+    //                                   failsoft: the patch state after -projectzfailpatch=<names> made those patches fail
+    //                                   (FailSoft; any other mode runs with that switch too; TestFailSoft)
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
     //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
     //                                   staircolour: stairs of wood, steel and granite next to walls of the same stuff, day and
@@ -384,6 +386,7 @@ namespace ProjectZ.Dev
                 }
             }
             Out($"test active: mode {mode}, floors {FloorsOverride}, days {days}, out {outDir}");
+            Out("mods: " + string.Join(", ", ModsConfig.ActiveModsInLoadOrder.Where(m => !m.Official).Select(m => m.PackageIdPlayerFacing)));
         }
 
         // Construction botches (each loses part of the frame's materials): the m1b "upper floor built" flake.
@@ -970,6 +973,11 @@ namespace ProjectZ.Dev
                     else if (mode == "dist3d")
                     {
                         stage = "d3_setup";
+                    }
+                    else if (mode == "failsoft")
+                    {
+                        StepFailSoftChecks();
+                        Finish();
                     }
                     else if (mode == "routerperf")
                     {

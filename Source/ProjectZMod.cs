@@ -43,9 +43,12 @@ namespace ProjectZ
         public ProjectZMod(ModContentPack content) : base(content)
         {
             Settings = GetSettings<ProjectZSettings>();
-            // Never the argument-less PatchAll(): on 1.7 CoreCLR it can patch nothing.
+            // Fail-soft (FailSoft.cs): class by class and entry by entry, a patch that fails turns off only its feature.
+            // Our own assembly explicitly: the argument-less PatchAll() can patch nothing on 1.7 CoreCLR.
             Harmony harmony = new Harmony("Peren.IsoRimProjectZ");
-            harmony.PatchAll(typeof(ProjectZMod).Assembly);
+            FailSoft.PatchAll(harmony, typeof(ProjectZMod).Assembly);
+            // the game's "nearest" choices measure the 3D distance between floors (an explicit list of vanilla methods)
+            Patches.Dist3D_Patch.Patch();
             // radius effects stay on their centre's floor (an explicit list of vanilla methods)
             BandRadial.Patch(harmony);
             // directional effects (flame spews, sprays, beams) aimed at another floor: laid out on the target's floor

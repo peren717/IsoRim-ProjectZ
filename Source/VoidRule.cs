@@ -140,18 +140,21 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(GasGridCalls_Void_Patch), original, instructions, code =>
             {
-                if (ci.Calls(canMove))
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = with;
-                    n++;
+                    if (ci.Calls(canMove))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = with;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            PerMethod[original.Name] = n;
+                PerMethod[original.Name] = n;
+                return n > 0 ? null : "no GasCanMoveTo call found";
+            });
         }
     }
 

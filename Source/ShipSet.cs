@@ -293,7 +293,11 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
+            return FailSoft.Transpile(nameof(ShipSetGround_Patch), original, instructions, code => Edit(code, original));
+        }
+
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             bool all = bakers.Contains(original);
             int n = 0;
             for (int i = 0; i < code.Count; i++)
@@ -308,12 +312,8 @@ namespace ProjectZ
             }
             string key = (original.DeclaringType?.Name ?? "?") + "." + original.Name;
             PerMethod[key] = n;
-            if (n == 0)
-            {
-                Log.Warning("[ProjectZ] multi-level gravships: no ship-set read swapped in " + key);
-            }
             ProjectZ.DebugLog($"multi-level gravships: {key}: {n} ship-set read(s) on the ground");
-            return code;
+            return n > 0 ? null : "no ship-set read found";
         }
     }
 

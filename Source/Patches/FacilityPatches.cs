@@ -130,10 +130,14 @@ namespace ProjectZ.Patches
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
+            return FailSoft.Transpile(nameof(FacilityDistance_Patch), original, instructions, code => Edit(code, original));
+        }
+
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             if (!targets.TryGetValue(original, out (MapFrom from, int arg) t))
             {
-                return code;
+                return null;
             }
             int n = 0;
             for (int i = 0; i < code.Count; i++)
@@ -175,12 +179,8 @@ namespace ProjectZ.Patches
             }
             string key = original.DeclaringType?.Name + "." + original.Name;
             PerMethod[key] = n;
-            if (n == 0)
-            {
-                Log.Warning("[ProjectZ] facility links across floors: no distance call in " + key);
-            }
             ProjectZ.DebugLog($"facility links across floors: {key}: {n} distance calls in 3D");
-            return code;
+            return n > 0 ? null : "no distance call found";
         }
 
         private static CodeInstruction LoadArg(int i)

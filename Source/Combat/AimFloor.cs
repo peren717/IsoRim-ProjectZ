@@ -49,6 +49,8 @@ namespace ProjectZ.Combat
             }
 
             public string Name => type.Substring(type.LastIndexOf('.') + 1) + "." + method;
+
+            public string Entry => "AimFloor:" + Name;   // its FailSoft entry name
         }
 
         // The reviewed list (vanilla 1.7 + DLCs): every method that turns the caster's cell into a direction, a cone, a
@@ -359,57 +361,37 @@ namespace ProjectZ.Combat
             Off = GenCommandLine.CommandLineArgPassed("projectznoaimfloor");
             if (Off || !CombatGate.Enabled)
             {
-                Log.Message("[ProjectZ] aim on the target's floor: off" + (Off ? " (-projectznoaimfloor)" : " (Combat Extended)"));
+                Log.Message("[ProjectZ] aim on the target's floor: off" + (Off ? " (-projectznoaimfloor)" : " (combat between floors off)"));
                 return;
             }
             Assembly game = typeof(Pawn).Assembly;
-            List<string> missing = new List<string>();
             foreach (Row r in Rows)
             {
                 r.found = Resolve(game, r);
-                if (r.found == null)
+                if (r.found != null)
                 {
-                    missing.Add(r.Name);
-                    continue;
+                    rowOf[r.found] = r;
                 }
-                rowOf[r.found] = r;
             }
+            // entry by entry (FailSoft "AimFloor:<Type.method>", in the combat group): a row not found (a game update?) or
+            // swapping nothing stays the game's, the other rows apply
             HarmonyMethod tr = new HarmonyMethod(typeof(AimFloor), nameof(Transpiler));
             HarmonyMethod pre = new HarmonyMethod(typeof(AimFloor), nameof(Enter)) { priority = Priority.First };
             HarmonyMethod fin = new HarmonyMethod(typeof(AimFloor), nameof(Leave));
-            List<string> failed = new List<string>();
-            foreach (Row r in Rows.Where(x => x.found != null))
+            FailSoft.BeginList("aim on the target's floor");
+            int patched = 0;
+            foreach (Row r in Rows)
             {
-                try
+                Row row = r;
+                bool inner = r.target == "inner";
+                if (FailSoft.Entry(r.Entry, r.found, prefix: inner ? null : pre, transpiler: tr, finalizer: inner ? null : fin,
+                    check: () => row.swaps > 0 ? null : "no call to swap found", group: FailSoft.Combat))
                 {
-                    if (r.target == "inner")
-                    {
-                        h.Patch(r.found, transpiler: tr);
-                    }
-                    else
-                    {
-                        h.Patch(r.found, prefix: pre, transpiler: tr, finalizer: fin);
-                    }
-                }
-                catch (Exception e)
-                {
-                    failed.Add(r.Name + ": " + e.GetType().Name + " " + e.Message);
+                    patched++;
                 }
             }
-            if (missing.Count > 0)
-            {
-                Log.Warning("[ProjectZ] aim on the target's floor: listed method(s) not found (a game update?): " + string.Join(", ", missing));
-            }
-            if (failed.Count > 0)
-            {
-                Log.Warning("[ProjectZ] aim on the target's floor: patch failed: " + string.Join("; ", failed));
-            }
-            List<string> none = Rows.Where(r => r.found != null && r.swaps == 0).Select(r => r.Name).ToList();
-            if (none.Count > 0)
-            {
-                Log.Warning("[ProjectZ] aim on the target's floor: nothing swapped in " + string.Join(", ", none));
-            }
-            Log.Message($"[ProjectZ] aim on the target's floor: {Rows.Count(r => r.found != null)} of {Rows.Length} methods patched, {Rows.Sum(r => r.swaps)} calls swapped");
+            FailSoft.EndList();
+            Log.Message($"[ProjectZ] aim on the target's floor: {patched} of {Rows.Length} methods patched, {Rows.Sum(r => r.swaps)} calls swapped");
         }
 
         private static MethodBase Resolve(Assembly game, Row r)
@@ -473,9 +455,15 @@ namespace ProjectZ.Combat
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
+            return FailSoft.Transpile(RowOf(original)?.Entry, original, instructions, code => Edit(code, original));
+        }
+
+        // (the row's own count is its entry's check)
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             Row row = RowOf(original);
             int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            foreach (CodeInstruction ci in code)
             {
                 MethodInfo with = null;
                 if (ci.operand is MethodInfo m && (ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt))
@@ -543,13 +531,13 @@ namespace ProjectZ.Combat
                     ci.operand = with;
                     n++;
                 }
-                yield return ci;
             }
             if (row != null)
             {
                 row.swaps = n;
             }
             ProjectZ.DebugLog($"aim on the target's floor: {original.DeclaringType?.Name}.{original.Name}: {n} calls swapped");
+            return null;
         }
     }
 }

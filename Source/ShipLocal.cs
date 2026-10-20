@@ -157,7 +157,7 @@ namespace ProjectZ
         public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> Need = new Dictionary<string, int> { { "TransferZones", 2 }, { "CopyAreas", 3 }, { "CopyCellContents", 3 } };
 
-        public static bool Ok => Need.All(kv => PerMethod.TryGetValue(kv.Key, out int n) && n >= kv.Value);
+        public static bool Ok => FailSoft.IsApplied(nameof(CapturePatch)) && Need.All(kv => PerMethod.TryGetValue(kv.Key, out int n) && n >= kv.Value);
 
         public static IEnumerable<MethodBase> TargetMethods()
         {
@@ -169,24 +169,23 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
-            int n = 0;
-            foreach (CodeInstruction ci in code)
+            return FailSoft.Transpile(nameof(CapturePatch), original, instructions, code =>
             {
-                if (ci.Calls(sub))
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = ours;
-                    n++;
+                    if (ci.Calls(sub))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = ours;
+                        n++;
+                    }
                 }
-            }
-            PerMethod[original.Name] = n;
-            if (n < Need[original.Name])
-            {
-                Log.Warning($"[ProjectZ] multi-level gravships: Gravship.{original.Name} has {n} of {Need[original.Name]} offset sites; upper decks won't launch");
-            }
-            ProjectZ.DebugLog($"multi-level gravships: Gravship.{original.Name}: {n} offset(s) floor-tagged");
-            return code;
+                PerMethod[original.Name] = n;
+                ProjectZ.DebugLog($"multi-level gravships: Gravship.{original.Name}: {n} offset(s) floor-tagged");
+                // fewer: upper decks won't launch (Ok)
+                return n >= Need[original.Name] ? null : $"{n} of {Need[original.Name]} offset sites found";
+            });
         }
     }
 
@@ -230,7 +229,7 @@ namespace ProjectZ
         public static readonly Dictionary<string, int> PerMethod = new Dictionary<string, int>();
         private static readonly Dictionary<string, int> Need = new Dictionary<string, int>();
 
-        public static bool Ok => Need.Count > 0 && Need.All(kv => PerMethod.TryGetValue(kv.Key, out int n) && n >= kv.Value);
+        public static bool Ok => FailSoft.IsApplied(nameof(PlacePatch)) && Need.Count > 0 && Need.All(kv => PerMethod.TryGetValue(kv.Key, out int n) && n >= kv.Value);
 
         private static string Key(MethodBase m) => m.DeclaringType.Name + "." + m.Name + "(" + string.Join(",", m.GetParameters().Select(p => p.ParameterType.Name)) + ")";
 
@@ -267,25 +266,24 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
-            int n = 0;
-            foreach (CodeInstruction ci in code)
+            return FailSoft.Transpile(nameof(PlacePatch), original, instructions, code =>
             {
-                if (ci.Calls(add))
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = ours;
-                    n++;
+                    if (ci.Calls(add))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = ours;
+                        n++;
+                    }
                 }
-            }
-            string key = Key(original);
-            PerMethod[key] = n;
-            if (Need.TryGetValue(key, out int need) && n < need)
-            {
-                Log.Warning($"[ProjectZ] multi-level gravships: {key} has {n} of {need} placement sites; upper decks won't launch");
-            }
-            ProjectZ.DebugLog($"multi-level gravships: {key}: {n} placement(s) floor-aware");
-            return code;
+                string key = Key(original);
+                PerMethod[key] = n;
+                ProjectZ.DebugLog($"multi-level gravships: {key}: {n} placement(s) floor-aware");
+                // fewer: upper decks won't launch (Ok)
+                return !Need.TryGetValue(key, out int need) || n >= need ? null : $"{n} of {need} placement sites found";
+            });
         }
     }
 

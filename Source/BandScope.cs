@@ -214,18 +214,21 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(BandScope_Patch), original, instructions, code =>
             {
-                if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && ci.operand is MethodInfo mi && BandScope.Swaps.TryGetValue(mi, out MethodInfo with))
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = with;
-                    n++;
+                    if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && ci.operand is MethodInfo mi && BandScope.Swaps.TryGetValue(mi, out MethodInfo with))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = with;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            PerMethod[original.DeclaringType.Name + "." + original.Name] = n;
+                PerMethod[original.DeclaringType.Name + "." + original.Name] = n;
+                return n > 0 ? null : "no cell check found";
+            });
         }
     }
 
@@ -242,33 +245,29 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
-            FieldInfo centre = AccessTools.Field(original.DeclaringType, "center");
-            if (centre == null)
+            return FailSoft.Transpile(nameof(RadialDistinctThings_Band_Patch), original, instructions, code =>
             {
-                Log.Warning("[ProjectZ] band scope: RadialDistinctThingsAround's iterator has no centre field; left as is.");
-                foreach (CodeInstruction ci in instructions)
+                MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
+                FieldInfo centre = AccessTools.Field(original.DeclaringType, "center");
+                if (centre == null)
                 {
-                    yield return ci;
+                    return "the iterator has no centre field";
                 }
-                yield break;
-            }
-            foreach (CodeInstruction ci in instructions)
-            {
-                if (ci.Calls(inBounds))
+                int n = 0;
+                for (int i = 0; i < code.Count; i++)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg_0);
-                    yield return new CodeInstruction(OpCodes.Ldfld, centre);
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(BandScope), nameof(BandScope.InBoundsNear));
-                    Swapped++;
+                    if (code[i].Calls(inBounds))
+                    {
+                        code[i].opcode = OpCodes.Call;
+                        code[i].operand = AccessTools.Method(typeof(BandScope), nameof(BandScope.InBoundsNear));
+                        code.InsertRange(i, new[] { new CodeInstruction(OpCodes.Ldarg_0), new CodeInstruction(OpCodes.Ldfld, centre) });
+                        i += 2;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (Swapped != 1)
-            {
-                Log.Warning($"[ProjectZ] band scope: RadialDistinctThingsAround: {Swapped} InBounds calls swapped (expected 1)");
-            }
+                Swapped = n;
+                return n == 1 ? null : $"{n} InBounds calls found (expected 1)";
+            });
         }
     }
 
@@ -278,24 +277,26 @@ namespace ProjectZ
     {
         public static int Swapped;
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo dist = AccessTools.Method(typeof(IntVec3Utility), nameof(IntVec3Utility.DistanceTo), new[] { typeof(IntVec3), typeof(IntVec3) });
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(CauseHediffAoE_3D_Patch), original, instructions, code =>
             {
-                if (ci.Calls(dist))
+                MethodInfo dist = AccessTools.Method(typeof(IntVec3Utility), nameof(IntVec3Utility.DistanceTo), new[] { typeof(IntVec3), typeof(IntVec3) });
+                int n = 0;
+                for (int i = 0; i < code.Count; i++)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg_0);
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(CauseHediffAoE_3D_Patch), nameof(Distance));
-                    Swapped++;
+                    if (code[i].Calls(dist))
+                    {
+                        code[i].opcode = OpCodes.Call;
+                        code[i].operand = AccessTools.Method(typeof(CauseHediffAoE_3D_Patch), nameof(Distance));
+                        code.Insert(i, new CodeInstruction(OpCodes.Ldarg_0));
+                        i++;
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (Swapped != 1)
-            {
-                Log.Warning($"[ProjectZ] auras across floors: {Swapped} distance calls swapped in CompCauseHediff_AoE.IsPawnAffected (expected 1)");
-            }
+                Swapped = n;
+                return n == 1 ? null : $"{n} distance calls found (expected 1)";
+            });
         }
 
         public static float Distance(IntVec3 a, IntVec3 b, ThingComp comp)
@@ -411,19 +412,24 @@ namespace ProjectZ
             }
         }
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(InfestationBand_Patch), original, instructions, code =>
             {
-                if (ci.Calls(inBounds))
+                MethodInfo inBounds = AccessTools.Method(typeof(GenGrid), nameof(GenGrid.InBounds), new[] { typeof(IntVec3), typeof(Map) });
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(BandScope), nameof(BandScope.InBounds));
-                    Swapped++;
+                    if (ci.Calls(inBounds))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(BandScope), nameof(BandScope.InBounds));
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
+                Swapped += n;
+                return n > 0 ? null : "no InBounds call found";
+            });
         }
     }
 
@@ -448,19 +454,24 @@ namespace ProjectZ
             }
         }
 
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo getter = AccessTools.Method(typeof(DijkstraUtility), nameof(DijkstraUtility.AdjacentCellsNeighborsGetter));
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(ColonyDistanceBand_Patch), original, instructions, code =>
             {
-                if (ci.Calls(getter))
+                MethodInfo getter = AccessTools.Method(typeof(DijkstraUtility), nameof(DijkstraUtility.AdjacentCellsNeighborsGetter));
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(ColonyDistanceBand_Patch), nameof(Neighbours));
-                    Swapped++;
+                    if (ci.Calls(getter))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(ColonyDistanceBand_Patch), nameof(Neighbours));
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
+                Swapped += n;
+                return n > 0 ? null : "no neighbour getter found";
+            });
         }
 
         private static readonly List<IntVec3> same = new List<IntVec3>();

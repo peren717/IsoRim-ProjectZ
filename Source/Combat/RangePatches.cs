@@ -155,6 +155,7 @@ namespace ProjectZ.Combat
 
     // A turret ordered to attack a target on another floor (player turrets, mortars): the range rule, the game's messages.
     [HarmonyPatch(typeof(Building_TurretGun), nameof(Building_TurretGun.OrderAttack))]
+    [PatchGroup(FailSoft.Combat)]
     public static class TurretGun_OrderAttack_Patch
     {
         private static readonly AccessTools.FieldRef<Building_Turret, LocalTargetInfo> forced = AccessTools.FieldRefAccess<Building_Turret, LocalTargetInfo>("forcedTarget");
@@ -202,6 +203,7 @@ namespace ProjectZ.Combat
     // (InHorDistOf), which is a whole floor's rows away: the range rule's reason instead. For every shot that is in range
     // but has no line of sight (the game's own result on one floor, Los3D's between floors): "no line of sight".
     [HarmonyPatch(typeof(FloatMenuUtility), nameof(FloatMenuUtility.GetRangedAttackAction))]
+    [PatchGroup(FailSoft.Combat)]
     public static class FloatMenu_RangedReason_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -249,6 +251,7 @@ namespace ProjectZ.Combat
     // The AI's avoid grid round a turret (raiders keep out of its fire): the game marks only the turret's own floor.
     // The cells of the other floors it reaches by the range rule and sees, too.
     [HarmonyPatch(typeof(AvoidGrid), "PrintAvoidGridAroundTurret")]
+    [PatchGroup(FailSoft.Combat)]
     public static class AvoidGrid_Turret_Patch
     {
         private static readonly Action<AvoidGrid, IntVec3, int> increment =

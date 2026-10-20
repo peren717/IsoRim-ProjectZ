@@ -35,6 +35,9 @@ namespace ProjectZ.Combat
             }
         }
 
+        // A key combat patch failed (FailSoft): combat between floors off, as with Combat Extended loaded.
+        public static void Disable() => enabled = false;
+
         // Accuracy bonus for shooting down at a lower floor (decision D7, a setting).
         public static float HeightBonus => ProjectZMod.Settings == null ? 0.2f : ProjectZMod.Settings.heightAccuracy;
     }
@@ -83,6 +86,7 @@ namespace ProjectZ.Combat
     // warm-up, cast spots, the shot report). Between floors Los3D (with the game's corner walks for full-fill targets),
     // none for a shot declared lobbed (Lobbed); on one floor the game's own code. Final say between floors (FinalSay).
     [HarmonyPatch(typeof(Verb), "CanHitCellFromCellIgnoringRange")]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class Verb_CanHitCell_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -138,6 +142,7 @@ namespace ProjectZ.Combat
     // floor (the void rows past a band's edge) are dropped. Each lean cell then goes through Los3D (Verb_CanHitCell_Patch,
     // Heights.CanSeeLeaning).
     [HarmonyPatch(typeof(ShootLeanUtility), nameof(ShootLeanUtility.LeanShootingSourcesFromTo))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class ShootLean_Patch
     {
         public static bool Off;   // test only: the game's own directions, to show the gap
@@ -177,6 +182,7 @@ namespace ProjectZ.Combat
     // Range between floors: the 3D rule with the high-ground bonus (Range3D). Behind CanHitTarget/CanHitTargetFrom,
     // TryFindShootLineFromTo, abilities (Verb_CastAbility) and drafted attack orders.
     [HarmonyPatch(typeof(Verb), nameof(Verb.OutOfRange))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class Verb_OutOfRange_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -218,6 +224,7 @@ namespace ProjectZ.Combat
     // height, blind smoke on the cells the line is in. Verb_LaunchProjectile.TryCastShot uses this report, so the tooltip
     // and the real shot agree. Last of all postfixes: between floors these fields are ProjectZ's (FinalSay).
     [HarmonyPatch(typeof(ShotReport), nameof(ShotReport.HitReportFor))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class ShotReport_Patch
     {
         private static readonly AccessTools.StructFieldRef<ShotReport, float> distance = AccessTools.StructFieldRefAccess<ShotReport, float>("distance");
@@ -297,6 +304,7 @@ namespace ProjectZ.Combat
 
     // A shot that goes wild between floors scatters around the target as seen from the shooter's spot on its floor.
     [HarmonyPatch(typeof(ShootLine), nameof(ShootLine.ChangeDestToMissWild))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class ShootLine_MissWild_Patch
     {
         private static readonly AccessTools.StructFieldRef<ShootLine, IntVec3> source = AccessTools.StructFieldRefAccess<ShootLine, IntVec3>("source");
@@ -326,6 +334,7 @@ namespace ProjectZ.Combat
     // (blind smoke for turrets). A seer whose shot at the target is declared lobbed needs no line (Lobbed.Sees).
     // Final say between floors (FinalSay).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.CanSee))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class AttackTargetFinder_CanSee_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -381,6 +390,7 @@ namespace ProjectZ.Combat
     // real distance and height cover and win when they score better than the game's pick (or the game found none it
     // can shoot from here).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.BestAttackTarget))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class AttackTargetFinder_Best_Patch
     {
         private static readonly Func<Thing, IAttackTarget, TargetScanFlags, bool> ignoreNoncombatant =
@@ -605,6 +615,7 @@ namespace ProjectZ.Combat
     // own floor within the range rule (CastSpots.OwnFloor); only then the game's search, which looks round the target's
     // cell, on the target's floor.
     [HarmonyPatch(typeof(CastPositionFinder), nameof(CastPositionFinder.TryFindCastPosition))]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class CastPositionFinder_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -745,6 +756,7 @@ namespace ProjectZ.Combat
     }
 
     [HarmonyPatch]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class Projectile_Launch_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
@@ -865,6 +877,7 @@ namespace ProjectZ.Combat
     }
 
     [HarmonyPatch(typeof(Projectile), "CheckForFreeIntercept")]
+    [PatchGroup(FailSoft.Combat, key: true)]
     public static class Projectile_Intercept_Patch
     {
         private static readonly Func<Projectile, Thing, bool> canHit = AccessTools.MethodDelegate<Func<Projectile, Thing, bool>>(AccessTools.Method(typeof(Projectile), "CanHit"));

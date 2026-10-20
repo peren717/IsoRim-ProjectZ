@@ -353,6 +353,11 @@ namespace ProjectZ.Patches
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
+            return FailSoft.Transpile(nameof(GroundFinders_Patch), original, instructions, code => Edit(code, original));
+        }
+
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             MethodInfo size = AccessTools.PropertyGetter(typeof(Map), nameof(Map.Size));
             MethodInfo wholeMap = M(typeof(CellRect), nameof(CellRect.WholeMap));
             MethodInfo clip = M(typeof(CellRect), nameof(CellRect.ClipInsideMap));
@@ -361,8 +366,9 @@ namespace ProjectZ.Patches
             MethodInfo opposite = M(typeof(MultipleCaravansCellFinder), "OppositeSpot");
             bool byCentre = original.Name == nameof(RCellFinder.TryFindRandomCellNearWith);
             int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            for (int i = 0; i < code.Count; i++)
             {
+                CodeInstruction ci = code[i];
                 string with = null;
                 if (ci.Calls(size))
                 {
@@ -376,7 +382,8 @@ namespace ProjectZ.Patches
                 {
                     if (byCentre && !GroundFinders.Off)
                     {
-                        yield return new CodeInstruction(OpCodes.Ldarg_0); // near
+                        code.Insert(i, new CodeInstruction(OpCodes.Ldarg_0)); // near
+                        i++;
                     }
                     with = byCentre ? nameof(GroundFinders.ClipInsideBand) : nameof(GroundFinders.ClipInsideGround);
                 }
@@ -398,13 +405,9 @@ namespace ProjectZ.Patches
                     ci.operand = M(typeof(GroundFinders), with);
                     n++;
                 }
-                yield return ci;
             }
             PerMethod[original.DeclaringType.Name + "." + original.Name] = n;
-            if (n == 0)
-            {
-                Log.Warning("[ProjectZ] ground finders: nothing swapped in " + original.DeclaringType.Name + "." + original.Name + " (left as vanilla)");
-            }
+            return n > 0 || GroundFinders.Off ? null : "no map size, rect or finder call found";
         }
     }
 

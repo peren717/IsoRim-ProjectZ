@@ -249,7 +249,11 @@ namespace ProjectZ.Combat
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
+            return FailSoft.Transpile(nameof(ExplosionDistance_Patch), original, instructions, code => Edit(code, original));
+        }
+
+        private static string Edit(List<CodeInstruction> code, MethodBase original)
+        {
             int arg = targets.TryGetValue(original, out int a) ? a : original.DeclaringType == typeof(Explosion) ? 0 : 1;
             int n = 0;
             for (int i = 0; i < code.Count; i++)
@@ -293,7 +297,7 @@ namespace ProjectZ.Combat
             Replaced += n;
             PerMethod[original.DeclaringType?.Name + "." + original.Name] = n;
             ProjectZ.DebugLog($"explosions across floors: {original.DeclaringType?.Name}.{original.Name}: {n} distance calls in 3D");
-            return code;
+            return n > 0 ? null : "no distance call found";
         }
 
         private static CodeInstruction LoadArg(int i)
@@ -316,24 +320,23 @@ namespace ProjectZ.Combat
     [HarmonyPatch(typeof(Projectile_DoomsdayRocket), "Impact")]
     public static class DoomsdayRocket_Impact_Patch
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            MethodInfo clip = AccessTools.Method(typeof(CellRect), nameof(CellRect.ClipInsideMap), new[] { typeof(Map) });
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
+            return FailSoft.Transpile(nameof(DoomsdayRocket_Impact_Patch), original, instructions, code =>
             {
-                if (ci.Calls(clip))
+                MethodInfo clip = AccessTools.Method(typeof(CellRect), nameof(CellRect.ClipInsideMap), new[] { typeof(Map) });
+                int n = 0;
+                foreach (CodeInstruction ci in code)
                 {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = AccessTools.Method(typeof(DoomsdayRocket_Impact_Patch), nameof(ClipInsideBand));
-                    n++;
+                    if (ci.Calls(clip))
+                    {
+                        ci.opcode = OpCodes.Call;
+                        ci.operand = AccessTools.Method(typeof(DoomsdayRocket_Impact_Patch), nameof(ClipInsideBand));
+                        n++;
+                    }
                 }
-                yield return ci;
-            }
-            if (n != 1)
-            {
-                Log.Warning($"[ProjectZ] doomsday rocket: {n} map clips found (expected 1)");
-            }
+                return n == 1 ? null : $"{n} map clips found (expected 1)";
+            });
         }
 
         public static CellRect ClipInsideBand(ref CellRect r, Map map)

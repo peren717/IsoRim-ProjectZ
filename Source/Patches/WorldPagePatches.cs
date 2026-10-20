@@ -46,9 +46,14 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(Page_CreateWorldParams), nameof(Page_CreateWorldParams.DoWindowContents))]
     public static class Page_CreateWorldParams_DoWindowContents_Patch
     {
-        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            List<CodeInstruction> code = new List<CodeInstruction>(instructions);
+            return FailSoft.Transpile(nameof(Page_CreateWorldParams_DoWindowContents_Patch), original, instructions, Edit);
+        }
+
+        // (no row: new worlds use the mod setting)
+        private static string Edit(List<CodeInstruction> code)
+        {
             MethodInfo endGroup = AccessTools.Method(typeof(Widgets), nameof(Widgets.EndGroup));
             // vanilla's row y: the local of the first "y += 40f"
             CodeInstruction loadY = null;
@@ -63,8 +68,7 @@ namespace ProjectZ.Patches
             int at = code.FindIndex(ci => ci.Calls(endGroup));
             if (loadY == null || at < 0)
             {
-                Log.Warning("[ProjectZ] Create World page: layout not recognised, no Floors row (new worlds use the mod setting).");
-                return code;
+                return "layout not recognised";
             }
             CodeInstruction first = new CodeInstruction(OpCodes.Ldarg_0);
             code[at].MoveLabelsTo(first); // the tutorial-mode branch jumps to EndGroup: the row is drawn there too
@@ -76,7 +80,7 @@ namespace ProjectZ.Patches
                 new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(WorldPage), nameof(WorldPage.DrawRow))),
             });
             WorldPage.RowInserted = true;
-            return code;
+            return null;
         }
     }
 
