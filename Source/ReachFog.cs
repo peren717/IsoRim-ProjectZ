@@ -7,42 +7,45 @@ using ProjectZ.Patches;
 
 namespace ProjectZ
 {
-    // THE fog rule on maps with floors (user 2026-10-19, final): every place the player's pawns can reach is revealed.
+    // THE fog rule on maps with floors (user 2026-10-19, final): every place the player's pawns can reach is revealed,
+    // and every edge a pawn can stand at lets it see below, all the way down.
     // Reach is walking and stairs, both ways, as in vanilla: vanilla's regions and their links plus ProjectZ's stairs
-    // links (StairRegions.LinkRegions, the pathing graph's own test). Voluntary jumps are not reach (switch Jumps, off).
-    // One more connection, for the reveal only (never for pathing): an open hole joins the spaces it opens into, like
-    // vanilla mining into a cave (d929578's hole rule, folded in): the space round the hole's top U leads down to where a
-    // fall through it lands (Column.Landing); and back up only when U is covered (a shaft inside the mountain: the cave a
-    // hole was mined up into); a hole to the sky shows only U and the rock round it, never the plateau round it.
+    // links (StairRegions.LinkRegions, the pathing graph's own test). Jumps are not reach.
+    // Seen space (reveal only, never for pathing) is the closure over edges: from every reached or seen region, each
+    // open-air cell beside one of its cells (a cliff or slab edge, a tunnel opening onto the open air, a hole: one rule,
+    // no case of its own) shows its fall column down to where a fall would land (Column.Landing; a roof on the way ends
+    // the view there), and the space at the landing is seen: its region and every region joined to it (vanilla's region
+    // links; a closed door stops it, rock and walls too), whose own edges show what lies below them, and so on. The one
+    // look up: an open-air cell with a cover over it on the ceiling column of a reached or seen cell (a shaft mined up into
+    // a cave) shows the space round it; a hole to the sky shows nothing round it.
     // The walk starts from the regions of the player's pawns (vanilla's own set: Pawn.SpawnSetup's unfog, the player's
     // faction or player controlled) and has two rules of its own:
     //   - fog is no obstacle (pathing keeps the player's pawns out of fog over floor links, StairRegions.FogBlocks; a
     //     reveal that minded it could never reveal anything);
     //   - a closed door stops it (vanilla: the room behind a door opens when a pawn opens the door).
     // Terrain only: no allowed areas, danger or forbidden doors.
-    // The reached space is revealed like vanilla reveals a cave mined into (FogGrid.FloodUnfogAdjacent per reached cell:
-    // the open fog floods, the rock faces 8-adjacent show), and the ceiling of every reached cell shows: the cell right
-    // above it, and up through open air (a hole's fall column) to the first cell that is not open air, each open-air cell
-    // with the rock round it (one cell per level, never a flood). Nothing that is not reached opens: a plateau or terrace
-    // only a jump or a climb gets to, a cave sealed by rock, a room behind a closed door.
+    // What is revealed is what can be seen, the surfaces: each reached or seen cell as vanilla reveals a cave mined into
+    // (FogGrid.FloodUnfogAdjacent: the open fog floods, the rock faces 8-adjacent show), the ceiling of each (the cell
+    // right above it, up through open air to the first cell that is not open air, each open-air cell with the rock faces
+    // round it), the open-air cells of each fall column with the rock faces round them, and the rock a fall lands on.
+    // Inner rock and ore, and everything neither reached nor under a seen edge, stay fogged.
     // Runs batched (at most once a frame, only when asked) after: regions rebuilt (rock mined, holes, floors, walls,
-    // doors built), floor links changed (stairs built or gone, a column's roofs: JumpGrid.Dirty), a player pawn opening
-    // a door into fog, a player pawn spawned or teleported, and once after load or generation (existing holes too).
-    // Regions found clear (no fog in them, round them or above them) are remembered by id (fog only goes, except a
-    // refog, which forgets them all), so a run after the first only walks the region graph.
+    // doors built), floor links changed (stairs built or gone: JumpGrid.Dirty), a column changed (a floor or a roof built
+    // or gone: ReachFogMap.ColumnChanged), a player pawn opening a door into fog, a player pawn spawned or teleported,
+    // and once after load or generation.
+    // Remembered per region id: known clear (no fog in it, round it or above it: never scanned again), and its edges
+    // (where they land: worked out once, again when its region or a landing region is rebuilt or a column next to it
+    // changes). So a run after the first only walks the region graph and the remembered landings.
     public static class ReachFog
     {
         // counters (tests)
-        public static int Runs, LastRegions, LastScanned, LastRevealed, LastSeeds;
-        public static double LastMs, MaxMs, LastWalkMs;
+        public static int Runs, LastRegions, LastSeen, LastScanned, LastRevealed, LastSeeds, LastEdgeRegions, EdgeComputes;
+        public static double LastMs, MaxMs, LastWalkMs, LastSeenMs;
         // cells unfogged on maps with floors (any cause; ReachFogMap counts them)
         public static int Unfogged;
 
         // test only (-projectznoreachfog): the rule never runs, to show the old fog
         public static bool Off;
-
-        // Voluntary jumps down count as reach (JumpGrid links). Off: the user removed them from reach (2026-10-19).
-        public static bool Jumps;
 
         public static bool PlayerPawn(Pawn p) => p != null && (p.Faction == Faction.OfPlayer || p.IsPlayerControlled);
 
@@ -51,6 +54,8 @@ namespace ProjectZ
             Building e = c.GetEdifice(map);
             return e != null && e.def.MakeFog;
         }
+
+        private static bool OpenAir(IntVec3 c, Map map) => c.GetTerrain(map) == PZDefOf.PZ_OpenAir && c.GetEdifice(map) == null;
 
         // Ask for a run on this map (batched: ReachFogMap.MapComponentUpdate).
         public static void Request(Map map)
@@ -62,6 +67,7 @@ namespace ProjectZ
         }
 
         private static readonly HashSet<Region> reached = new HashSet<Region>();
+        private static readonly HashSet<Region> all = new HashSet<Region>();
         private static readonly Queue<Region> open = new Queue<Region>();
         private static readonly Dictionary<Region, List<Region>> links = new Dictionary<Region, List<Region>>();
         private static readonly List<Region> scan = new List<Region>();
@@ -86,67 +92,27 @@ namespace ProjectZ
             l.Add(to);
         }
 
-        private static readonly List<Region> holeTop = new List<Region>();
-
-        // The open holes (ShaftMarks: bottoms C whose ceiling is open, Shaft.Is): the regions round the top U (its walkable
-        // 4-neighbours on U's level) lead to the region where a fall through U lands; that region leads back to them only
-        // when U is covered (roofed: inside the mountain).
-        private static void HoleLinks(Map map, RegionGrid rg)
-        {
-            ShaftMarks marks = ShaftMarks.For(map);
-            if (marks == null || marks.cells.Count == 0)
-            {
-                return;
-            }
-            foreach (IntVec3 c in marks.cells)
-            {
-                if (!Shaft.Is(c, map))
-                {
-                    continue;
-                }
-                IntVec3 u = FloorRoof.Above(c, map);
-                if (!u.IsValid || !u.InBounds(map))
-                {
-                    continue;
-                }
-                IntVec3 land = Column.Landing(u, map, false, true, out _, out _);
-                Region down = land.IsValid && land.InBounds(map) && land != u ? rg.GetValidRegionAt_NoRebuild(land) : null;
-                if (down == null)
-                {
-                    continue;
-                }
-                bool covered = map.roofGrid.Roofed(u);
-                holeTop.Clear();
-                for (int d = 0; d < 4; d++)
-                {
-                    IntVec3 n = u + GenAdj.CardinalDirections[d];
-                    if (n.InBounds(map) && ProjectZ.SameBand(n, u, map) && n.Walkable(map))
-                    {
-                        Region r = rg.GetValidRegionAt_NoRebuild(n);
-                        if (r != null && !holeTop.Contains(r))
-                        {
-                            holeTop.Add(r);
-                        }
-                    }
-                }
-                for (int i = 0; i < holeTop.Count; i++)
-                {
-                    Link(holeTop[i], down);
-                    if (covered)
-                    {
-                        Link(down, holeTop[i]);
-                    }
-                }
-            }
-            holeTop.Clear();
-        }
-
         private static void Visit(Region r)
         {
             if (Enters(r) && reached.Add(r))
             {
                 open.Enqueue(r);
             }
+        }
+
+        private static void See(Region r)
+        {
+            if (Enters(r) && all.Add(r))
+            {
+                open.Enqueue(r);
+            }
+        }
+
+        // The region id a listed cell stands for now (-1: no passable region there, rock).
+        internal static int TargetId(IntVec3 c, RegionGrid rg)
+        {
+            Region t = rg.GetValidRegionAt_NoRebuild(c);
+            return t != null && t.type.Passable() ? t.id : -1;
         }
 
         // THE walk and reveal (run now).
@@ -165,11 +131,12 @@ namespace ProjectZ
             }
             busy = true;
             System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-            int seeds = 0, scanned = 0, revealed = 0, unfog0 = Unfogged;
+            int seeds = 0, scanned = 0, revealed = 0, unfog0 = Unfogged, edgeRegions = 0;
             try
             {
                 RegionGrid rg = map.regionGrid;
                 reached.Clear();
+                all.Clear();
                 open.Clear();
                 links.Clear();
                 // the stairs links of the map, both ways (StairRegions.LinkRegions: the pathing graph's own test)
@@ -185,8 +152,6 @@ namespace ProjectZ
                         }
                     }
                 }
-                HoleLinks(map, rg);
-                JumpGrid jg = Jumps ? JumpGrid.For(map) : null;
                 IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
                 for (int i = 0; i < pawns.Count; i++)
                 {
@@ -201,6 +166,7 @@ namespace ProjectZ
                         }
                     }
                 }
+                // 1. reach: walking and stairs
                 while (open.Count > 0)
                 {
                     Region r = open.Dequeue();
@@ -215,20 +181,43 @@ namespace ProjectZ
                             Visit(up[i]);
                         }
                     }
-                    if (jg != null)
-                    {
-                        List<Jump> jumps = jg.Down(r);
-                        for (int i = 0; i < jumps.Count; i++)
-                        {
-                            Visit(jumps[i].to);
-                        }
-                    }
                 }
                 LastWalkMs = sw.Elapsed.TotalMilliseconds;
                 LastRegions = reached.Count;
-                // reveal what was reached and is not known clear
-                scan.Clear();
+                // 2. seen: the closure over edges (reveal only), from every reached region
                 foreach (Region r in reached)
+                {
+                    all.Add(r);
+                    open.Enqueue(r);
+                }
+                while (open.Count > 0)
+                {
+                    Region r = open.Dequeue();
+                    if (!reached.Contains(r))
+                    {
+                        for (int i = 0; i < r.links.Count; i++)
+                        {
+                            See(r.links[i].GetOtherRegion(r));
+                        }
+                    }
+                    ReachFogMap.Edges e = comp.EdgesOf(r, rg);
+                    if (e.cells.Length > 0)
+                    {
+                        edgeRegions++;
+                    }
+                    for (int i = 0; i < e.cells.Length; i++)
+                    {
+                        if (e.ids[i] >= 0)
+                        {
+                            See(rg.GetValidRegionAt_NoRebuild(e.cells[i]));
+                        }
+                    }
+                }
+                LastSeenMs = sw.Elapsed.TotalMilliseconds - LastWalkMs;
+                LastSeen = all.Count - reached.Count;
+                // 3. reveal what was reached or seen and is not known clear
+                scan.Clear();
+                foreach (Region r in all)
                 {
                     if (!comp.IsClear(r))
                     {
@@ -248,10 +237,13 @@ namespace ProjectZ
                     {
                         RevealCell(c, map, fog);
                     }
-                    int L = Levels.LevelOf(r.AnyCell, map);
-                    if (L != Levels.None && L >= 1)
+                    if (reached.Contains(r))
                     {
-                        a.MarkReached(L);
+                        int L = Levels.LevelOf(r.AnyCell, map);
+                        if (L != Levels.None && L >= 1)
+                        {
+                            a.MarkReached(L);
+                        }
                     }
                     comp.SetClear(r);
                 }
@@ -260,12 +252,14 @@ namespace ProjectZ
             {
                 busy = false;
                 reached.Clear();
+                all.Clear();
                 open.Clear();
                 links.Clear();
                 scan.Clear();
                 Runs++;
                 LastSeeds = seeds;
                 LastScanned = scanned;
+                LastEdgeRegions = edgeRegions;
                 LastRevealed = revealed = Unfogged - unfog0;
                 LastMs = sw.Elapsed.TotalMilliseconds;
                 MaxMs = System.Math.Max(MaxMs, LastMs);
@@ -273,14 +267,117 @@ namespace ProjectZ
 
             if (revealed > 0)
             {
-                ProjectZ.DebugLog($"reach fog: {seeds} seed region(s), {scanned} region(s) scanned, {revealed} cell(s) revealed, {LastMs:0.00} ms (walk {LastWalkMs:0.00} ms)");
+                ProjectZ.DebugLog($"reach fog: {seeds} seed region(s), {LastRegions} reached, {LastSeen} seen, {scanned} scanned, {revealed} cell(s) revealed, {LastMs:0.00} ms (walk {LastWalkMs:0.00} ms, seen {LastSeenMs:0.00} ms)");
             }
         }
 
-        // One reached cell: vanilla's reveal of a cell mined into (FogGrid.FloodUnfogAdjacent: its open fog floods, the
-        // rock faces round it show) when it or a neighbour is fogged; then its ceiling: up through open air (a shaft, the
-        // sky) to the first cell that is not open air, each open-air cell with the rock faces round it (vanilla's faces of
-        // an unfogged open cell; the open cells beside it stay as they are: only reach opens them).
+        private static readonly List<IntVec3> tCells = new List<IntVec3>();
+        private static readonly List<int> tIds = new List<int>();
+        private static readonly List<IntVec3> broken = new List<IntVec3>();
+
+        private static void Target(IntVec3 c, int id)
+        {
+            if (id >= 0 && tIds.Contains(id))
+            {
+                return;
+            }
+            tCells.Add(c);
+            tIds.Add(id);
+        }
+
+        // The edges of region r, worked out now: for each open-air cell beside one of its cells (4-way, on its band), the
+        // fall column down to the landing (Column.Landing) is revealed (its open-air cells with the rock faces round them;
+        // the rock it lands on), and the landing is listed (its region, or -1 for rock); a roof on the way ends the view
+        // there. Then the look up: an open-air cell with a cover over it on the ceiling column of r's cells lists the
+        // regions round it. The list keeps one cell per region (and every rock landing: mined later, it opens).
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        internal static ReachFogMap.Edges ComputeEdges(Region r, Map map, RegionGrid rg)
+        {
+            EdgeComputes++;
+            tCells.Clear();
+            tIds.Clear();
+            FogGrid fog = map.fogGrid;
+            foreach (IntVec3 c in r.Cells)
+            {
+                for (int d = 0; d < 4; d++)
+                {
+                    IntVec3 n = c + GenAdj.CardinalDirections[d];
+                    if (!n.InBounds(map) || !OpenAir(n, map) || !ProjectZ.SameBand(n, c, map))
+                    {
+                        continue;
+                    }
+                    IntVec3 land = Column.Landing(n, map, false, true, out _, out _, broken);
+                    if (!land.IsValid || land == n)
+                    {
+                        continue;
+                    }
+                    IntVec3 g = Levels.Ground(n, map);
+                    int top = Levels.LevelOf(n, map);
+                    int stop = broken.Count > 0 ? Levels.LevelOf(broken[0], map) : Levels.LevelOf(land, map);
+                    for (int L = top; L > stop; L--)
+                    {
+                        IntVec3 x = Levels.Cell(g, L, map);
+                        if (x.IsValid)
+                        {
+                            RevealOpen(x, map, fog);
+                        }
+                    }
+                    if (broken.Count > 0)
+                    {
+                        continue;   // (seen from above: the roof, not the room under it)
+                    }
+                    int id = TargetId(land, rg);
+                    if (id < 0 && fog.IsFogged(land))
+                    {
+                        fog.Unfog(land);   // the rock face the fall lands on
+                    }
+                    Target(land, id);
+                }
+                for (IntVec3 up = FloorRoof.Above(c, map); up.IsValid && up.InBounds(map) && OpenAir(up, map); up = FloorRoof.Above(up, map))
+                {
+                    if (!map.roofGrid.Roofed(up))
+                    {
+                        continue;
+                    }
+                    for (int d = 0; d < 4; d++)
+                    {
+                        IntVec3 w = up + GenAdj.CardinalDirections[d];
+                        if (w.InBounds(map) && ProjectZ.SameBand(w, up, map) && w.Walkable(map))
+                        {
+                            int id = TargetId(w, rg);
+                            if (id >= 0)
+                            {
+                                Target(w, id);
+                            }
+                        }
+                    }
+                }
+            }
+            broken.Clear();
+            return new ReachFogMap.Edges { cells = tCells.ToArray(), ids = tIds.ToArray() };
+        }
+
+        // An open cell seen without being entered (a fall column): it, and the rock faces round it on its band.
+        private static void RevealOpen(IntVec3 x, Map map, FogGrid fog)
+        {
+            if (fog.IsFogged(x))
+            {
+                fog.Unfog(x);
+            }
+            for (int i = 0; i < 8; i++)
+            {
+                IntVec3 f = x + GenAdj.AdjacentCells[i];
+                if (f.InBounds(map) && fog.IsFogged(f) && Blocker(f, map) && ProjectZ.SameBand(f, x, map))
+                {
+                    fog.Unfog(f);
+                }
+            }
+        }
+
+        // One reached or seen cell: vanilla's reveal of a cell mined into (FogGrid.FloodUnfogAdjacent: its open fog
+        // floods, the rock faces round it show) when it or a neighbour is fogged; then its ceiling: up through open air (a
+        // shaft, the sky) to the first cell that is not open air, each open-air cell with the rock faces round it
+        // (vanilla's faces of an unfogged open cell; the open cells beside it stay as they are).
         private static void RevealCell(IntVec3 c, Map map, FogGrid fog)
         {
             bool any = fog.IsFogged(c);
@@ -315,11 +412,18 @@ namespace ProjectZ
         }
     }
 
-    // Per map: the run request and the regions known clear.
+    // Per map: the run request, the regions known clear and the edges of regions (by region id).
     public class ReachFogMap : MapComponent
     {
+        public class Edges
+        {
+            public IntVec3[] cells;
+            public int[] ids;
+        }
+
         private bool asked;
         private readonly HashSet<int> clear = new HashSet<int>();
+        private readonly Dictionary<int, Edges> edges = new Dictionary<int, Edges>();
         private bool listening;
 
         public ReachFogMap(Map map) : base(map)
@@ -351,6 +455,73 @@ namespace ProjectZ
 
         public void SetClear(Region r) => clear.Add(r.id);
 
+        public int EdgesKnown => edges.Count;
+
+        // The edges of r: remembered, worked out again when a listed landing's region is not the one it was (rebuilt,
+        // rock mined away, a wall put there).
+        public Edges EdgesOf(Region r, RegionGrid rg)
+        {
+            if (edges.TryGetValue(r.id, out Edges e))
+            {
+                bool stale = false;
+                for (int i = 0; i < e.cells.Length && !stale; i++)
+                {
+                    stale = ReachFog.TargetId(e.cells[i], rg) != e.ids[i];
+                }
+                if (!stale)
+                {
+                    return e;
+                }
+            }
+            e = ReachFog.ComputeEdges(r, map, rg);
+            edges[r.id] = e;
+            return e;
+        }
+
+        // A column changed (a floor or a roof built or gone): the edges of the regions round its cells on every level,
+        // and the ceilings, are worked out again.
+        public static void ColumnChanged(IntVec3 c, Map map)
+        {
+            if (Current.ProgramState != ProgramState.Playing || ReachFog.Off)
+            {
+                return;
+            }
+            ReachFogMap comp = For(map);
+            if (comp == null || comp.edges.Count == 0)
+            {
+                comp?.Ask();
+                return;
+            }
+            IntVec3 g = Levels.Ground(c, map);
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (!g.IsValid || a == null)
+            {
+                return;
+            }
+            RegionGrid rg = map.regionGrid;
+            for (int L = a.MinLevel; L <= a.MaxLevel; L++)
+            {
+                IntVec3 x = Levels.Cell(g, L, map);
+                if (!x.IsValid || !x.InBounds(map))
+                {
+                    continue;
+                }
+                for (int i = -1; i < 8; i++)
+                {
+                    IntVec3 y = i < 0 ? x : x + GenAdj.AdjacentCells[i];
+                    if (y.InBounds(map))
+                    {
+                        Region r = rg.GetValidRegionAt_NoRebuild(y);
+                        if (r != null)
+                        {
+                            comp.edges.Remove(r.id);
+                        }
+                    }
+                }
+            }
+            comp.Ask();
+        }
+
         private void Listen()
         {
             if (!listening && map.events != null)
@@ -369,15 +540,13 @@ namespace ProjectZ
                 ReachFog.Unfogged++;
                 return;
             }
-            if (fogged)
-            {
-                Forget();
-            }
+            Forget();
         }
 
         public void Forget()
         {
             clear.Clear();
+            edges.Clear();
             asked = true;
         }
 
@@ -388,6 +557,7 @@ namespace ProjectZ
             last = this;
             Listen();
             clear.Clear();
+            edges.Clear();
             asked = true;   // once after load or generation
         }
 
@@ -401,6 +571,10 @@ namespace ProjectZ
             if (clear.Count > 200000)
             {
                 clear.Clear();   // (ids of regions long gone)
+            }
+            if (edges.Count > 100000)
+            {
+                edges.Clear();
             }
             ReachFog.Run(map);
         }

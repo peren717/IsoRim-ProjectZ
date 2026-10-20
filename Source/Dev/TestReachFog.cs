@@ -8,21 +8,31 @@ using Verse.AI;
 
 namespace ProjectZ.Dev
 {
-    // Mode reachfog: THE fog rule (ReachFog: every place the player's pawns can reach is revealed). A fixed-seed
-    // tall-mountain map (the arguments of rocktop: -projectztallmountains -projectzfloors=4 -projectzmapsize=250) saved
-    // once as pz_reachfog; every check reloads it, builds its own fixture and runs real flows with ticks:
-    //   R1 a colonist arrives on a level-2 ledge (teleport): the terrace one level below (only a jump gets there) stays
-    //      fogged; the colonist digs a hole (Mine below) from the ledge beside the terrace: it opens through the hole
-    //   R2 a colonist arrives on a level-3 top: the area two or more floors below (only a jump gets there) stays fogged
+    // Mode reachfog: THE fog rule (ReachFog: every place the player's pawns can reach is revealed, and every edge they can
+    // stand at shows what lies below it, all the way down). A fixed-seed tall-mountain map (the arguments of rocktop:
+    // -projectztallmountains -projectzfloors=4 -projectzmapsize=250) saved once as pz_reachfog; every check reloads it,
+    // builds its own fixture and runs real flows with ticks:
+    //   R1 a colonist arrives on a level-2 ledge (teleport): the terrace one level below is revealed; it stays out of
+    //      reach for pathing (a drafted order there goes nowhere)
+    //   R2 a colonist arrives on a level-3 top: the area two or more floors below it is revealed
+    //   E2 a colonist arrives on a top over terraces stepping down: every terrace below is revealed, also those only seen
+    //      from a terrace seen before (the cascade)
+    //   E3 a colonist in a chamber inside a mountain mines sideways through the face: the area below the opening is
+    //      revealed when the rock goes, not before
+    //   E4 a colonist arrives on a slab over a wall: the walled pen under its edge is revealed; the pen beside it behind a
+    //      closed door, under no edge, stays fogged (and both stay fogged before anyone is on the slab)
     //   R3 colonists build stairs from the ground onto a fogged plateau's rim: it opens on completion
-    //   R4 a plateau nobody can reach (no stairs, nothing higher next to it) stays fogged after runs
+    //   R4 a plateau nobody can reach or see stays fogged after runs
     //   R5 a cave sealed by rock stays fogged while colonists mine towards it; it opens when they break through
     //   R6 a room behind a closed door stays fogged; a drafted colonist ordered into the doorway opens it and the room
-    //   R7 cost: the full run (every region scanned, as after a load), the walk-only run, the run after a wall is built
-    // Every check also verifies that every walkable cell it revealed is reachable (RfAllReached: an independent
-    // reachability query that ignores fog), and the checks that must not open anything compare the whole fog grid.
+    //   R7 cost: the full run (every region scanned and every edge worked out, as after a load), the walk-only run, the
+    //      run after a wall is built, the run after a roof (a column) changed
+    // Every check also verifies that every walkable cell it revealed is reached or seen (RfAllReached: an independent
+    // reachability query that ignores fog plus a cell flood over edges and their landings), and that no inner rock
+    // opened (RfInner: rock with no revealed open cell next to it, above or below stays fogged; ore counted). The checks
+    // that must not open anything compare the whole fog grid.
     // With -projectzsave=<copy of a player's save>: the load-time pass (loaded once with the rule off, once on): how many
-    // cells it reveals, all reachable, its cost, shots per level with the fog lid on.
+    // cells it reveals, all reached or seen, its cost, shots per level with the fog lid on.
     public static partial class TestRunner
     {
         private const string RfSave = "pz_reachfog";
@@ -33,10 +43,16 @@ namespace ProjectZ.Dev
         private static IntVec3 rfLone = IntVec3.Invalid;
         private static IntVec3 rfCaveE = IntVec3.Invalid, rfCaveD = IntVec3.Invalid;
         private static IntVec3 rfRoomE = IntVec3.Invalid, rfRoomD = IntVec3.Invalid;
+        private static IntVec3 rfCasTop = IntVec3.Invalid;
+        private static readonly List<List<IntVec3>> rfCasAreas = new List<List<IntVec3>>();
+        private static readonly List<int> rfCasDepth = new List<int>();
+        private static IntVec3 rfTunF = IntVec3.Invalid, rfTunD = IntVec3.Invalid, rfTunLand = IntVec3.Invalid;
+        private static IntVec3 rfPen = IntVec3.Invalid;
         private static readonly List<IntVec3> rfArea = new List<IntVec3>();
+        private static readonly List<IntVec3> rfArea2 = new List<IntVec3>();
         private static bool[] rfBefore = new bool[0];
         private static Pawn rfPawn;
-        private static int rfShot, rfFog0;
+        private static int rfShot, rfFog0, rfFog1;
         private static string rfUserSave;
 
         private static bool[] RfSnap(Map map)
@@ -77,45 +93,104 @@ namespace ProjectZ.Dev
 
         private static List<Pawn> RfPlayers(Map map) => map.mapPawns.AllPawnsSpawned.Where(ReachFog.PlayerPawn).ToList();
 
-        // The start cells of the oracle: the player's pawns, then the far end of every open hole whose near end they
-        // reach (round the top -> the landing; back up only through a covered top), read from the map (Shaft, Column),
-        // twice for holes over holes.
-        private static List<IntVec3> RfStarts(Map map)
+        private static bool RfOpenAir(IntVec3 c, Map map) => c.InBounds(map) && c.GetTerrain(map) == PZDefOf.PZ_OpenAir && c.GetEdifice(map) == null;
+
+        // The oracle's seen cells (written apart from ReachFog: cells, not regions): from every reached walkable cell (and
+        // every seen one, again) each open-air 4-neighbour on its band falls to Column.Landing (no roof on the way); a
+        // walkable landing floods its walkable 4-connected cells on its band (a closed door is taken, not passed); an
+        // open-air cell with a roof over it on a cell's ceiling column floods from its walkable 4-neighbours.
+        private static HashSet<IntVec3> RfSeenCells(Map map, Func<IntVec3, bool> reached)
         {
-            List<IntVec3> s = RfPlayers(map).Select(p => p.Position).ToList();
-            List<IntVec3> marks = ShaftMarks.For(map)?.cells.Where(c => Shaft.Is(c, map)).ToList() ?? new List<IntVec3>();
-            for (int pass = 0; pass < 2; pass++)
+            HashSet<IntVec3> seen = new HashSet<IntVec3>();
+            List<IntVec3> src = new List<IntVec3>();
+            List<IntVec3> broken = new List<IntVec3>();
+            void Flood(IntVec3 s)
             {
-                foreach (IntVec3 c in marks)
+                if (!s.InBounds(map) || !s.Walkable(map) || seen.Contains(s) || reached(s))
                 {
-                    IntVec3 u = FloorRoof.Above(c, map);
-                    IntVec3 land = u.IsValid ? Column.Landing(u, map, false, true, out _, out _) : IntVec3.Invalid;
-                    if (!land.IsValid || !land.Walkable(map))
+                    return;
+                }
+                Queue<IntVec3> q = new Queue<IntVec3>();
+                seen.Add(s);
+                q.Enqueue(s);
+                while (q.Count > 0)
+                {
+                    IntVec3 x = q.Dequeue();
+                    src.Add(x);
+                    if (x.GetEdifice(map) is Building_Door dd && !dd.Open)
                     {
                         continue;
                     }
-                    List<IntVec3> top = GenAdj.CardinalDirections.Select(d => u + d).Where(n => n.InBounds(map) && ProjectZ.SameBand(n, u, map) && n.Walkable(map)).ToList();
-                    if (!s.Contains(land) && top.Any(n => RfReach(map, n, s)))
+                    for (int d = 0; d < 4; d++)
                     {
-                        s.Add(land);
-                    }
-                    if (map.roofGrid.Roofed(u) && RfReach(map, land, s))
-                    {
-                        s.AddRange(top.Where(n => !s.Contains(n)));
+                        IntVec3 n = x + GenAdj.CardinalDirections[d];
+                        if (n.InBounds(map) && ProjectZ.SameBand(n, x, map) && n.Walkable(map) && !reached(n) && seen.Add(n))
+                        {
+                            q.Enqueue(n);
+                        }
                     }
                 }
             }
-            return s;
+            void Source(IntVec3 c)
+            {
+                for (int d = 0; d < 4; d++)
+                {
+                    IntVec3 n = c + GenAdj.CardinalDirections[d];
+                    if (!RfOpenAir(n, map) || !ProjectZ.SameBand(n, c, map))
+                    {
+                        continue;
+                    }
+                    IntVec3 land = Column.Landing(n, map, false, true, out _, out _, broken);
+                    if (land.IsValid && land != n && broken.Count == 0)
+                    {
+                        Flood(land);
+                    }
+                }
+                for (IntVec3 up = FloorRoof.Above(c, map); up.IsValid && RfOpenAir(up, map); up = FloorRoof.Above(up, map))
+                {
+                    if (map.roofGrid.Roofed(up))
+                    {
+                        for (int d = 0; d < 4; d++)
+                        {
+                            IntVec3 w = up + GenAdj.CardinalDirections[d];
+                            if (w.InBounds(map) && ProjectZ.SameBand(w, up, map))
+                            {
+                                Flood(w);
+                            }
+                        }
+                    }
+                }
+            }
+            for (int i = 0; i < map.cellIndices.NumGridCells; i++)
+            {
+                IntVec3 c = map.cellIndices.IndexToCell(i);
+                if (c.z < ProjectZ.GroundZ(map) && !RfOpenAir(FloorRoof.Above(c, map), map))
+                {
+                    continue;   // (ground cells: no open air beside them; only a ceiling of open air matters)
+                }
+                bool edge = RfOpenAir(FloorRoof.Above(c, map), map);
+                for (int d = 0; d < 4 && !edge; d++)
+                {
+                    edge = RfOpenAir(c + GenAdj.CardinalDirections[d], map);
+                }
+                if (edge && c.Walkable(map) && reached(c))
+                {
+                    Source(c);
+                }
+            }
+            for (int k = 0; k < src.Count; k++)
+            {
+                Source(src[k]);
+            }
+            return seen;
         }
 
-        // Everything unfogged since 'before': every walkable cell reachable by a player pawn; the rest (faces, ceilings,
-        // the open fog vanilla's flood takes along) counted.
+        // Everything unfogged since 'before': every walkable cell reached by a player pawn or seen from an edge; the rest
+        // (faces, ceilings, fall columns, the open fog vanilla's flood takes along) counted.
         private static bool RfAllReached(Map map, bool[] before, out string why)
         {
-            List<IntVec3> from = RfStarts(map);
+            List<IntVec3> from = RfPlayers(map).Select(p => p.Position).ToList();
             Dictionary<Region, bool> byRegion = new Dictionary<Region, bool>();
-            int newly = 0, walk = 0, bad = 0, faces = 0, ceil = 0, other = 0, topCeil = 0;
-            string first = null;
             bool Reached(IntVec3 c)
             {
                 Region r = map.regionGrid.GetValidRegionAt(c);
@@ -130,14 +205,18 @@ namespace ProjectZ.Dev
                 }
                 return ok;
             }
-            bool CeilingOfReached(IntVec3 c)
+            HashSet<IntVec3> seen = RfSeenCells(map, Reached);
+            bool Ok(IntVec3 c) => seen.Contains(c) || Reached(c);
+            int newly = 0, walk = 0, bad = 0, faces = 0, ceil = 0, other = 0, topCeil = 0, bySight = 0;
+            string first = null;
+            bool CeilingOfOk(IntVec3 c)
             {
                 IntVec3 b = FloorRoof.Below(c, map);
                 while (b.IsValid && b.InBounds(map) && b.GetTerrain(map) == PZDefOf.PZ_OpenAir && b.GetEdifice(map) == null)
                 {
                     b = FloorRoof.Below(b, map);
                 }
-                return b.IsValid && b.InBounds(map) && b.Walkable(map) && Reached(b);
+                return b.IsValid && b.InBounds(map) && b.Walkable(map) && Ok(b);
             }
             for (int i = 0; i < before.Length && i < map.cellIndices.NumGridCells; i++)
             {
@@ -150,9 +229,13 @@ namespace ProjectZ.Dev
                 if (c.Walkable(map))
                 {
                     walk++;
-                    if (!Reached(c))
+                    if (seen.Contains(c))
                     {
-                        if (CeilingOfReached(c))
+                        bySight++;
+                    }
+                    else if (!Reached(c))
+                    {
+                        if (CeilingOfOk(c))
                         {
                             topCeil++;   // (a top that is the ceiling of a reached cave: seen from below, not walked on)
                         }
@@ -168,19 +251,14 @@ namespace ProjectZ.Dev
                 for (int d = 0; d < 8 && !face; d++)
                 {
                     IntVec3 n = c + GenAdj.AdjacentCells[d];
-                    face = n.InBounds(map) && n.Walkable(map) && !map.fogGrid.IsFogged(n) && Reached(n);
+                    face = n.InBounds(map) && n.Walkable(map) && !map.fogGrid.IsFogged(n) && Ok(n);
                 }
                 if (face)
                 {
                     faces++;
                     continue;
                 }
-                IntVec3 b = FloorRoof.Below(c, map);
-                while (b.IsValid && b.InBounds(map) && b.GetTerrain(map) == PZDefOf.PZ_OpenAir && b.GetEdifice(map) == null)
-                {
-                    b = FloorRoof.Below(b, map);
-                }
-                if (b.IsValid && b.InBounds(map) && b.Walkable(map) && Reached(b))
+                if (CeilingOfOk(c))
                 {
                     ceil++;
                 }
@@ -189,8 +267,49 @@ namespace ProjectZ.Dev
                     other++;
                 }
             }
-            why = $"{newly} cell(s) revealed: {walk} walkable ({bad} NOT reachable{(first == null ? "" : ", first " + first)}, {topCeil} of them tops seen from below as the ceiling of a reached cell), {faces} faces, {ceil} ceilings, {other} other (vanilla's flood through open fog, faces of a shaft)";
+            why = $"{newly} cell(s) revealed: {walk} walkable ({bySight} seen from an edge, {bad} NOT reached or seen{(first == null ? "" : ", first " + first)}, {topCeil} tops seen from below as a ceiling), {faces} faces, {ceil} ceilings, {other} other (fall columns, vanilla's flood through open fog, faces of open air)";
             return bad == 0;
+        }
+
+        // Inner rock: rock (any mineable, ore too) with no revealed open cell among its 8 neighbours, right above it or
+        // right below it, as the fog stands now. None of it may have opened since 'before'.
+        private static bool RfInner(Map map, bool[] before, out string why)
+        {
+            FogGrid fog = map.fogGrid;
+            bool OpenSeen(IntVec3 x) => x.IsValid && x.InBounds(map) && !fog.IsFogged(x) && !(x.GetEdifice(map) is Building e && e.def.MakeFog);
+            int inner = 0, innerFog = 0, ore = 0, oreFog = 0, opened = 0, oreOpened = 0;
+            string first = null;
+            for (int i = 0; i < map.cellIndices.NumGridCells; i++)
+            {
+                IntVec3 c = map.cellIndices.IndexToCell(i);
+                if (!(c.GetEdifice(map) is Mineable m))
+                {
+                    continue;
+                }
+                bool next = OpenSeen(FloorRoof.Above(c, map)) || OpenSeen(FloorRoof.Below(c, map));
+                for (int d = 0; d < 8 && !next; d++)
+                {
+                    next = OpenSeen(c + GenAdj.AdjacentCells[d]);
+                }
+                if (next)
+                {
+                    continue;
+                }
+                bool isOre = m.def.building.isResourceRock;
+                bool f = fog.IsFogged(c);
+                inner++;
+                innerFog += f ? 1 : 0;
+                ore += isOre ? 1 : 0;
+                oreFog += isOre && f ? 1 : 0;
+                if (i < before.Length && before[i] && !f)
+                {
+                    opened++;
+                    oreOpened += isOre ? 1 : 0;
+                    first ??= $"{c} L{Levels.LevelOf(c, map)} {m.def.defName}";
+                }
+            }
+            why = $"inner rock {inner} cells ({ore} ore): fogged {innerFog} now (ore {oreFog}), opened since before {opened} (ore {oreOpened}){(first == null ? "" : ", first " + first)}";
+            return opened == 0;
         }
 
         private static void RfFixture(Map map)
@@ -248,8 +367,16 @@ namespace ProjectZ.Dev
 
         private static int RfFogged(IEnumerable<IntVec3> cells, Map map) => cells.Count(c => map.fogGrid.IsFogged(c));
 
-        // A top at level L over g whose jump over its neighbour in a direction lands at least 'fall' floors down on a
-        // fogged cell with a fogged area of at least minFog cells round it (and a fogged goal cell 2+ cells inside it).
+        // Where a fall from the open-air cell n lands (Column.Landing), Invalid when a roof is on the way or nothing holds.
+        private static IntVec3 RfFall(IntVec3 n, Map map, bool standable, out int fallen)
+        {
+            List<IntVec3> broken = new List<IntVec3>();
+            IntVec3 l = Column.Landing(n, map, standable, true, out fallen, out _, broken);
+            return l.IsValid && l != n && broken.Count == 0 ? l : IntVec3.Invalid;
+        }
+
+        // A top at level L over g beside open air whose fall lands at least 'fall' floors down on a fogged cell with a
+        // fogged area of at least minFog cells round it (and a fogged goal cell 2+ cells inside it).
         private static bool RfLedge(IntVec3 g, int L, int fall, int minFog, Map map, out IntVec3 top, out IntVec3 land, out IntVec3 goal, out IntVec3 stand)
         {
             top = land = goal = stand = IntVec3.Invalid;
@@ -265,7 +392,13 @@ namespace ProjectZ.Dev
             for (int d = 0; d < 4; d++)
             {
                 IntVec3 dir = GenAdj.CardinalDirections[d];
-                if (!JumpGrid.LandingFrom(t, dir, map, out IntVec3 l, out int fallen) || fallen < fall || !map.fogGrid.IsFogged(l) || !l.Standable(map))
+                IntVec3 n = t + dir;
+                if (!RfOpenAir(n, map) || !ProjectZ.SameBand(n, t, map))
+                {
+                    continue;
+                }
+                IntVec3 l = RfFall(n, map, true, out int fallen);
+                if (!l.IsValid || fallen < fall || !map.fogGrid.IsFogged(l) || !l.Standable(map))
                 {
                     continue;
                 }
@@ -289,31 +422,137 @@ namespace ProjectZ.Dev
             return false;
         }
 
-        // A ground cell e (open, seen, reachable) and a direction: rock at e+d, then a 5x5 block of fogged natural rock
-        // centred at e+k*d (k = 3: room, 4: cave). Returns the centre.
-        private static bool RfPocket(IntVec3 e, int k, Map map, Pawn any, out IntVec3 dir)
+        // A top (level 3+) beside open air whose seen closure, worked out on the cells (RfFlat areas joined by falls),
+        // takes in fogged terraces (6+ fogged cells) on two or more levels below it, at least one of them only seen from a
+        // terrace seen before (depth 2+).
+        private static bool RfCascade(IntVec3 g, Map map, HashSet<IntVec3> done)
         {
-            dir = IntVec3.Invalid;
-            if (!e.InBounds(map) || e.x < 8 || e.z < 8 || e.x >= map.Size.x - 8 || e.z >= ProjectZ.GroundZ(map) - 8 || !e.Standable(map) || map.fogGrid.IsFogged(e) || e.GetEdifice(map) != null)
+            int L = Column.NaturalTop(g, map);
+            if (L < 3 || g.x < 4 || g.z < 4 || g.x >= map.Size.x - 4 || g.z >= ProjectZ.GroundZ(map) - 4)
             {
                 return false;
             }
-            for (int d = 0; d < 4; d++)
+            IntVec3 t = Levels.Cell(g, L, map);
+            if (!t.IsValid || done.Contains(t) || !TmTop(t, map) || !t.Standable(map) || !GenAdj.CardinalDirections.Any(d => RfOpenAir(t + d, map)))
             {
-                IntVec3 dd = GenAdj.CardinalDirections[d];
-                IntVec3 c0 = e + dd * k;
-                if (!MuRock(e + dd, map) || !HfBlock(c0, 2, map, x => MuRock(x, map) && ((x - e).x * dd.x + (x - e).z * dd.z == 1 || map.fogGrid.IsFogged(x))))
+                return false;
+            }
+            List<List<IntVec3>> areas = new List<List<IntVec3>>();
+            List<int> depth = new List<int>();
+            HashSet<IntVec3> mark = new HashSet<IntVec3>();
+            List<IntVec3> a0 = RfFlat(t, map, 600);
+            a0.ForEach(c => { mark.Add(c); done.Add(c); });
+            areas.Add(a0);
+            depth.Add(0);
+            for (int k = 0; k < areas.Count && areas.Count < 40; k++)
+            {
+                foreach (IntVec3 c in areas[k])
+                {
+                    for (int d = 0; d < 4; d++)
+                    {
+                        IntVec3 n = c + GenAdj.CardinalDirections[d];
+                        if (!RfOpenAir(n, map) || !ProjectZ.SameBand(n, c, map))
+                        {
+                            continue;
+                        }
+                        IntVec3 l = RfFall(n, map, false, out _);
+                        if (!l.IsValid || !l.Walkable(map) || mark.Contains(l))
+                        {
+                            continue;
+                        }
+                        List<IntVec3> a = RfFlat(l, map, 600);
+                        a.ForEach(x => mark.Add(x));
+                        areas.Add(a);
+                        depth.Add(depth[k] + 1);
+                    }
+                }
+            }
+            List<int> keep = Enumerable.Range(1, areas.Count - 1).Where(i => RfFogged(areas[i], map) >= 6 && Levels.LevelOf(areas[i][0], map) >= 1).ToList();
+            int levels = keep.Select(i => Levels.LevelOf(areas[i][0], map)).Distinct().Count();
+            if (levels < 2 || !keep.Any(i => depth[i] >= 2))
+            {
+                return false;
+            }
+            rfCasTop = t;
+            rfCasAreas.Clear();
+            rfCasDepth.Clear();
+            foreach (int i in keep)
+            {
+                rfCasAreas.Add(areas[i]);
+                rfCasDepth.Add(depth[i]);
+            }
+            return true;
+        }
+
+        // A face inside a mountain at level L >= 2: rock F with open air beyond it (dir d) whose fall lands on a fogged
+        // area (8+ fogged cells), and solid rock 3 wide and 4 deep behind and round F (the chamber is carved into it).
+        private static bool RfTunnel(IntVec3 g, Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            if (g.x < 6 || g.z < 6 || g.x >= map.Size.x - 6 || g.z >= a.groundZ - 6)
+            {
+                return false;
+            }
+            for (int L = 2; L <= a.MaxLevel; L++)
+            {
+                IntVec3 f = Levels.Cell(g, L, map);
+                if (!f.IsValid || !MuRock(f, map))
                 {
                     continue;
                 }
-                if (any == null || !map.reachability.CanReach(any.Position, e, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
+                for (int k = 0; k < 4; k++)
                 {
-                    continue;
+                    IntVec3 d = GenAdj.CardinalDirections[k];
+                    IntVec3 n = f + d;
+                    if (!RfOpenAir(n, map) || !ProjectZ.SameBand(n, f, map))
+                    {
+                        continue;
+                    }
+                    IntVec3 perp = new IntVec3(d.z, 0, d.x);
+                    bool solid = true;
+                    for (int b = 0; b <= 3 && solid; b++)
+                    {
+                        for (int j = -1; j <= 1 && solid; j++)
+                        {
+                            IntVec3 x = f - d * b + perp * j;
+                            solid = x.InBounds(map) && ProjectZ.SameBand(x, f, map) && MuRock(x, map);
+                        }
+                    }
+                    if (!solid)
+                    {
+                        continue;
+                    }
+                    IntVec3 l = RfFall(n, map, true, out _);
+                    if (!l.IsValid || !l.Standable(map) || !map.fogGrid.IsFogged(l) || RfFogged(RfFlat(l, map, 200), map) < 8)
+                    {
+                        continue;
+                    }
+                    rfTunF = f;
+                    rfTunD = d;
+                    rfTunLand = l;
+                    return true;
                 }
-                dir = dd;
-                return true;
             }
             return false;
+        }
+
+        // A 9x5 patch of open, seen, unroofed ground (open air over it) for the pens and the slab (E4).
+        private static bool RfPenSpot(IntVec3 o, Map map)
+        {
+            CellRect r = new CellRect(o.x, o.z, 9, 5);
+            if (!r.ExpandedBy(2).InBounds(map) || r.maxZ + 3 >= ProjectZ.GroundZ(map))
+            {
+                return false;
+            }
+            foreach (IntVec3 c in r.ExpandedBy(1))
+            {
+                if (!c.Standable(map) || c.GetEdifice(map) != null || c.Roofed(map) || map.fogGrid.IsFogged(c) || c.GetFirstPawn(map) != null || c.GetFirstItem(map) != null
+                    || c.GetTerrain(map).IsWater || !RfOpenAir(Levels.Cell(c, 1, map), map))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static bool RfSites(Map map)
@@ -323,7 +562,7 @@ namespace ProjectZ.Dev
             IntVec3 home = new IntVec3(map.Size.x / 2, 0, a.groundZ / 2);   // (fixed: the colonists wander before the setup)
             List<IntVec3> near = Near(home, 110, map).ToList();
             IntVec3 t, l, gl;
-            // R1: a level-2 ledge over a fogged level-1 terrace (one floor down, no hole)
+            // R1: a level-2 ledge over a fogged level-1 terrace (one floor down)
             foreach (IntVec3 g in near)
             {
                 if (RfLedge(g, 2, 1, 12, map, out t, out l, out gl, out IntVec3 st1) && Levels.LevelOf(l, map) == 1)
@@ -342,6 +581,32 @@ namespace ProjectZ.Dev
                 {
                     rfT3 = t;
                     rfLand2 = gl;
+                    break;
+                }
+            }
+            // E2: terraces stepping down from a top (the cascade)
+            HashSet<IntVec3> done = new HashSet<IntVec3>();
+            foreach (IntVec3 g in near)
+            {
+                if (RfCascade(g, map, done))
+                {
+                    break;
+                }
+            }
+            // E3: a mountain face to tunnel through
+            foreach (IntVec3 g in near)
+            {
+                if (RfTunnel(g, map))
+                {
+                    break;
+                }
+            }
+            // E4: open ground for the pens and the slab
+            foreach (IntVec3 o in near)
+            {
+                if (RfPenSpot(o, map))
+                {
+                    rfPen = o;
                     break;
                 }
             }
@@ -404,8 +669,51 @@ namespace ProjectZ.Dev
                     break;
                 }
             }
-            Info($"sites: R1 ledge {rfT2} -> terrace {rfLand1} goal {rfGoal1}; R2 top {rfT3} -> {rfLand2}; R3 stairs {rfStairs} {rfRot} exit {rfExit}; R4 plateau {rfLone}; R5 cave beside {rfCaveE} dir {rfCaveD}; R6 room beside {rfRoomE} dir {rfRoomD}");
-            return rfT2.IsValid && rfT3.IsValid && rfStairs.IsValid && rfLone.IsValid && rfCaveE.IsValid && rfRoomE.IsValid;
+            Info($"sites: R1 ledge {rfT2} -> terrace {rfLand1} goal {rfGoal1}; R2 top {rfT3} -> {rfLand2}; E2 top {rfCasTop} over {rfCasAreas.Count} fogged terrace(s) on levels {string.Join(",", rfCasAreas.Select(x => Levels.LevelOf(x[0], map)))} depths {string.Join(",", rfCasDepth)}; E3 face {rfTunF} dir {rfTunD} -> {rfTunLand}; E4 pens at {rfPen}; R3 stairs {rfStairs} {rfRot} exit {rfExit}; R4 plateau {rfLone}; R5 cave beside {rfCaveE} dir {rfCaveD}; R6 room beside {rfRoomE} dir {rfRoomD}");
+            return rfT2.IsValid && rfT3.IsValid && rfCasTop.IsValid && rfTunF.IsValid && rfPen.IsValid && rfStairs.IsValid && rfLone.IsValid && rfCaveE.IsValid && rfRoomE.IsValid;
+        }
+
+        // A ground cell e (open, seen, reachable) and a direction: rock at e+d, then a 5x5 block of fogged natural rock
+        // centred at e+k*d (k = 3: room, 4: cave). Returns the centre.
+        private static bool RfPocket(IntVec3 e, int k, Map map, Pawn any, out IntVec3 dir)
+        {
+            dir = IntVec3.Invalid;
+            if (!e.InBounds(map) || e.x < 8 || e.z < 8 || e.x >= map.Size.x - 8 || e.z >= ProjectZ.GroundZ(map) - 8 || !e.Standable(map) || map.fogGrid.IsFogged(e) || e.GetEdifice(map) != null)
+            {
+                return false;
+            }
+            for (int d = 0; d < 4; d++)
+            {
+                IntVec3 dd = GenAdj.CardinalDirections[d];
+                IntVec3 c0 = e + dd * k;
+                if (!MuRock(e + dd, map) || !HfBlock(c0, 2, map, x => MuRock(x, map) && ((x - e).x * dd.x + (x - e).z * dd.z == 1 || map.fogGrid.IsFogged(x))))
+                {
+                    continue;
+                }
+                if (any == null || !map.reachability.CanReach(any.Position, e, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
+                {
+                    continue;
+                }
+                dir = dd;
+                return true;
+            }
+            return false;
+        }
+
+        // The common tail of a check that opened something: the oracle and the inner rock.
+        private static void RfAudit(Map map, string check)
+        {
+            bool ok = RfAllReached(map, rfBefore, out string why);
+            Result($"{check} everything revealed is reached or seen from an edge", ok, why);
+            bool inner = RfInner(map, rfBefore, out string why2);
+            Result($"{check} no inner rock or ore opened (only surfaces next to seen open space)", inner, why2);
+        }
+
+        private static Building RfSpawn(ThingDef def, IntVec3 c, Map map, Rot4 rot)
+        {
+            Thing t = ThingMaker.MakeThing(def, def.MadeFromStuff ? ThingDefOf.WoodLog : null);
+            t.SetFaction(Faction.OfPlayer);
+            return (Building)GenSpawn.Spawn(t, c, map, rot, WipeMode.Vanish);
         }
 
         private static bool StepReachFog(Map map)
@@ -430,7 +738,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     bool sites = RfSites(map);
-                    Result("R sites: a level-2 ledge over a fogged terrace, a level-3 top over a 2+ floor drop, a stairs spot onto a fogged plateau, a fogged plateau, two rock pockets beside reachable ground", sites, "see sites");
+                    Result("R sites: a ledge over a fogged terrace, a top over a 2+ floor drop, terraces stepping down, a mountain face, open ground for pens, a stairs spot onto a fogged plateau, a fogged plateau, two rock pockets beside reachable ground", sites, "see sites");
                     if (!sites)
                     {
                         Finish();
@@ -450,10 +758,11 @@ namespace ProjectZ.Dev
                     rfArea.Clear();
                     rfArea.AddRange(RfFlat(rfLand1, map, 400));
                     rfFog0 = RfFogged(rfArea, map);
-                    Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed && !x.WorkTypeIsDisabled(WorkTypeDefOf.Mining));
-                    MdWork(map, new List<Pawn> { p }, WorkTypeDefOf.Mining);
+                    rfBefore = RfSnap(map);
+                    Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed);
                     Info($"R1 ledge {rfT2} (L2), terrace {rfArea.Count} cells round {rfLand1} (L1), fogged {rfFog0}; {p} arrives on the ledge at {rfStand1} (teleport)");
                     Teleport(p, rfStand1);
+                    Draft(p, true);
                     rfPawn = p;
                     Wait(3, "rf_r1_arrived");
                     return true;
@@ -462,42 +771,22 @@ namespace ProjectZ.Dev
                 case "rf_r1_arrived":
                 {
                     int fog = RfFogged(rfArea, map);
-                    Result("R1 a colonist arrived on a level-2 ledge: the terrace one level below (only a jump gets there) stays fogged", fog == rfFog0,
-                        $"terrace cells fogged {fog} of {rfArea.Count} (before {rfFog0}); run {ReachFog.LastMs:0.00} ms (walk {ReachFog.LastWalkMs:0.00} ms), {ReachFog.LastRegions} regions reached, {ReachFog.LastScanned} scanned");
-                    MuShot(map, "reachfog_r1_terrace_fogged_L1", 1, rfLand1, 14f, "rf_r1_dig");
+                    Result("R1 a colonist arrived on a level-2 ledge: the terrace one level below is revealed", rfFog0 > 0 && fog == 0,
+                        $"terrace cells fogged {fog} of {rfArea.Count} (before {rfFog0}); run {ReachFog.LastMs:0.00} ms (walk {ReachFog.LastWalkMs:0.00} ms, seen {ReachFog.LastSeenMs:0.00} ms), {ReachFog.LastRegions} regions reached, {ReachFog.LastSeen} seen, {ReachFog.LastScanned} scanned");
+                    RfAudit(map, "R1");
+                    bool can = rfPawn.CanReach(rfGoal1, PathEndMode.OnCell, Danger.Deadly);
+                    Info($"R1 pathing: {rfPawn} can reach the terrace goal {rfGoal1}: {can}; ordered there (drafted)");
+                    rfFog1 = can ? 1 : 0;
+                    rfPawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, rfGoal1), JobTag.DraftedOrder);
+                    MuRun(30, 71711, () => Levels.LevelOf(rfPawn.Position, map) != 2, "rf_r1_order");
                     return true;
                 }
 
-                case "rf_r1_dig":
+                case "rf_r1_order":
                 {
-                    Find.UIRoot.screenshotMode.Active = false;
-                    rfBefore = RfSnap(map);
-                    bool ok = HfOrder(new Designator_MineBelow(), rfT2, out string why);
-                    Info($"R1 {rfPawn} marks Mine below on the ledge cell {rfT2} (the rock under it borders the terrace): {why}");
-                    if (!ok)
-                    {
-                        Result("R1 Mine below on the ledge", false, why);
-                        RfNext("rf_r2");
-                        return true;
-                    }
-                    IntVec3 c1 = FloorRoof.Below(rfT2, map);
-                    MuRun(400, 71710, () => c1.GetFirstMineable(map) == null && Shaft.Is(c1, map), "rf_r1_dug");
-                    return true;
-                }
-
-                case "rf_r1_dug":
-                    Wait(2, "rf_r1_check");
-                    return true;
-
-                case "rf_r1_check":
-                {
-                    IntVec3 c1 = FloorRoof.Below(rfT2, map);
-                    int fog = RfFogged(rfArea, map);
-                    Result("R1 the colonist dug a hole from the ledge down beside the terrace: the terrace, connected through the hole, is revealed",
-                        Shaft.Is(c1, map) && fog == 0, $"hole bottom {c1} open {Shaft.Is(c1, map)}; terrace cells still fogged {fog} of {rfArea.Count}");
-                    bool ok = RfAllReached(map, rfBefore, out string why);
-                    Result("R1 everything revealed is reached (walking, stairs, through a hole)", ok, why);
-                    MuShot(map, "reachfog_r1_terrace_hole_L1", 1, rfLand1, 14f, "rf_r1_end");
+                    Result("R1 the revealed terrace stays out of reach: the drafted colonist ordered there cannot path to it and stays on the ledge",
+                        rfFog1 == 0 && Levels.LevelOf(rfPawn.Position, map) == 2, $"CanReach {rfFog1 == 1}; {rfPawn} at {rfPawn.Position} L{Levels.LevelOf(rfPawn.Position, map)}");
+                    MuShot(map, "reachfog_r1_terrace_L1", 1, rfLand1, 14f, "rf_r1_end");
                     return true;
                 }
 
@@ -513,6 +802,7 @@ namespace ProjectZ.Dev
                     rfArea.Clear();
                     rfArea.AddRange(RfFlat(rfLand2, map, 400));
                     rfFog0 = RfFogged(rfArea, map);
+                    rfBefore = RfSnap(map);
                     Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed);
                     Info($"R2 top {rfT3} (L3), area {rfArea.Count} cells round {rfLand2} (L{Levels.LevelOf(rfLand2, map)}) two or more floors down, fogged {rfFog0}; {p} arrives on the top");
                     Teleport(p, rfT3);
@@ -524,12 +814,182 @@ namespace ProjectZ.Dev
                 case "rf_r2_arrived":
                 {
                     int fog = RfFogged(rfArea, map);
-                    Result("R2 a colonist arrived on a level-3 top: the area two or more floors below it (only a jump gets there) stays fogged", fog == rfFog0, $"area cells fogged {fog} of {rfArea.Count} (before {rfFog0})");
+                    Result("R2 a colonist arrived on a level-3 top: the area two or more floors below its edge is revealed", rfFog0 > 0 && fog == 0, $"area cells fogged {fog} of {rfArea.Count} (before {rfFog0})");
+                    RfAudit(map, "R2");
                     MuShot(map, $"reachfog_r2_drop_L{Levels.LevelOf(rfLand2, map)}", Levels.LevelOf(rfLand2, map), ProjectZ.GroundCellOf(rfLand2, map), 16f, "rf_r2_end");
                     return true;
                 }
 
                 case "rf_r2_end":
+                    RfNext("rf_e2");
+                    return true;
+
+                // ------------------------------------------------------------ E2 terraces stepping down (cascade)
+                case "rf_e2":
+                {
+                    RfFixture(map);
+                    ReachFog.Run(map);
+                    rfBefore = RfSnap(map);
+                    Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed);
+                    Info($"E2 top {rfCasTop} (L{Levels.LevelOf(rfCasTop, map)}); terraces below: {string.Join("; ", rfCasAreas.Select((x, i) => $"L{Levels.LevelOf(x[0], map)} depth {rfCasDepth[i]} {x.Count} cells, fogged {RfFogged(x, map)}"))}; {p} arrives on the top");
+                    Teleport(p, rfCasTop);
+                    Draft(p, true);
+                    Wait(3, "rf_e2_arrived");
+                    return true;
+                }
+
+                case "rf_e2_arrived":
+                {
+                    List<string> left = new List<string>();
+                    for (int i = 0; i < rfCasAreas.Count; i++)
+                    {
+                        int f = RfFogged(rfCasAreas[i], map);
+                        if (f > 0)
+                        {
+                            left.Add($"L{Levels.LevelOf(rfCasAreas[i][0], map)} depth {rfCasDepth[i]}: {f} fogged");
+                        }
+                    }
+                    Result($"E2 a colonist on a top over terraces stepping down (levels {string.Join(",", rfCasAreas.Select(x => Levels.LevelOf(x[0], map)).Distinct())}): every terrace below is revealed, those seen only from a seen terrace too",
+                        left.Count == 0, left.Count == 0 ? $"{rfCasAreas.Count} terrace(s) revealed; run {ReachFog.LastMs:0.00} ms, {ReachFog.LastSeen} regions seen" : string.Join("; ", left));
+                    RfAudit(map, "E2");
+                    int lo = rfCasAreas.Select(x => Levels.LevelOf(x[0], map)).Min();
+                    MuShot(map, $"reachfog_e2_cascade_L{lo}", lo, ProjectZ.GroundCellOf(rfCasTop, map), 24f, "rf_e2_shot2");
+                    return true;
+                }
+
+                case "rf_e2_shot2":
+                {
+                    int L = Levels.LevelOf(rfCasTop, map) - 1;
+                    MuShot(map, $"reachfog_e2_cascade_L{L}", L, ProjectZ.GroundCellOf(rfCasTop, map), 24f, "rf_e2_end");
+                    return true;
+                }
+
+                case "rf_e2_end":
+                    RfNext("rf_e3");
+                    return true;
+
+                // ------------------------------------------------------------ E3 a tunnel through a mountain face
+                case "rf_e3":
+                {
+                    RfFixture(map);
+                    IntVec3 c1 = rfTunF - rfTunD, c2 = rfTunF - rfTunD * 2;
+                    HfCarve(map, new[] { c1, c2 }, true);
+                    rfArea.Clear();
+                    rfArea.AddRange(RfFlat(rfTunLand, map, 200));
+                    Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed && !x.WorkTypeIsDisabled(WorkTypeDefOf.Mining));
+                    foreach (Pawn o in Colonists(map).Where(o => o != p))
+                    {
+                        Draft(o, true);
+                    }
+                    Teleport(p, c2);
+                    MdWork(map, new List<Pawn> { p }, WorkTypeDefOf.Mining);
+                    rfPawn = p;
+                    Wait(3, "rf_e3_inside");
+                    return true;
+                }
+
+                case "rf_e3_inside":
+                {
+                    ReachFog.Run(map);
+                    rfFog0 = RfFogged(rfArea, map);
+                    rfBefore = RfSnap(map);
+                    Result("E3 a colonist in a chamber inside the mountain: the area below the face stays fogged while rock closes the face", rfFog0 == RfFogged(rfArea, map) && rfFog0 >= 8,
+                        $"face {rfTunF} L{Levels.LevelOf(rfTunF, map)} {rfTunF.GetEdifice(map)?.def.defName}, area round {rfTunLand} (L{Levels.LevelOf(rfTunLand, map)}): {rfFog0} of {rfArea.Count} fogged");
+                    map.designationManager.AddDesignation(new Designation(rfTunF, DesignationDefOf.Mine));
+                    Info($"E3 {rfPawn} mines the face {rfTunF} sideways (open air beyond it, dir {rfTunD})");
+                    MuRun(300, 71720, () => rfTunF.GetEdifice(map) == null, "rf_e3_mined");
+                    return true;
+                }
+
+                case "rf_e3_mined":
+                    Wait(3, "rf_e3_check");
+                    return true;
+
+                case "rf_e3_check":
+                {
+                    int fog = RfFogged(rfArea, map);
+                    bool mined = rfTunF.GetEdifice(map) == null;
+                    Result("E3 the colonist mined through the face: the area below the opening is revealed", mined && fog == 0, $"face mined {mined}; area cells fogged {fog} of {rfArea.Count} (before {rfFog0})");
+                    RfAudit(map, "E3");
+                    MuShot(map, $"reachfog_e3_tunnel_L{Levels.LevelOf(rfTunLand, map)}", Levels.LevelOf(rfTunLand, map), ProjectZ.GroundCellOf(rfTunF, map), 14f, "rf_e3_shot2");
+                    return true;
+                }
+
+                case "rf_e3_shot2":
+                    MuShot(map, $"reachfog_e3_tunnel_L{Levels.LevelOf(rfTunF, map)}", Levels.LevelOf(rfTunF, map), ProjectZ.GroundCellOf(rfTunF, map), 14f, "rf_e3_end");
+                    return true;
+
+                case "rf_e3_end":
+                    RfNext("rf_e4");
+                    return true;
+
+                // ------------------------------------------------------------ E4 a slab edge over a walled pen; a door
+                case "rf_e4":
+                {
+                    RfFixture(map);
+                    IntVec3 o = rfPen;
+                    rfArea.Clear();
+                    rfArea2.Clear();
+                    for (int dz = 0; dz < 5; dz++)
+                    {
+                        for (int dx = 0; dx < 9; dx++)
+                        {
+                            IntVec3 c = o + new IntVec3(dx, 0, dz);
+                            bool border = dx == 0 || dx == 8 || dz == 0 || dz == 4;
+                            if (border || dx == 4 && dz != 2)
+                            {
+                                RfSpawn(ThingDefOf.Wall, c, map, Rot4.North);
+                            }
+                            else if (dx == 4)
+                            {
+                                RfSpawn(ThingDefOf.Door, c, map, Rot4.North);
+                            }
+                            else
+                            {
+                                (dx < 4 ? rfArea : rfArea2).Add(c);
+                            }
+                        }
+                    }
+                    HfCarve(map, rfArea.Concat(rfArea2), false);
+                    // the slab over the west wall (level 1), carried by it
+                    for (int dz = 0; dz < 5; dz++)
+                    {
+                        map.terrainGrid.SetTerrain(Levels.Cell(o + new IntVec3(0, 0, dz), 1, map), PZDefOf.PZ_UpperFloor);
+                    }
+                    Wait(3, "rf_e4_sealed");
+                    return true;
+                }
+
+                case "rf_e4_sealed":
+                {
+                    ReachFogMap.For(map)?.Forget();
+                    ReachFog.Run(map);
+                    int a = RfFogged(rfArea, map), b = RfFogged(rfArea2, map);
+                    Result("E4 two sealed pens on the ground, nobody on the slab: both stay fogged", a == rfArea.Count && b == rfArea2.Count, $"pen A fogged {a} of {rfArea.Count}, pen B {b} of {rfArea2.Count}");
+                    rfBefore = RfSnap(map);
+                    Pawn p = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed);
+                    IntVec3 on = Levels.Cell(rfPen + new IntVec3(0, 0, 2), 1, map);
+                    Info($"E4 {p} arrives on the slab at {on} (L1, {on.GetTerrain(map).defName}, standable {on.Standable(map)})");
+                    Teleport(p, on);
+                    Draft(p, true);
+                    rfPawn = p;
+                    Wait(3, "rf_e4_check");
+                    return true;
+                }
+
+                case "rf_e4_check":
+                {
+                    int a = RfFogged(rfArea, map), b = RfFogged(rfArea2, map);
+                    Building_Door door = (rfPen + new IntVec3(4, 0, 2)).GetEdifice(map) as Building_Door;
+                    Result("E4 a colonist on the slab over the pen wall: the pen under its edge is revealed", Levels.LevelOf(rfPawn.Position, map) == 1 && a == 0,
+                        $"{rfPawn} at {rfPawn.Position} L{Levels.LevelOf(rfPawn.Position, map)}; pen A fogged {a} of {rfArea.Count}");
+                    Result("E4 the pen beside it behind a closed door (under no edge) stays fogged", door != null && !door.Open && b == rfArea2.Count, $"door open {door?.Open}; pen B fogged {b} of {rfArea2.Count}");
+                    RfAudit(map, "E4");
+                    MuShot(map, "reachfog_e4_slab_L0", 0, rfPen + new IntVec3(4, 0, 2), 10f, "rf_e4_end");
+                    return true;
+                }
+
+                case "rf_e4_end":
                     RfNext("rf_r3");
                     return true;
 
@@ -563,8 +1023,7 @@ namespace ProjectZ.Dev
                     bool built = MuStairs(map, rfStairs) != null;
                     int fog = RfFogged(rfArea, map);
                     Result("R3 colonists built stairs onto a fogged plateau's rim: on completion the plateau is revealed", built && fog == 0, $"built {built}; plateau cells still fogged {fog} of {rfArea.Count}");
-                    bool ok = RfAllReached(map, rfBefore, out string why);
-                    Result("R3 everything revealed is reachable", ok, why);
+                    RfAudit(map, "R3");
                     MuShot(map, "reachfog_r3_stairs_L1", 1, rfExit, 18f, "rf_r3_end");
                     return true;
                 }
@@ -573,7 +1032,7 @@ namespace ProjectZ.Dev
                     RfNext("rf_r4");
                     return true;
 
-                // ------------------------------------------------------------ R4 a plateau nobody can reach
+                // ------------------------------------------------------------ R4 a plateau nobody can reach or see
                 case "rf_r4":
                 {
                     RfFixture(map);
@@ -600,9 +1059,10 @@ namespace ProjectZ.Dev
                 case "rf_r4_check":
                 {
                     int fog = RfFogged(rfArea, map);
-                    bool reach = RfReach(map, rfLone, RfStarts(map));
+                    List<IntVec3> from = RfPlayers(map).Select(p => p.Position).ToList();
+                    bool reach = RfReach(map, rfLone, from);
                     int changed = RfChanged(map, rfBefore);
-                    Result("R4 a plateau nobody can reach (no stairs, no jump onto it) stays fogged after runs", fog == rfFog0 && changed == 0 && !reach,
+                    Result("R4 a plateau nobody can reach or see from an edge stays fogged after runs", fog == rfFog0 && changed == 0 && !reach,
                         $"plateau round {rfLone}: {fog} of {rfArea.Count} fogged (before {rfFog0}: its rim seen since generation), reachable {reach}; fog cells changed anywhere {changed}; runs {ReachFog.Runs}");
                     MuShot(map, "reachfog_r4_unreached_L1", 1, rfLone, 18f, "rf_r4_end");
                     return true;
@@ -648,7 +1108,7 @@ namespace ProjectZ.Dev
                 case "rf_r5_first2":
                 {
                     int fog = RfFogged(rfArea, map);
-                    Result("R5 colonists mined towards a cave sealed by rock: it stays fogged while rock still seals it", (rfCaveE + rfCaveD).GetEdifice(map) == null && fog == rfArea.Count,
+                    Result("R5 colonists mined towards a cave sealed by rock (under no edge): it stays fogged while rock still seals it", (rfCaveE + rfCaveD).GetEdifice(map) == null && fog == rfArea.Count,
                         $"cave cells fogged {fog} of {rfArea.Count}; runs {ReachFog.Runs}");
                     map.designationManager.AddDesignation(new Designation(rfCaveE + rfCaveD * 2, DesignationDefOf.Mine));
                     MuRun(200, 71751, () => (rfCaveE + rfCaveD * 2).GetEdifice(map) == null, "rf_r5_second");
@@ -664,8 +1124,7 @@ namespace ProjectZ.Dev
                     int fog = RfFogged(rfArea, map);
                     int ceil = rfArea.Count(c => { IntVec3 u = FloorRoof.Above(c, map); return u.IsValid && map.fogGrid.IsFogged(u); });
                     Result("R5 they broke through: the cave is revealed, its ceiling too", fog == 0 && ceil == 0, $"cave cells fogged {fog}, ceilings fogged {ceil} of {rfArea.Count}");
-                    bool ok = RfAllReached(map, rfBefore, out string why);
-                    Result("R5 everything revealed is reachable", ok, why);
+                    RfAudit(map, "R5");
                     MuShot(map, "reachfog_r5_cave_L0", 0, rfCaveE + rfCaveD * 3, 12f, "rf_r5_end");
                     return true;
                 }
@@ -725,8 +1184,7 @@ namespace ProjectZ.Dev
                     int fog = RfFogged(rfArea, map);
                     Result("R6 a drafted colonist ordered into the doorway opened the door: the room is revealed", rfPawn.Position == rfRoomE + rfRoomD && fog == 0,
                         $"{rfPawn} at {rfPawn.Position}; room cells fogged {fog} of {rfArea.Count}");
-                    bool ok = RfAllReached(map, rfBefore, out string why);
-                    Result("R6 everything revealed is reachable", ok, why);
+                    RfAudit(map, "R6");
                     MuShot(map, "reachfog_r6_room_L0", 0, rfRoomE + rfRoomD * 2, 12f, "rf_r6_end");
                     return true;
                 }
@@ -739,23 +1197,32 @@ namespace ProjectZ.Dev
                 case "rf_r7":
                 {
                     RfFixture(map);
+                    // (a colonist on the E2 top: the cascade's edges are part of every run measured)
+                    Pawn top = Colonists(map).OrderBy(x => x.thingIDNumber).First(x => !x.Downed);
+                    Teleport(top, rfCasTop);
+                    Draft(top, true);
                     ReachFog.Run(map);
-                    double full = 0, walk = 0, wall = 0;
-                    int regions = 0;
+                    double full = 0, walk = 0, wall = 0, roof = 0, seenMs = 0;
+                    int regions = 0, seen = 0, edgeRegions = 0, computes = 0;
                     for (int k = 0; k < 3; k++)
                     {
                         ReachFogMap.For(map)?.Forget();
+                        int c0 = ReachFog.EdgeComputes;
                         ReachFog.Run(map);
                         full += ReachFog.LastMs;
                         regions = ReachFog.LastRegions;
+                        seen = ReachFog.LastSeen;
+                        edgeRegions = ReachFog.LastEdgeRegions;
+                        computes = ReachFog.EdgeComputes - c0;
                     }
                     for (int k = 0; k < 10; k++)
                     {
                         ReachFog.Run(map);
                         walk += ReachFog.LastMs;
+                        seenMs += ReachFog.LastSeenMs;
                     }
                     // a wall built on the ground (regions rebuilt, the jump index dirty): the run after it
-                    List<Pawn> cols = Colonists(map);
+                    List<Pawn> cols = Colonists(map).Where(p => p != top).ToList();
                     IntVec3 home = new IntVec3((int)cols.Average(p => p.Position.x), 0, (int)cols.Average(p => p.Position.z));
                     int walls = 0;
                     foreach (IntVec3 c in GenRadial.RadialCellsAround(home, 20f, false).Where(c => c.InBounds(map) && c.Standable(map) && c.GetFirstPawn(map) == null && c.GetFirstItem(map) == null && !c.Roofed(map)).Take(3).ToList())
@@ -766,12 +1233,24 @@ namespace ProjectZ.Dev
                         wall += ReachFog.LastMs;
                         walls++;
                     }
+                    // a roof built on the ground (a column changed): the run after it
+                    int roofs = 0, rc = ReachFog.EdgeComputes;
+                    foreach (IntVec3 c in GenRadial.RadialCellsAround(home, 25f, false).Where(c => c.InBounds(map) && c.Standable(map) && !c.Roofed(map)).Skip(10).Take(3).ToList())
+                    {
+                        map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
+                        ReachFog.Run(map);
+                        roof += ReachFog.LastMs;
+                        roofs++;
+                    }
+                    rc = ReachFog.EdgeComputes - rc;
                     full /= 3;
                     walk /= 10;
+                    seenMs /= 10;
                     wall /= Math.Max(1, walls);
-                    Info($"PERF reach fog on {map.Size.x}x{map.Size.z} ({map.cellIndices.NumGridCells} cells, {regions} regions reached): full run {full:0.00} ms, walk only {walk:0.00} ms, after a wall {wall:0.00} ms; max of all runs {ReachFog.MaxMs:0.00} ms");
-                    Result("R7 cost: a full run (as after a load) under 100 ms, a walk-only run and the run after a wall under 5 ms", full < 100 && walk < 5 && wall < 5,
-                        $"full {full:0.00} ms, walk {walk:0.00} ms, after a wall {wall:0.00} ms");
+                    roof /= Math.Max(1, roofs);
+                    Info($"PERF reach fog on {map.Size.x}x{map.Size.z} ({map.cellIndices.NumGridCells} cells, {regions} regions reached, {seen} seen, {edgeRegions} with edges, {computes} edge lists worked out in a full run): full run {full:0.00} ms, walk only {walk:0.00} ms (of it the seen closure {seenMs:0.00} ms), after a wall {wall:0.00} ms, after a roof {roof:0.00} ms ({rc} edge lists redone for {roofs} roofs); max of all runs {ReachFog.MaxMs:0.00} ms; edge lists remembered {ReachFogMap.For(map)?.EdgesKnown}");
+                    Result("R7 cost: a full run (as after a load) under 100 ms, a walk-only run, the run after a wall and after a roof under 5 ms", full < 100 && walk < 5 && wall < 5 && roof < 5,
+                        $"full {full:0.00} ms, walk {walk:0.00} ms, after a wall {wall:0.00} ms, after a roof {roof:0.00} ms");
                     RfNext(null);
                     return true;
                 }
@@ -803,10 +1282,9 @@ namespace ProjectZ.Dev
                     {
                         newly += rfBefore[i] && !map.fogGrid.IsFogged(i) ? 1 : 0;
                     }
-                    Info($"loaded {rfUserSave} WITH the rule: load-time run {ReachFog.MaxMs:0.0} ms ({ReachFog.LastRegions} regions reached), {newly} cell(s) newly revealed");
+                    Info($"loaded {rfUserSave} WITH the rule: load-time run {ReachFog.MaxMs:0.0} ms ({ReachFog.LastRegions} regions reached, {ReachFog.LastSeen} seen), {newly} cell(s) newly revealed");
                     HfFogStats(map, "save, rule on");
-                    bool ok = RfAllReached(map, rfBefore, out string why);
-                    Result("U the load-time pass on the player's save: every walkable cell it revealed is reachable", ok, why);
+                    RfAudit(map, "U the load-time pass on the player's save:");
                     // cost on the player's map
                     double full = 0, walk = 0;
                     for (int k = 0; k < 3; k++)
@@ -820,7 +1298,7 @@ namespace ProjectZ.Dev
                         ReachFog.Run(map);
                         walk += ReachFog.LastMs;
                     }
-                    Info($"PERF on {rfUserSave} ({map.Size.x}x{map.Size.z}, {ReachFog.LastRegions} regions reached): full run {full / 3:0.00} ms, walk only {walk / 10:0.00} ms");
+                    Info($"PERF on {rfUserSave} ({map.Size.x}x{map.Size.z}, {ReachFog.LastRegions} regions reached, {ReachFog.LastSeen} seen): full run {full / 3:0.00} ms, walk only {walk / 10:0.00} ms");
                     SetHour(map, 12);
                     rfShot = 0;
                     stage = "rf_u_shots";
