@@ -116,7 +116,6 @@ namespace ProjectZ.Dev
             Find.Storyteller.storytellerComps.Clear();
             Find.Storyteller.incidentQueue.Clear();
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-            MineSide.Forget();
         }
 
         private static void MuOutside(Map map, string check)
@@ -427,7 +426,7 @@ namespace ProjectZ.Dev
                         Finish();
                         return true;
                     }
-                    Info($"mineup: map {map.Size}, tile {map.Tile} {map.TileInfo?.hilliness}, floors {a.floors}; rock {Mountains.LastRock}, tops {Mountains.LastTops}; group rule {(MineSide.NoGroup ? "OFF (test)" : "on")}, vertical fog {(VerticalFog.Off ? "OFF (test)" : "on")}");
+                    Info($"mineup: map {map.Size}, tile {map.Tile} {map.TileInfo?.hilliness}, floors {a.floors}; rock {Mountains.LastRock}, tops {Mountains.LastTops}; vertical fog {(VerticalFog.Off ? "OFF (test)" : "on")}");
                     // V4: the generation count against a recount (revealed walkable ground cells whose level-1 cell the rim rule
                     // left fogged), and those level-1 cells unfogged now
                     int sx = map.Size.x, gz = a.groundZ, recount = 0, open = 0;
@@ -544,7 +543,6 @@ namespace ProjectZ.Dev
                     {
                         dm.DesignateMultiCell(new[] { uw });
                     }
-                    MineSide.Forget();
                     Pawn miner = Colonists(map).Where(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Mining)).OrderBy(p => p.thingIDNumber).FirstOrDefault();
                     WorkGiver_Scanner giver = DefDatabase<WorkGiverDef>.GetNamed("PZ_MineFromBelow").Worker as WorkGiver_Scanner;
                     bool overTunnel = MineSide.FromBelow(u2, map) && giver.HasJobOnCell(miner, muA[1]);
@@ -1251,7 +1249,7 @@ namespace ProjectZ.Dev
                     List<double> opens = muOpenMs.OrderBy(x => x).ToList();
                     double median = opens.Count == 0 ? 0 : opens[opens.Count / 2];
                     Result("M12 the vertical reveal adds at most 60 ms to a whole-map ClearAllFog", on - off <= 60, $"{map.Size.x}x{map.Size.z}: on {on:0.0} ms, off {off:0.0} ms, added {on - off:0.0} ms");
-                    Result("M12 Shaft.Open takes at most 1 ms (median over the checks)", median <= 1.0, $"median {median:0.000} ms, max {Shaft.MaxOpenMs:0.000} ms over {opens.Count} check(s) (last per check), opened {Shaft.Opened}; FromBelow computed {MineSide.Computed}");
+                    Result("M12 Shaft.Open takes at most 1 ms (median over the checks)", median <= 1.0, $"median {median:0.000} ms, max {Shaft.MaxOpenMs:0.000} ms over {opens.Count} check(s) (last per check), opened {Shaft.Opened}");
                     Finish();
                     return true;
                 }

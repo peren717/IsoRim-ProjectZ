@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Mine above / Mine below right after vanilla Mine in Orders (shown on tall-mountain maps only). -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses/li[text()="Designator_Mine"]</xpath>
+    <order>Append</order>
+    <value>
+      <li>ProjectZ.Designator_MineAbove</li>
+      <li>ProjectZ.Designator_MineBelow</li>
+    </value>
+  </Operation>
+
+</Patch>

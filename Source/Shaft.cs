@@ -12,7 +12,7 @@ namespace ProjectZ
     // Column.OpenAbove), else none. The rule is applied again down a stack of shafts when a higher boundary opens.
     // C cells are remembered (ShaftMarks, saved); a mark counts while no floor lies over it (a slab cap or a stairs landing
     // over the hole takes over the ceiling, and the mark comes back into force if that floor goes).
-    // The ways in (player orders): vanilla Mine on rock that can't be dug on its own level, mined from below or from above
+    // The ways in (player orders): Mine above / Mine below on a cell, the rock over or under it mined from below or from above
     // (MineUp.cs, JobDriver_MineVertical), and vanilla Remove roof under a bare natural top (Hole.CanOpen, MineUp.cs).
     public static class Shaft
     {

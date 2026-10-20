@@ -269,7 +269,6 @@ namespace ProjectZ.Dev
                 case "md_d1":
                 {
                     MdStart(map, MuRect(new[] { mdG0, mdX, mdFS }.Concat(mdF), map, 2), false);
-                    MineSide.Forget();
                     // interior ground rock under a top: from above
                     MineDir inner = MineSide.Get(MdM1, map);
                     // a face reachable on the ground (a colonist there: the colony), and the rock behind it marked with it: own
@@ -280,13 +279,11 @@ namespace ProjectZ.Dev
                         Teleport(onGround, mdFS);
                     }
                     new Designator_Mine().DesignateMultiCell(mdF.Take(3));
-                    MineSide.Forget();
                     MineDir face = MineSide.Get(mdF[0], map), behind = MineSide.Get(mdF[2], map);
                     // level-1 rock over ground rock X, a level-2 top above: from above; X dug (a fixture): from below, never both
                     IntVec3 ux = L1(mdX, map);
                     MineDir before = MineSide.Get(ux, map);
                     mdX.GetEdifice(map)?.Destroy(DestroyMode.Vanish);
-                    MineSide.Forget();
                     MineDir after = MineSide.Get(ux, map);
                     Result("D1 the side rule: interior ground rock under a top is mined from above", inner == MineDir.FromAbove, $"{MdM1}: {inner}");
                     Result("D1 the group rule: a marked face reachable on the ground and the rock behind it: own level", face == MineDir.Own && behind == MineDir.Own, $"face {mdF[0]} {face}, behind {mdF[2]} {behind}");

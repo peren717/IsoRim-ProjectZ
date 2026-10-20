@@ -146,7 +146,7 @@ namespace ProjectZ.Dev
     //                                   (tint, outline, the mark on the top, fogged rock); the same arguments as rocktop (TestMineTint)
     //                                   mineup: tall mountains phase 3 (vanilla Mine on rock above and Remove roof under a bare
     //                                   top open shafts; vertical fog; stairs in shafts; cave-in at the bottom; real jobs); the
-    //                                   same arguments as rocktop (TestMineUp; -projectzminenogroup, -projectznovfog: old behaviour)
+    //                                   same arguments as rocktop (TestMineUp; -projectznovfog: old behaviour)
     //                                   minedown: mine down (rock mined from the level above, the group and side rules), stairs
     //                                   built from above on rock, the one-floor landing rule, the two-way x-ray; the same
     //                                   arguments as rocktop (TestMineDown)
@@ -250,7 +250,6 @@ namespace ProjectZ.Dev
             Patches.Facilities3D.Off = GenCommandLine.CommandLineArgPassed("projectznofacilityfix");
             VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
             Gravity.Off = GenCommandLine.CommandLineArgPassed("projectznogravity");
-            MineSide.NoGroup = GenCommandLine.CommandLineArgPassed("projectzminenogroup");
             VerticalFog.Off = GenCommandLine.CommandLineArgPassed("projectznovfog");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))

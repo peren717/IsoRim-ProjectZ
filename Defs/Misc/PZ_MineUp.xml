@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Tall mountains, vertical mining: rock marked with vanilla Mine that the pawns can't reach on its own level is mined
-       from the cell right below it (its floor opens: mine up, ProjectZ.WorkGiver_MineFromBelow) or, where no one can
-       stand below, from the cell right above it (its ceiling opens: mine down, ProjectZ.WorkGiver_MineFromAbove). Rock
-       under a stairs site is mined from above (the stairwell). No button. -->
+  <!-- Tall mountains, vertical mining: two commands next to vanilla Mine (ProjectZ.Designator_MineAbove / _MineBelow,
+       Patches/PZ_MineVertical.xml). The player marks cells of the viewed level; the mark (a cell designation on that cell)
+       fixes the side. Mine above: the rock right above is mined from that cell (its floor opens: mine up,
+       ProjectZ.WorkGiver_MineFromBelow). Mine below: the rock right below is mined from beside that cell (the cell opens:
+       mine down, ProjectZ.WorkGiver_MineFromAbove). Vanilla Mine stays vanilla. -->
+  <DesignationDef>
+    <defName>PZ_MineAbove</defName>
+    <texturePath>Designations/Mine</texturePath>
+    <targetType>Cell</targetType>
+  </DesignationDef>
+
+  <DesignationDef>
+    <defName>PZ_MineBelow</defName>
+    <texturePath>Designations/Mine</texturePath>
+    <targetType>Cell</targetType>
+  </DesignationDef>
+
   <JobDef>
     <defName>PZ_MineFromBelow</defName>
     <driverClass>ProjectZ.JobDriver_MineFromBelow</driverClass>
