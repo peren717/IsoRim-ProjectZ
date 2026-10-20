@@ -290,12 +290,18 @@ namespace ProjectZ.Dev
             // (a fixture pawn lost earlier, e.g. hurt in a fight check: another colonist takes its place)
             if (r2P == null || r2P.Dead || !r2P.Spawned || r2P.Downed)
             {
-                r2P = Colonists(map).FirstOrDefault(p => p != r2Q && !p.Downed);
-                Info($"router2: walker is now {r2P}");
+                Pawn was = r2P;
+                r2P = Colonists(map).FirstOrDefault(p => p != r2Q && !p.Downed) ?? map.mapPawns.AllPawnsSpawned.FirstOrDefault(p => p.Faction == Faction.OfPlayer && p.RaceProps.Humanlike && p != r2Q && !p.Downed);
+                Info($"router2: walker {was} (dead {was?.Dead}, spawned {was?.Spawned}, downed {was?.Downed}, at {was?.PositionHeld}, held by {was?.ParentHolder}) is now {r2P}; colonists {string.Join(", ", Colonists(map))}");
             }
             if (r2Q == null || r2Q.Dead || !r2Q.Spawned || r2Q.Downed)
             {
                 r2Q = Colonists(map).FirstOrDefault(p => p != r2P && !p.Downed);
+            }
+            // (nothing from outside the fixtures: wild animals that wandered in, a threat a quest brought)
+            foreach (Pawn o in map.mapPawns.AllPawnsSpawned.Where(p => p.Faction != Faction.OfPlayer).ToList())
+            {
+                o.Destroy();
             }
             map.roofCollapseBuffer.Clear();
             CellRect big = r2Area.ExpandedBy(3).ClipInsideMap(map);

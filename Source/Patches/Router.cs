@@ -88,7 +88,13 @@ namespace ProjectZ.Patches
             {
                 return false;   // (the game's cell flood on one floor: left to the game on one floor)
             }
-            return !g.FloorReach(start, dest, peMode, tp);
+            if (g.FloorReach(start, dest, peMode, tp))
+            {
+                return false;
+            }
+            // Not on this floor alone: the router only when the map's reachability (stairs included) says yes. When it says
+            // no the game's own answer (no path) stands, as on any floor (FinalSay: one floor is other mods' and the game's).
+            return !ReachRefs.WorkingRef(map.reachability) && map.reachability.CanReach(start, dest, peMode, tp);
         }
 
         // ------------------------------------------------------------------------------------------------ search state

@@ -32,7 +32,17 @@ namespace ProjectZ.Dev
 
         private static IntVec3 CG(int x, int z) => new IntVec3(cOx + x, 0, cOz + z);
 
-        private static bool CJobOn(Thing t) => cPawn?.CurJob != null && (cPawn.CurJob.targetA.Thing == t || cPawn.CurJob.targetQueueA != null && cPawn.CurJob.targetQueueA.Any(q => q.Thing == t));
+        private static string cJobInfo;
+
+        private static bool CJobOn(Thing t)
+        {
+            bool on = cPawn?.CurJob != null && (cPawn.CurJob.targetA.Thing == t || cPawn.CurJob.targetQueueA != null && cPawn.CurJob.targetQueueA.Any(q => q.Thing == t));
+            if (on && cJobInfo == null)
+            {
+                cJobInfo = $"{cPawn.CurJob.def.defName} A {cPawn.CurJob.targetA} queue {(cPawn.CurJob.targetQueueA == null ? "-" : string.Join(",", cPawn.CurJob.targetQueueA.Select(q => q.Thing?.ToString() ?? q.Cell.ToString())))}, pawn at {cPawn.Position}, reach now {cPawn.CanReach(t, PathEndMode.Touch, Danger.Deadly)}";
+            }
+            return on;
+        }
 
         private static Thing CSpawnFilth(IntVec3 c, Map map)
         {
@@ -81,7 +91,8 @@ namespace ProjectZ.Dev
                     (double ms, bool found) = CTimedPath(map, cFilth);
                     Result("routes: a filth walled in on the upper floor is not reachable, never given as a job, and the router says no at once",
                         !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5,
-                        $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen}, filth left {!cFilth.Destroyed}; {CStats()}");
+                        $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen} ({cJobInfo ?? "-"}), filth left {!cFilth.Destroyed}; {CStats()}");
+                    cJobInfo = null;
                     cFilth.Destroy();
                     // r_fog: the pocket's landing fogged
                     map.fogGrid.Refog(CellRect.SingleCell(cA));
@@ -98,7 +109,8 @@ namespace ProjectZ.Dev
                     (double ms, bool found) = CTimedPath(map, cFilth);
                     Result("routes: a pocket under a hole (only a jump would get in: no jumps since 2026-10-19), landing fogged: not reachable, never given as a job, the router says no at once",
                         !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5,
-                        $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen}, filth left {!cFilth.Destroyed}; {CStats()}");
+                        $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen} ({cJobInfo ?? "-"}), filth left {!cFilth.Destroyed}; {CStats()}");
+                    cJobInfo = null;
                     map.fogGrid.Unfog(cA);
                     bool reach2 = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
                     Result("routes: the landing revealed, the pocket is still not reachable (fog never decided it)", !reach2 && !cA.Fogged(map), $"reach {reach2}, landing fogged {cA.Fogged(map)}");

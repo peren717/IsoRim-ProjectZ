@@ -21,7 +21,7 @@ namespace ProjectZ.Dev
     //   - real jumps ordered as the targeter does (Verb.OrderForceTarget) on real ticks: ground -> floor 2, floor 2 ->
     //     ground, floor 2 -> floor 2 across the gap; each lands where asked, unhurt; flights between floors filmed in
     //     bursts at yaw 45 and 225 with floor 2 viewed and hidden;
-    //   - a plain jump-down off the slab edge (no pack, ProjectZ's jump link): one floor, unhurt (only 2+ floors bruise);
+    //   - no pack and no stairs: ordered down off the slab edge, the pawn stays up (no voluntary jumps since 2026-10-19);
     //   - a sanguophage's longjump ground -> floor 2;
     //   - the game's own AI jump: a colony paramedic mech given a rescue of a downed colonist on floor 2 jumps up to it
     //     (JobGiver_AIJumpToJobTarget, its constant think tree).
@@ -207,7 +207,7 @@ namespace ProjectZ.Dev
                 }
                 case "jp_plain":
                 {
-                    // a plain jump-down (no pack) off P's south edge
+                    // ordered down off P's south edge with no pack (and no stairs): it stays up (no voluntary jumps since 2026-10-19)
                     IntVec3 from = JUp(5, 10, map), to = JO(5, 5);
                     Heal(jpPlain);
                     Teleport(jpPlain, from);
@@ -215,14 +215,14 @@ namespace ProjectZ.Dev
                     jpInjBefore = Injuries(jpPlain);
                     jpPlain.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, to), JobTag.Misc);
                     Info($"plain jump-down: {jpPlain} from {from} (floor 2, no pack) to {to}");
-                    TickUntil(1500, () => jpPlain.Spawned && ProjectZ.FloorOf(jpPlain.Position, map) == 0, "jp_plain2", 1);
+                    TickUntil(600, () => jpPlain.Spawned && ProjectZ.FloorOf(jpPlain.Position, map) == 0, "jp_plain2", 1);
                     return true;
                 }
                 case "jp_plain2":
                 {
                     tickWatch = null;
                     int inj = Injuries(jpPlain) - jpInjBefore;
-                    Result("plain jump-down of one floor (no pack): unhurt (one floor), as the pack's landing", ProjectZ.FloorOf(jpPlain.Position, map) == 0 && inj == 0, $"at {jpPlain.Position}, new injuries {inj} ({InjuryNames(jpPlain)})");
+                    Result("no pack, no stairs: ordered down off the edge the pawn stays up (no voluntary jump), unhurt", ProjectZ.FloorOf(jpPlain.Position, map) == 1 && inj == 0, $"at {jpPlain.Position}, new injuries {inj} ({InjuryNames(jpPlain)})");
                     Wait(2, "jp_mech");
                     return true;
                 }
