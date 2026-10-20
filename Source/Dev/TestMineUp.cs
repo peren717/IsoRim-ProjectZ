@@ -16,21 +16,23 @@ namespace ProjectZ.Dev
     // givers and jobs under fixed seeds (each frame's ticks under their own seed), and ends with the terrain, roofs,
     // edifices (and fog where nothing is revealed by design) outside its site unchanged:
     //   M1  designators: Remove roof under a bare top (ok), under rock ("Mine the rock above first"), under a built thing
-    //       ("Something is built above"), fogged (no); vanilla Mine on rock above (ok); stairs under rock ("Ceiling is
-    //       rock..."); the rule: rock over rock is never from below, rock over the tunnel is
-    //   M3  a covered shaft: vanilla Mine on a rock and an ore above tunnel A; mined from below; yields at the miner; roofs,
-    //       fog, room, column; saved and reloaded identical; M10 (cave-in) on the reloaded state: the game's collapse buffer
-    //       on the shaft's thick roof drops the rocks at the bottom
-    //   M4  a hole in a top: Remove roof under a bare top with a drafted colonist and steel on it; they fall; a stool next to it
-    //       stays; the area keeps the hole open; M14 (c) the area cleared and a roof built over the hole: it stays
-    //   M5  stairs in a covered shaft: refused under rock; 4 rocks mined from below; stairs built (landing laid); M14 (a) the
+    //       ("Something is built above"), fogged (no); vanilla Mine on rock above (ok, its own level only); stairs under
+    //       rock ("Ceiling is rock..."); Mine above from the tunnel cell: from below; from a rock wall cell: refused
+    //   M3  a covered shaft: Mine above on the tunnel cells under a rock and an ore; mined from below; yields at the miner;
+    //       roofs, fog, room, column; saved and reloaded identical; M10 (cave-in) on the reloaded state: the game's collapse
+    //       buffer on the shaft's thick roof drops the rocks at the bottom
+    //   M4  a hole in a top: Remove roof under a bare top with a drafted colonist and steel on it; the colonist steps aside
+    //       on its level, the steel falls; a stool next to it stays; the area keeps the hole open; M14 (c) the area cleared
+    //       and a roof built over the hole: it stays
+    //   M5  stairs in a covered shaft: refused under rock; 4 rocks mined from below (Mine above); stairs built (landing laid); M14 (a) the
     //       no-roof area on the stairs and shafts: no job, roofs kept; a colonist walks up; M8 sight from the bottom to the
     //       landing; M7 a hole opened upward from the landing (stack propagation); the stairs deconstructed
     //   M6  stairs onto the plateau from tunnel B: three holes by Remove roof, stairs built, nothing laid, walk up
-    //   M9  cancel mid-job (HP kept, nothing opened); two colonists side by side; saved mid-job, reloaded, finished
-    //   M13 (a) a big Mine drag on level 1 over the tunnel reachable from stairs: dug on its own level, no shaft
-    //       (-projectzminenogroup: holes); (b) a 3-cell mark under solid rock, stairs finished mid-job: the job ends, vanilla
-    //       finishes the rock from level 1 with its hit points kept
+    //   M9  cancel mid-job (the Mine above mark cancelled: HP kept, nothing opened); two colonists side by side; saved
+    //       mid-job, reloaded, finished
+    //   M13 (a) a big vanilla Mine drag on level 1 over the tunnel reachable from stairs: dug on its own level only, no
+    //       shaft; (b) a 3-cell Mine above drag under solid rock, stairs to level 1 finished mid-job: the mark keeps its
+    //       side, the job from below goes on and opens the shaft
     //   M12 costs: the vertical reveal in a whole-map ClearAllFog (on and off), Shaft.Open
     // Shots (IsoRim, for the P7 review): mu_*.png.
     public static partial class TestRunner
@@ -155,6 +157,17 @@ namespace ProjectZ.Dev
             muMax = maxFrames;
             muSeed = seed;
             stage = "mu_run";
+        }
+
+        // Before fog is read after the last rock went: a few seeded ticks (the regions rebuilt) and frames (the reach fog
+        // runs batched, once a frame), then next.
+        private static string muSettleNext, muOrder = "";
+
+        private static void MuSettle(string next)
+        {
+            muSettleNext = next;
+            SeedTicks("mu_settle_" + next);
+            StartTicks(10, "mu_settle_wait");
         }
 
         private static void MuKeep(Map map)
@@ -416,6 +429,10 @@ namespace ProjectZ.Dev
                     Wait(5, muShotNext);
                     return true;
 
+                case "mu_settle_wait":
+                    Wait(3, muSettleNext);
+                    return true;
+
                 // ------------------------------------------------------------ setup
                 case "mu_setup":
                 {
@@ -533,22 +550,23 @@ namespace ProjectZ.Dev
                     IntVec3 u2 = MuUp(muA[1], map);
                     AcceptanceReport mine = dm.CanDesignateCell(u2);
                     dm.DesignateMultiCell(new[] { u2 });
-                    Result("M1 vanilla Mine on the rock above tunnel A (level 1): accepted, marked", mine.Accepted && MineSide.Marked(u2, map), $"{u2}: '{(mine.Accepted ? "ok" : mine.Reason)}'");
-                    AcceptanceReport stairs = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, muA[1], muRotA, map, stuffDef: ThingDefOf.WoodLog);
-                    Result("M1 stairs under rock: 'Ceiling is rock: mine it, or remove roof'", !stairs.Accepted && stairs.Reason == "PZ_CeilingIsRock".Translate(), $"'{stairs.Reason}'");
-                    // the rule: rock over the tunnel is mined from below; rock over a rock wall never is
-                    IntVec3 wall = muA[1] + muSideA;
-                    IntVec3 uw = MuUp(wall, map);
-                    if (MuRock(uw, map))
-                    {
-                        dm.DesignateMultiCell(new[] { uw });
-                    }
                     Pawn miner = Colonists(map).Where(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Mining)).OrderBy(p => p.thingIDNumber).FirstOrDefault();
                     WorkGiver_Scanner giver = DefDatabase<WorkGiverDef>.GetNamed("PZ_MineFromBelow").Worker as WorkGiver_Scanner;
-                    bool overTunnel = MineSide.FromBelow(u2, map) && giver.HasJobOnCell(miner, muA[1]);
-                    bool overWall = !MineSide.FromBelow(uw, map) && !giver.HasJobOnCell(miner, wall);
-                    Result("M1 the rule: the rock over the tunnel is mined from below, the rock over a rock wall is not", overTunnel && overWall && MuRock(uw, map),
-                        $"over tunnel {overTunnel}, over wall {uw} ({uw.GetEdifice(map)?.def.defName ?? "no rock"}) {overWall}");
+                    bool vanillaOwn = MineSide.Get(u2, map) == MineDir.Own && !giver.HasJobOnCell(miner, muA[1]);
+                    Result("M1 vanilla Mine on the rock above tunnel A (level 1): accepted, marked, its own level only (no work from below)", mine.Accepted && MineSide.Marked(u2, map) && vanillaOwn,
+                        $"{u2}: '{(mine.Accepted ? "ok" : mine.Reason)}', side {MineSide.Get(u2, map)}, own level only {vanillaOwn}");
+                    AcceptanceReport stairs = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, muA[1], muRotA, map, stuffDef: ThingDefOf.WoodLog);
+                    Result("M1 stairs under rock: 'Ceiling is rock: mine it, or remove roof'", !stairs.Accepted && stairs.Reason == "PZ_CeilingIsRock".Translate(), $"'{stairs.Reason}'");
+                    // Mine above from the tunnel cell: the rock over it is mined from below; from a rock wall cell: refused
+                    IntVec3 wall = muA[1] + muSideA;
+                    IntVec3 uw = MuUp(wall, map);
+                    Designator_MineAbove ma = new Designator_MineAbove();
+                    AcceptanceReport fromTunnel = ma.CanDesignateCell(muA[1]), fromWall = ma.CanDesignateCell(wall);
+                    ma.DesignateMultiCell(new[] { muA[1], wall });
+                    bool overTunnel = fromTunnel.Accepted && MineSide.FromBelow(u2, map) && giver.HasJobOnCell(miner, muA[1]);
+                    bool overWall = !fromWall.Accepted && fromWall.Reason == "PZ_MineHereFirst".Translate() && !MineSide.FromBelow(uw, map) && !giver.HasJobOnCell(miner, wall);
+                    Result("M1 Mine above: from the tunnel cell the rock over it is mined from below; from a rock wall cell refused ('Mine this rock first')", overTunnel && overWall && MuRock(uw, map),
+                        $"over tunnel '{(fromTunnel.Accepted ? "ok" : fromTunnel.Reason)}' {overTunnel}, over wall {uw} ({uw.GetEdifice(map)?.def.defName ?? "no rock"}) '{(fromWall.Accepted ? "ok" : fromWall.Reason)}' {overWall}");
                     // shot: the Mine tool on level 1 over the tunnel, the x-ray and the marks
                     dm.DesignateMultiCell(muA.Skip(2).Take(2).Select(t => MuUp(t, map)));
                     MuPointer(MuUp(muA[3], map));
@@ -565,7 +583,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ M3 (+ M10)
                 case "mu_m3":
                 {
-                    MuStart(map, MuRect(muA, map, 3), true);
+                    MuStart(map, MuRect(muA, map, 3), false);   // (fog outside not compared: what the opened shaft shows is ReachFog's, modes reachfog / holefog)
                     // U1 over t3 (rock), U2 over t5 (made steel ore)
                     IntVec3 u1 = MuUp(muA[2], map), u2 = MuUp(muA[4], map);
                     GenSpawn.Spawn(ThingMaker.MakeThing(ThingDefOf.MineableSteel), u2, map, WipeMode.Vanish);
@@ -578,7 +596,9 @@ namespace ProjectZ.Dev
                             muFogBefore[n] = map.fogGrid.IsFogged(n);
                         }
                     }
-                    new Designator_Mine().DesignateMultiCell(new[] { u1, u2 });
+                    // (the ore U2 is marked once the rock U1 is gone: the same order every run; U1 first is the order whose
+                    // faces ReachFog leaves fogged, see the M3 fog check)
+                    new Designator_MineAbove().DesignateMultiCell(new[] { muA[2] });
                     List<Pawn> crew = MuCrew(map, WorkTypeDefOf.Mining, 1);
                     muP1 = crew.FirstOrDefault();
                     muAt = IntVec3.Invalid;
@@ -594,8 +614,20 @@ namespace ProjectZ.Dev
                     muPointer = IntVec3.Invalid;
                     FloorView.Set(0);
                     IntVec3 u1 = MuUp(muA[2], map), u2 = MuUp(muA[4], map);
-                    MuRun(200, 33000, () => !MuRockOrOre(u1, map) && !MuRockOrOre(u2, map), "mu_m3_done", () =>
+                    muOrder = "";
+                    MuRun(200, 33000, () => !MuRockOrOre(u1, map) && !MuRockOrOre(u2, map), "mu_m3_settle", () =>
                     {
+                        if (!MuRockOrOre(u1, map) && MuRockOrOre(u2, map) && !MineSide.MarkAt(muA[4], map, MineDir.FromBelow))
+                        {
+                            new Designator_MineAbove().DesignateMultiCell(new[] { muA[4] });
+                        }
+                        foreach ((IntVec3 u, string n) in new[] { (u1, "U1"), (u2, "U2") })
+                        {
+                            if (!MuRockOrOre(u, map) && !muOrder.Contains(n))
+                            {
+                                muOrder += $"{n} gone at tick {Find.TickManager.TicksGame} (miner at {muP1.Position}, reach fog runs {ReachFog.Runs}); ";
+                            }
+                        }
                         if (!muAt.IsValid && !MuRockOrOre(u2, map))
                         {
                             muAt = muP1.Position;   // where the miner stood when the ore went
@@ -610,6 +642,10 @@ namespace ProjectZ.Dev
                     return true;
                 }
 
+                case "mu_m3_settle":
+                    MuSettle("mu_m3_done");   // (regions rebuilt and the reach fog's batched run for the last rock before fog is read)
+                    return true;
+
                 case "mu_m3_done":
                 {
                     IntVec3 u1 = MuUp(muA[2], map), u2 = MuUp(muA[4], map), c1 = muA[2], c2 = muA[4];
@@ -622,22 +658,42 @@ namespace ProjectZ.Dev
                     List<Thing> steel = map.listerThings.ThingsOfDef(ThingDefOf.Steel).Where(t => t.Spawned && ProjectZ.FloorOf(t.Position, map) == 0 && muAt.IsValid && t.Position.InHorDistOf(muAt, 1.5f)).ToList();
                     Result("M3 the steel lands at the miner's cell (its floor, within 1 cell)", steel.Count > 0 && steel.Sum(t => t.stackCount) > 0,
                         $"miner stood at {muAt}; steel {string.Join(", ", map.listerThings.ThingsOfDef(ThingDefOf.Steel).Select(t => $"{t.stackCount} at {t.Position} L{ProjectZ.FloorOf(t.Position, map)}"))}; yields moved {MineUp.YieldsMoved}");
-                    // fog: the rock faces round U unfogged, open cells beyond untouched
-                    int faces = 0, facesOpen = 0, openChanged = 0;
+                    // fog: the rock faces round U unfogged; open space round U may be revealed too (ReachFog's look up a shaft
+                    // mined into a cave: the space round a covered open-air cell shows), but nothing is fogged again
+                    int faces = 0, facesOpen = 0, openRevealed = 0, refogged = 0;
+                    List<string> stillFogged = new List<string>();
+                    Info($"M3 mining order: {muOrder}");
                     foreach (KeyValuePair<IntVec3, bool> kv in muFogBefore)
                     {
                         Building e = kv.Key.GetEdifice(map);
+                        bool now = map.fogGrid.IsFogged(kv.Key);
                         if (e != null && e.def.MakeFog)
                         {
                             faces++;
-                            facesOpen += map.fogGrid.IsFogged(kv.Key) ? 0 : 1;
+                            facesOpen += now ? 0 : 1;
+                            if (now)
+                            {
+                                stillFogged.Add($"{kv.Key} {e.def.defName} (next to U1 {kv.Key.AdjacentTo8WayOrInside(u1)}, U2 {kv.Key.AdjacentTo8WayOrInside(u2)})");
+                            }
                         }
-                        else if (kv.Key != u1 && kv.Key != u2 && kv.Value != map.fogGrid.IsFogged(kv.Key))
+                        else if (kv.Key != u1 && kv.Key != u2 && kv.Value && !now)
                         {
-                            openChanged++;
+                            openRevealed++;
                         }
+                        refogged += !kv.Value && now ? 1 : 0;
                     }
-                    Result("M3 the shaft walls (rock round U) are revealed, no open cell's fog changed", faces == facesOpen && openChanged == 0, $"rock faces {facesOpen}/{faces} unfogged, open cells changed {openChanged}");
+                    Result("M3 the shaft walls (rock round U) are revealed, nothing fogged again", faces == facesOpen && refogged == 0, $"rock faces {facesOpen}/{faces} unfogged{(stillFogged.Count > 0 ? " (fogged: " + string.Join("; ", stillFogged) + ")" : "")}, open cells revealed {openRevealed}, fogged again {refogged}; U1 {(map.fogGrid.IsFogged(u1) ? "fogged" : "seen")}, U2 {(map.fogGrid.IsFogged(u2) ? "fogged" : "seen")}, reach fog runs {ReachFog.Runs}");
+                    if (stillFogged.Count > 0)
+                    {
+                        // (diagnosis, after the check: does a plain run, or a full run with the memory cleared, show them?)
+                        List<IntVec3> fogFaces = muFogBefore.Keys.Where(c => c.GetEdifice(map) is Building b && b.def.MakeFog && map.fogGrid.IsFogged(c)).ToList();
+                        ReachFog.Run(map);
+                        int afterRun = fogFaces.Count(c => map.fogGrid.IsFogged(c));
+                        ReachFogMap.For(map)?.Forget();
+                        ReachFog.Run(map);
+                        int afterFull = fogFaces.Count(c => map.fogGrid.IsFogged(c));
+                        Info($"M3 diagnosis: {fogFaces.Count} faces fogged at the check; after ReachFog.Run {afterRun}, after a full run (memory forgotten) {afterFull}; {muOrder}");
+                    }
                     Room room = c1.GetRoom(map);
                     IntVec3 g1 = ProjectZ.GroundCellOf(c1, map);
                     Result("M3 the shaft bottom stays roofed (the stairwell roof: indoors, no sky); the column is open above it; the plane between the levels is gone",
@@ -756,9 +812,9 @@ namespace ProjectZ.Dev
                     Result("M4 Remove roof under a bare top: the top opens to the sky (open air, no roof below, outdoors share)", open && Hole.Opened - muHoles == 1 && room != null && room.OpenRoofCount > 0,
                         $"U {u.GetTerrain(map).defName}, roof below {MuRoof(c, map)}, U roof {MuRoof(u, map)}, room open roofs {room?.OpenRoofCount}, holes {Hole.Opened - muHoles}, shaft {Shaft.Is(c, map)}");
                     int hurt = muP1.health.hediffSet.hediffs.Count(h => h is Hediff_Injury);
-                    bool fell = muP1.Spawned && ProjectZ.FloorOf(muP1.Position, map) == 0 && muP1.Position.InHorDistOf(c, 1.5f);
+                    bool aside = muP1.Spawned && ProjectZ.FloorOf(muP1.Position, map) == 1 && muP1.Position != u && muP1.Position.InHorDistOf(u, 1.5f);
                     bool steelFell = muSteel.Spawned && ProjectZ.FloorOf(muSteel.Position, map) == 0 && muSteel.Position.InHorDistOf(c, 2.5f);
-                    Result("M4 the colonist and the steel on the top fell to the tunnel floor; the colonist unhurt (one floor)", fell && steelFell && hurt == muInt % 1000 && Gravity.PawnsBruised == muInt / 1000,
+                    Result("M4 the colonist on the top stepped aside on its level (no fall, unhurt), the steel on it fell to the tunnel floor", aside && steelFell && hurt == muInt % 1000 && Gravity.PawnsBruised == muInt / 1000,
                         $"colonist at {muP1.Position} L{ProjectZ.FloorOf(muP1.Position, map)}, injuries {muInt % 1000} -> {hurt}, bruised count {muInt / 1000} -> {Gravity.PawnsBruised}; steel at {muSteel.Position} L{ProjectZ.FloorOf(muSteel.Position, map)}");
                     Result("M4 the stool on the next top stays; nothing collapsed", muStool.Spawned && muStool.Position == muStoolAt && PZStats.slabCollapses == muCollapses,
                         $"stool {muStool.Position} (was {muStoolAt}), floor collapses {PZStats.slabCollapses - muCollapses}");
@@ -811,7 +867,7 @@ namespace ProjectZ.Dev
                     muFlag2 = Combat.Los3D.CanSee(muA[0], e, map);
                     AcceptanceReport before = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, muA[1], muRotA, map, stuffDef: ThingDefOf.WoodLog);
                     Result("M5 stairs under the rock ceiling are refused: 'Ceiling is rock: mine it, or remove roof'", !before.Accepted && before.Reason == "PZ_CeilingIsRock".Translate(), $"'{before.Reason}'");
-                    new Designator_Mine().DesignateMultiCell(muA.Take(4).Select(t => MuUp(t, map)));
+                    new Designator_MineAbove().DesignateMultiCell(muA.Take(4));
                     List<Pawn> crew = MuCrew(map, WorkTypeDefOf.Mining, 2);
                     muP1 = crew.FirstOrDefault();
                     muFlag = false;
@@ -1050,7 +1106,7 @@ namespace ProjectZ.Dev
                 {
                     MuStart(map, MuRect(muA, map, 3), true);
                     IntVec3 u = MuUp(muA[1], map);
-                    new Designator_Mine().DesignateMultiCell(new[] { u });
+                    new Designator_MineAbove().DesignateMultiCell(new[] { muA[1] });
                     muP1 = MuCrew(map, WorkTypeDefOf.Mining, 1).FirstOrDefault();
                     muRock = u.GetFirstMineable(map);
                     MuRun(100, 37000, () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muRock.HitPoints < muRock.MaxHitPoints, "mu_m9_cancel");
@@ -1062,7 +1118,7 @@ namespace ProjectZ.Dev
                     IntVec3 u = MuUp(muA[1], map);
                     muHp = muRock.HitPoints;
                     // cancelled as the game's cancel tool does (the designation removed)
-                    new Designator_Cancel().DesignateSingleCell(u);
+                    new Designator_Cancel().DesignateSingleCell(muA[1]);   // (the Mine above mark sits on the tunnel cell)
                     MuRun(1, 37100, () => false, "mu_m9_cancelled");
                     return true;
                 }
@@ -1081,7 +1137,7 @@ namespace ProjectZ.Dev
                 case "mu_m9b":
                 {
                     MuStart(map, MuRect(muA, map, 3), true);
-                    new Designator_Mine().DesignateMultiCell(new[] { MuUp(muA[1], map), MuUp(muA[2], map) });
+                    new Designator_MineAbove().DesignateMultiCell(new[] { muA[1], muA[2] });
                     List<Pawn> crew = MuCrew(map, WorkTypeDefOf.Mining, 2);
                     muP1 = crew[0];
                     muP2 = crew.Count > 1 ? crew[1] : null;
@@ -1145,7 +1201,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     new Designator_Mine().DesignateMultiCell(drag);
-                    MuCrew(map, WorkTypeDefOf.Mining, 3);   // (more miners than faces: without the group rule the third holes the floor)
+                    MuCrew(map, WorkTypeDefOf.Mining, 3);   // (more miners than faces: vanilla Mine never works from below)
                     muInt = drag.Count;
                     muNote = string.Join(";", drag);
                     Info($"M13a: stairs {st?.Position} exit {st?.TopCell} ({st?.TopCell.GetTerrain(map)?.defName}); drag {drag.Count} rock: {muNote}");
@@ -1159,7 +1215,7 @@ namespace ProjectZ.Dev
                     int floors = drag.Count(u => ProjectZ.HasFloor(u, map) && u.GetFirstMineable(map) == null);
                     int thick = muA.Take(4).Count(t => MuThick(t, map));
                     bool ok = floors == drag.Count && MineUp.MinedFromBelow - muMined == 0 && thick == 4;
-                    Result("M13 (a) a big Mine drag on level 1 over the tunnel, reachable by stairs: dug on its own level, the floor stays, no shaft",
+                    Result("M13 (a) a big vanilla Mine drag on level 1 over the tunnel, reachable by stairs: dug on its own level only, the floor stays, no shaft",
                         ok,
                         $"{floors}/{drag.Count} cells dug with their floor kept, mined from below {MineUp.MinedFromBelow - muMined}, tunnel roofs thick {thick}/4");
                     MuEnd(map, "M13a", "mu_m13b");
@@ -1169,7 +1225,7 @@ namespace ProjectZ.Dev
                 case "mu_m13b":
                 {
                     MuStart(map, MuRect(muA.Concat(new[] { muSA - muDA * 4 }), map, 4), false);
-                    new Designator_Mine().DesignateMultiCell(muA.Take(3).Select(t => MuUp(t, map)));
+                    new Designator_MineAbove().DesignateMultiCell(muA.Take(3));
                     muP1 = MuCrew(map, WorkTypeDefOf.Mining, 1).FirstOrDefault();
                     MuRun(150, 38500, () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muP1.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints, "mu_m13b_flip");
                     return true;
@@ -1179,7 +1235,7 @@ namespace ProjectZ.Dev
                 {
                     muRock = muP1.CurJob?.targetA.Thing;
                     muHp = muRock?.HitPoints ?? -1;
-                    Result("M13 (b) a 3-cell mark under solid rock is mined from below", muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muRock != null && muHp < muRock.MaxHitPoints,
+                    Result("M13 (b) a 3-cell Mine above drag under solid rock is mined from below", muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muRock != null && muHp < muRock.MaxHitPoints,
                         $"{muP1} {muP1.CurJobDef?.defName} on {muRock} HP {muHp}");
                     if (muRock == null)
                     {
@@ -1217,10 +1273,11 @@ namespace ProjectZ.Dev
 
                 case "mu_m13b_done":
                 {
-                    bool floorKept = ProjectZ.HasFloor(muAt, map);
-                    Result("M13 (b) stairs finished mid-job: the job from below ends, vanilla's Mine finishes the rock from level 1 with its damage kept, the floor stays",
-                        muFlag && muFlag2 && muInt >= 0 && muInt <= muHp && muRock.Destroyed && floorKept && muNote == "Mine" && MineUp.MinedFromBelow - muMined == 0,
-                        $"from-below job ended {muFlag}, vanilla took it {muFlag2} at HP {muInt} (was {muHp}), destroyed {muRock.Destroyed} by {muNote}, floor at {muAt} {muAt.GetTerrain(map).defName}, mined from below {MineUp.MinedFromBelow - muMined}");
+                    IntVec3 below = FloorRoof.Below(muAt, map);
+                    bool open = muAt.GetTerrain(map) == PZDefOf.PZ_OpenAir && below.IsValid && Shaft.Is(below, map);
+                    Result("M13 (b) stairs to level 1 finished mid-job: the mark keeps its side, the job from below goes on and opens the shaft (no switch to vanilla's Mine)",
+                        muRock.Destroyed && muNote == PZMineDefOf.PZ_MineFromBelow.defName && !muFlag2 && open && MineUp.MinedFromBelow - muMined >= 1,
+                        $"from-below job interrupted {muFlag}, vanilla took it {muFlag2}, destroyed {muRock.Destroyed} by {muNote}, U {muAt} {muAt.GetTerrain(map).defName}, shaft below {(below.IsValid && Shaft.Is(below, map))}, mined from below {MineUp.MinedFromBelow - muMined}");
                     MuEnd(map, "M13b", "mu_m12");
                     return true;
                 }

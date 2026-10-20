@@ -16,16 +16,19 @@ namespace ProjectZ.Dev
     // (level 2, if any) over open ground. Three colonists are put on the plateau (the arrival reveal), the game saved as
     // pz_minedown; every check reloads it and works with real designators, work givers and jobs under fixed seeds, and ends
     // with terrain, roofs and edifices outside its site unchanged:
-    //   D1 the side rule: interior ground rock under a top -> from above; rock at a reachable face (and the marked rock
-    //      behind it, the group) -> its own level; level-1 rock over level-1... over a dug ground cell with a top above ->
-    //      from below (never both); the ground surface: no Mine mark, no work from above
-    //   D2 mine down: vanilla Mine on two ground rocks (one steel ore) inside P; a colonist on the plateau mines them from
-    //      above standing next to the top, not on it; the tops open to the sky; yields at the miner; a drafted colonist and
-    //      wood on the top fall into the pit (one floor: no injury, staggered); fog of the pit and its walls; the pit floor
-    //      stays (nothing below the ground); saved and reloaded identical
-    //   D3 the group rule at F: three marked rocks at a face reachable on the ground are mined there (vanilla), never from above
+    //   D1 the marks fix the side (Mine above / Mine below, 550f5c3; no guess): unmarked rock is its own level; Mine below
+    //      on the top over interior ground rock -> from above; vanilla Mine at a reachable face (and the rock behind it) ->
+    //      its own level only; X: Mine above from rock refused, Mine below from the level-2 top -> from above, cancelled ->
+    //      own, Mine above from the dug cell below -> from below; the ground surface: no Mine / Mine below mark, no work
+    //   D2 mine down: Mine below on the tops over two ground rocks (one steel ore) inside P; a colonist on the plateau mines
+    //      them from above standing next to the top on a cell that touches it (vanilla touch, 7a5e2a9); the tops open to the
+    //      sky; yields at the miner; a drafted colonist on the top steps aside on its level (no fall), the wood on it falls
+    //      into the pit; fog of the pit and its walls; the pit floor stays (nothing below the ground); saved and reloaded
+    //   D3 vanilla Mine on three rocks at a face reachable on the ground: mined there (own level), never from above
+    //   D3b a rock marked with Mine below and vanilla Mine, mined on its own level by vanilla's job: the top still opens
+    //      (2c4b728: the mark opens its boundary whatever mined the rock)
     //   D5 stairs: vanilla placement refuses them on unmined rock in the fog and on seen rock; the footprint marked with
-    //      vanilla Mine from the plateau is mined from above (cells open, revealed); the stairs placed in the pit (ground
+    //      Mine below from the plateau is mined from above (cells open, revealed); the stairs placed in the pit (ground
     //      view, stairs tool with the x-ray) are built from the rim with nobody going down; the exit top stays; a colonist
     //      walks down into the pit and back up; deconstructed from above
     //   D6 falls: a drop of one floor (J1) does no harm but staggers; of two floors (J2) hurts (no voluntary jumps since
@@ -40,7 +43,7 @@ namespace ProjectZ.Dev
         private static readonly List<int> mdCrewIds = new List<int>();
         private static int mdVictimId = -1;
         private static int mdMinedA, mdOpened, mdStaggers, mdHurts;
-        private static bool mdFlag, mdFlag2, mdFlag3;
+        private static bool mdFlag, mdFlag2, mdFlag3, mdTouch;
         private static IntVec3 mdAt, mdAt2;
         private static string mdNote;
         private static float mdHurt0;
@@ -281,10 +284,13 @@ namespace ProjectZ.Dev
                 case "md_d1":
                 {
                     MdStart(map, MuRect(new[] { mdG0, mdX, mdFS }.Concat(mdF), map, 2), false);
-                    // interior ground rock under a top: from above
+                    // interior ground rock under a top: no mark, its own level; Mine below on the top over it: from above
+                    IntVec3 top1 = L1(MdM1, map);
+                    MineDir unmarked = MineSide.Get(MdM1, map);
+                    AcceptanceReport below = new Designator_MineBelow().CanDesignateCell(top1);
+                    new Designator_MineBelow().DesignateMultiCell(new[] { top1 });
                     MineDir inner = MineSide.Get(MdM1, map);
-                    // a face reachable on the ground (a colonist there: the colony), and the rock behind it marked with it: own
-                    // level (the group)
+                    // vanilla Mine is its own level only: a face reachable on the ground (a colonist there) and the rock behind it
                     Pawn onGround = MdCrew(map).LastOrDefault();
                     if (onGround != null)
                     {
@@ -292,22 +298,36 @@ namespace ProjectZ.Dev
                     }
                     new Designator_Mine().DesignateMultiCell(mdF.Take(3));
                     MineDir face = MineSide.Get(mdF[0], map), behind = MineSide.Get(mdF[2], map);
-                    // level-1 rock over ground rock X, a level-2 top above: from above; X dug (a fixture): from below, never both
-                    IntVec3 ux = L1(mdX, map);
-                    MineDir before = MineSide.Get(ux, map);
+                    // level-1 rock ux over ground rock X, a level-2 top above: Mine above from X is refused while X is rock; Mine
+                    // below on the level-2 top: from above; that mark cancelled and X dug (a fixture, seen): Mine above on X: from below
+                    IntVec3 ux = L1(mdX, map), t2 = Levels.Cell(mdX, 2, map);
+                    map.fogGrid.Unfog(mdX);   // (the fixture: X seen, so the refusal is the rule's, not the fog's)
+                    AcceptanceReport upOnRock = new Designator_MineAbove().CanDesignateCell(mdX);
+                    map.fogGrid.Unfog(t2);   // (the fixture: the level-2 top seen)
+                    new Designator_MineBelow().DesignateMultiCell(new[] { t2 });
+                    MineDir fromTop = MineSide.Get(ux, map);
+                    new Designator_Cancel().DesignateSingleCell(t2);
+                    MineDir cancelled = MineSide.Get(ux, map);
                     mdX.GetEdifice(map)?.Destroy(DestroyMode.Vanish);
-                    MineDir after = MineSide.Get(ux, map);
-                    Result("D1 the side rule: interior ground rock under a top is mined from above", inner == MineDir.FromAbove, $"{MdM1}: {inner}");
-                    Result("D1 the group rule: a marked face reachable on the ground and the rock behind it: own level", face == MineDir.Own && behind == MineDir.Own, $"face {mdF[0]} {face}, behind {mdF[2]} {behind}");
-                    Result("D1 level-1 rock with a top above: from above while rock is below, from below once the cell below is open (one side, below first)",
-                        before == MineDir.FromAbove && after == MineDir.FromBelow, $"{ux}: before {before}, after the ground cell {mdX} was dug {after}");
-                    // the ground surface is never dug: no Mine mark on open ground, nothing for the from-above giver
+                    AcceptanceReport upOpen = new Designator_MineAbove().CanDesignateCell(mdX);
+                    new Designator_MineAbove().DesignateMultiCell(new[] { mdX });
+                    MineDir fromBelow = MineSide.Get(ux, map);
+                    Result("D1 Mine below on the level-1 top over ground rock: accepted, the rock below is mined from above (unmarked: its own level)",
+                        below.Accepted && unmarked == MineDir.Own && inner == MineDir.FromAbove, $"{top1}: '{(below.Accepted ? "ok" : below.Reason)}'; {MdM1}: unmarked {unmarked}, marked {inner}");
+                    Result("D1 vanilla Mine is its own level only: a marked face reachable on the ground and the rock behind it", face == MineDir.Own && behind == MineDir.Own, $"face {mdF[0]} {face}, behind {mdF[2]} {behind}");
+                    Result("D1 the marks fix the side: Mine above from rock refused ('Mine this rock first'); Mine below from the level-2 top: from above; cancelled: own level; Mine above from the dug cell below: from below",
+                        !upOnRock.Accepted && upOnRock.Reason == "PZ_MineHereFirst".Translate() && fromTop == MineDir.FromAbove && cancelled == MineDir.Own && upOpen.Accepted && fromBelow == MineDir.FromBelow,
+                        $"{ux}: Mine above from {mdX} (rock) '{(upOnRock.Accepted ? "ok" : upOnRock.Reason)}', Mine below from {t2}: {fromTop}, cancelled {cancelled}, Mine above from {mdX} (dug) '{(upOpen.Accepted ? "ok" : upOpen.Reason)}': {fromBelow}");
+                    // the ground surface is never dug: no Mine or Mine below mark on open ground, nothing for the from-above giver
                     IntVec3 soil = mdFS;
                     AcceptanceReport mark = new Designator_Mine().CanDesignateCell(soil);
+                    AcceptanceReport markBelow = new Designator_MineBelow().CanDesignateCell(soil);
                     Pawn miner = MdCrew(map).FirstOrDefault();
                     WorkGiver_Scanner above = DefDatabase<WorkGiverDef>.GetNamed("PZ_MineFromAbove").Worker as WorkGiver_Scanner;
                     bool noJob = miner != null && !above.HasJobOnCell(miner, L1(soil, map)) && MineSide.Get(soil, map) == MineDir.Own;
-                    Result("D1 the ground surface: no Mine mark on open ground, no work from above over it", !mark.Accepted && noJob, $"{soil} {soil.GetTerrain(map).defName}: mark '{(mark.Accepted ? "ok" : mark.Reason)}', no job {noJob}");
+                    Result("D1 the ground surface: no Mine or Mine below mark on open ground ('No rock below'), no work from above over it",
+                        !mark.Accepted && !markBelow.Accepted && markBelow.Reason == "PZ_NoRockBelow".Translate() && noJob,
+                        $"{soil} {soil.GetTerrain(map).defName}: Mine '{(mark.Accepted ? "ok" : mark.Reason)}', Mine below '{(markBelow.Accepted ? "ok" : markBelow.Reason)}', no job {noJob}");
                     MdEnd(map, "D1", "md_d2");
                     return true;
                 }
@@ -338,7 +358,8 @@ namespace ProjectZ.Dev
                         }
                     }
                     Info($"D2 fog before: m1 {(map.fogGrid.IsFogged(MdM1) ? "fogged" : "seen")}, m2 {(map.fogGrid.IsFogged(MdM2) ? "fogged" : "seen")}");
-                    new Designator_Mine().DesignateMultiCell(new[] { MdM1, MdM2 });
+                    new Designator_MineBelow().DesignateMultiCell(new[] { t1, L1(MdM2, map) });
+                    Info($"D2 Mine below marks: {t1} {MineSide.MarkAt(t1, map, MineDir.FromAbove)}, {L1(MdM2, map)} {MineSide.MarkAt(L1(MdM2, map), map, MineDir.FromAbove)}");
                     List<Pawn> crew = MdCrew(map).Take(1).ToList();
                     MdWork(map, crew, WorkTypeDefOf.Mining);
                     // (bystanders drafted out of the way: a drafted pawn steps aside when a worker walks through)
@@ -353,9 +374,9 @@ namespace ProjectZ.Dev
                     }
                     muP1 = crew.FirstOrDefault();
                     mdAt = mdAt2 = IntVec3.Invalid;
-                    mdFlag = mdFlag2 = mdFlag3 = false;
+                    mdFlag = mdFlag2 = mdFlag3 = mdTouch = false;
                     mdNote = null;
-                    MuRun(300, 41000, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_done", () =>
+                    MuRun(300, 41000, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", () =>
                     {
                         if (!mdAt.IsValid && !MuRockOrOre(MdM2, map))
                         {
@@ -366,25 +387,21 @@ namespace ProjectZ.Dev
                             mdFlag = true;
                             mdAt2 = muP1.Position;
                             muAt2 = muP1.CurJob.targetB.Cell;
+                            mdTouch = ReachabilityImmediate.CanReachImmediate(mdAt2, muAt2, map, PathEndMode.Touch, muP1);
                         }
                         Pawn v = MdVictim(map);
-                        if (v != null && !mdFlag2 && !v.Drafted)
+                        if (v != null && !v.Drafted)
                         {
                             Draft(v, true);   // (vanilla's auto-undraft after a few idle hours)
                         }
-                        if (v != null && !mdFlag2 && ProjectZ.FloorOf(v.Position, map) == 1 && v.Position != L1(MdM1, map) && mdNote != "moved" && mdNote != "shot")
-                        {
-                            mdNote = "moved";
-                            Info($"D2 the colonist on the top moved before it opened: to {v.Position}, job {v.CurJobDef?.defName}, drafted {v.Drafted}, tick {Find.TickManager.TicksGame}");
-                        }
                         if (v != null && !mdFlag2 && ProjectZ.FloorOf(v.Position, map) == 0)
                         {
-                            mdFlag2 = true;   // landed
+                            mdFlag2 = true;   // fell
                         }
-                        if (v != null && mdFlag2 && !mdFlag3 && v.stances?.stagger != null && v.stances.stagger.Staggered)
+                        if (v != null && !mdFlag3 && v.Position != t1 && MuRockOrOre(MdM1, map))
                         {
-                            mdFlag3 = true;
-                            muInterrupt = "md_d2_fallshot";
+                            mdFlag3 = true;   // left the top before it opened
+                            Info($"D2 the colonist on the top moved before it opened: to {v.Position}, job {v.CurJobDef?.defName}, tick {Find.TickManager.TicksGame}");
                         }
                         if (mdFlag && MuRockOrOre(MdM1, map) != MuRockOrOre(MdM2, map) && mdNote != "shot" && muP1.CurJobDef == PZMineDefOf.PZ_MineFromAbove && !muP1.pather.Moving
                             && muP1.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints)
@@ -393,13 +410,6 @@ namespace ProjectZ.Dev
                             muInterrupt = "md_d2_shot";
                         }
                     });
-                    return true;
-                }
-
-                case "md_d2_fallshot":
-                {
-                    Pawn v = MdVictim(map);
-                    MuShot(map, "md_fall_stagger", 0, v != null ? v.Position : MdM1, 6f, "md_d2_resume");
                     return true;
                 }
 
@@ -416,7 +426,15 @@ namespace ProjectZ.Dev
                     muPointer = IntVec3.Invalid;
                     Find.UIRoot.screenshotMode.Active = false;
                     FloorView.Set(0);
-                    MuRun(300, 41100, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_done", muEach);
+                    MuRun(300, 41100, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", muEach);
+                    return true;
+
+                case "md_d2_settle":
+                    MuSettle("md_d2_done");   // (regions rebuilt and the reach fog's batched run for the last rock before fog is read)
+                    return true;
+
+                case "md_d5_settle":
+                    MuSettle("md_d5_dug");
                     return true;
 
                 case "md_d2_done":
@@ -428,15 +446,16 @@ namespace ProjectZ.Dev
                     Result("D2 a colonist on the plateau mined two ground rocks (one ore) from above: both gone, the tops over them open air, the pits open to the sky",
                         gone && air && sky && MineUp.MinedFromAbove - mdMinedA == 2,
                         $"gone {gone}, open air {air}; roofs {MuRoof(MdM1, map)} {MuRoof(MdM2, map)}, shafts {Shaft.Is(MdM1, map)} {Shaft.Is(MdM2, map)}; mined from above {MineUp.MinedFromAbove - mdMinedA}");
-                    Result("D2 the miner worked from the plateau next to the top that opened, not on it", mdFlag && ProjectZ.FloorOf(mdAt2, map) == 1 && mdAt2.InHorDistOf(muAt2, 1.5f) && mdAt2 != muAt2,
-                        $"worked at B {muAt2} from {mdAt2} (level {ProjectZ.FloorOf(mdAt2, map)})");
+                    Result("D2 the miner worked from the plateau next to the top that opened, not on it, from a cell that touches it (vanilla touch)", mdFlag && ProjectZ.FloorOf(mdAt2, map) == 1 && mdAt2.InHorDistOf(muAt2, 1.5f) && mdAt2 != muAt2 && mdTouch,
+                        $"worked at B {muAt2} from {mdAt2} (level {ProjectZ.FloorOf(mdAt2, map)}), touches {mdTouch}");
                     List<Thing> steel = map.listerThings.ThingsOfDef(ThingDefOf.Steel).Where(t => t.Spawned && mdAt.IsValid && ProjectZ.FloorOf(t.Position, map) == ProjectZ.FloorOf(mdAt, map) && t.Position.InHorDistOf(mdAt, 1.5f)).ToList();
                     Result("D2 the steel lands at the miner's cell (its floor, within 1 cell)", steel.Sum(t => t.stackCount) > 0,
                         $"miner stood at {mdAt}; steel {string.Join(", ", map.listerThings.ThingsOfDef(ThingDefOf.Steel).Select(t => $"{t.stackCount} at {t.Position} L{ProjectZ.FloorOf(t.Position, map)}"))}");
                     Pawn v = MdVictim(map);
                     float hurt = v == null ? -1 : MdInjury(v) - mdHurt0;
-                    Result("D2 a drafted colonist on the top fell one floor into the pit: no injury, staggered", v != null && mdFlag2 && ProjectZ.FloorOf(v.Position, map) == 0 && hurt <= 0f && mdFlag3,
-                        $"{v} at {v?.Position} level {(v == null ? -9 : ProjectZ.FloorOf(v.Position, map))}, new injury {hurt:0.0}, staggered seen {mdFlag3}; landings: staggered {JumpGrid.Staggers - mdStaggers}, hurt {JumpGrid.HurtLandings - mdHurts}");
+                    Result("D2 a drafted colonist standing on the top as it opened stepped aside on its level: no fall, no injury",
+                        v != null && !mdFlag2 && !mdFlag3 && ProjectZ.FloorOf(v.Position, map) == 1 && v.Position.InHorDistOf(t1, 1.5f) && v.Position != t1 && hurt <= 0f && JumpGrid.HurtLandings == mdHurts,
+                        $"{v} at {v?.Position} level {(v == null ? -9 : ProjectZ.FloorOf(v.Position, map))} (top {t1}), fell {mdFlag2}, left early {mdFlag3}, new injury {hurt:0.0}; landings: staggered {JumpGrid.Staggers - mdStaggers}, hurt {JumpGrid.HurtLandings - mdHurts}");
                     List<Thing> wood = map.listerThings.ThingsOfDef(ThingDefOf.WoodLog).Where(t => t.Spawned && ProjectZ.GroundCellOf(t.Position, map).InHorDistOf(MdM1, 1.5f)).ToList();
                     Result("D2 the wood on the top fell into the pit", wood.Count > 0 && wood.All(t => ProjectZ.FloorOf(t.Position, map) == 0), string.Join(", ", wood.Select(t => $"{t.stackCount} at {t.Position} L{ProjectZ.FloorOf(t.Position, map)}")));
                     int faces = 0, facesOpen = 0;
@@ -506,10 +525,58 @@ namespace ProjectZ.Dev
                 {
                     int dug = mdF.Take(3).Count(t => !MuRockOrOre(t, map));
                     int tops = mdF.Take(3).Count(t => TmTop(L1(t, map), map));
-                    Result("D3 three marked rocks at a face reachable on the ground: dug there (vanilla), the tops above them stay, never from above",
+                    Result("D3 vanilla Mine on three rocks at a face reachable on the ground: dug there (its own level), the tops above them stay, never from above",
                         dug == 3 && tops == 3 && !mdFlag && MineUp.MinedFromAbove == mdMinedA && Shaft.Opened == mdOpened,
                         $"dug {dug}/3, tops kept {tops}/3, from-above job seen {mdFlag}, mined from above {MineUp.MinedFromAbove - mdMinedA}, shafts {Shaft.Opened - mdOpened}");
-                    MdEnd(map, "D3", "md_d5");
+                    MdEnd(map, "D3", "md_d3b");
+                    return true;
+                }
+
+                // ------------------------------------------------------------ D3b: a Mine below mark opens whatever mined the rock
+                case "md_d3b":
+                {
+                    MdStart(map, MuRect(mdF.Concat(new[] { mdFS }), map, 3), false);
+                    IntVec3 r = mdF[0], top = L1(r, map);
+                    bool fogged = map.fogGrid.IsFogged(top);
+                    map.fogGrid.Unfog(top);   // (the fixture: the top over the face seen)
+                    AcceptanceReport mb = new Designator_MineBelow().CanDesignateCell(top);
+                    new Designator_MineBelow().DesignateMultiCell(new[] { top });
+                    new Designator_Mine().DesignateMultiCell(new[] { r });
+                    // only a colonist on the ground at the face mines (vanilla's job on the rock's own level)
+                    Pawn ground = Colonists(map).Where(p => !mdCrewIds.Contains(p.thingIDNumber) && p.thingIDNumber != mdVictimId && !p.WorkTypeIsDisabled(WorkTypeDefOf.Mining)).OrderBy(p => p.thingIDNumber).FirstOrDefault()
+                        ?? MdVictim(map);
+                    List<Pawn> crew = new List<Pawn>();
+                    if (ground != null)
+                    {
+                        Teleport(ground, mdFS);
+                        crew.Add(ground);
+                    }
+                    MdWork(map, crew, WorkTypeDefOf.Mining);
+                    Info($"D3b: rock {r}, top {top} (was fogged {fogged}), Mine below '{(mb.Accepted ? "ok" : mb.Reason)}', marked {MineSide.Get(r, map)}, ground miner {ground}");
+                    mdOpened = Mineable_MinedMarked_Patch.Opened;
+                    mdNote = null;
+                    MuRun(300, 42500, () => !MuRockOrOre(r, map), "md_d3b_done", () =>
+                    {
+                        foreach (Pawn p in Colonists(map))
+                        {
+                            if (p.CurJob != null && p.CurJob.targetA.Thing is Mineable m && m.Position == r)
+                            {
+                                mdNote = p.CurJobDef.defName;
+                            }
+                        }
+                    });
+                    return true;
+                }
+
+                case "md_d3b_done":
+                {
+                    IntVec3 r = mdF[0], top = L1(r, map);
+                    bool gone = !MuRockOrOre(r, map);
+                    bool open = top.GetTerrain(map) == PZDefOf.PZ_OpenAir && Shaft.Is(r, map);
+                    Result("D3b a rock marked with Mine below (and vanilla Mine) mined on its own level by vanilla's job: the top above it still opens",
+                        gone && mdNote == JobDefOf.Mine.defName && open && Mineable_MinedMarked_Patch.Opened - mdOpened == 1 && MineUp.MinedFromAbove == mdMinedA,
+                        $"gone {gone} by {mdNote ?? "-"}, top {top} {top.GetTerrain(map).defName}, shaft {Shaft.Is(r, map)}, roof {MuRoof(r, map)}, opened by the mark {Mineable_MinedMarked_Patch.Opened - mdOpened}, mined from above {MineUp.MinedFromAbove - mdMinedA}");
+                    MdEnd(map, "D3b", "md_d5");
                     return true;
                 }
 
@@ -521,18 +588,18 @@ namespace ProjectZ.Dev
                     AcceptanceReport fogged = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, MdStairs, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
                     Result("D5 stairs on unmined rock in the fog: refused as vanilla ('Cannot place in undiscovered areas')", !fogged.Accepted && fogged.Reason == "CannotPlaceInUndiscovered".Translate(),
                         $"{MdStairs} fogged {map.fogGrid.IsFogged(MdStairs)}: '{(fogged.Accepted ? "ok" : fogged.Reason)}'");
-                    // the footprint marked with vanilla Mine (seen from the plateau): mined from above, the cells open
-                    new Designator_Mine().DesignateMultiCell(MdFoot);
+                    // the footprint marked with Mine below from the plateau: mined from above, the cells open
+                    new Designator_MineBelow().DesignateMultiCell(MdFoot.Select(c => L1(c, map)));
                     List<Pawn> crew = MdCrew(map);
                     MdWork(map, crew, WorkTypeDefOf.Mining);
-                    MuRun(400, 43000, () => MdFoot.All(c => !MuRockOrOre(c, map)), "md_d5_dug");
+                    MuRun(400, 43000, () => MdFoot.All(c => !MuRockOrOre(c, map)), "md_d5_settle");
                     return true;
                 }
 
                 case "md_d5_dug":
                 {
                     bool dug = MdFoot.All(c => !MuRockOrOre(c, map) && L1(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && !map.fogGrid.IsFogged(c));
-                    Result("D5 the stairs' footprint marked with vanilla Mine from the plateau is mined from above: the cells open and revealed",
+                    Result("D5 the stairs' footprint marked with Mine below from the plateau is mined from above: the cells open and revealed",
                         dug && MineUp.MinedFromAbove - mdMinedA == 3, $"{string.Join(", ", MdFoot.Select(c => $"{c} {(MuRockOrOre(c, map) ? "rock" : "open")} {(map.fogGrid.IsFogged(c) ? "fog" : "seen")} roof {MuRoof(c, map)}"))}; mined from above {MineUp.MinedFromAbove - mdMinedA}");
                     // vanilla placement: no stairs on unmined (now seen) rock: the wall east of the pit
                     IntVec3 wall = MdStairs + IntVec3.East;

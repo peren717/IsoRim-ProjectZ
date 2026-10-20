@@ -318,7 +318,7 @@ namespace ProjectZ.Dev
             {
                 Seed = seed;
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode == "drops" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -458,7 +458,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode == "drops" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -672,7 +672,19 @@ namespace ProjectZ.Dev
             }
             if (stage.StartsWith("a_"))
             {
-                StepDrops(map);
+                // (each stage's own code under a fixed random state: the same finder samples, raids and pods every run)
+                // and its ticks seeded tick by tick
+                Rand.PushState((int)(StableHash("drops_" + stage) ^ (uint)(SeedArg ?? 717)));
+                SeedTicks("drops_ticks_" + stage);
+                try
+                {
+                    StepDrops(map);
+                }
+                finally
+                {
+                    Rand.PopState();
+                    nextTickSeed = null;
+                }
                 return;
             }
             if (stage.StartsWith("o_"))
@@ -902,7 +914,18 @@ namespace ProjectZ.Dev
             }
             if (stage.StartsWith("fg_"))
             {
-                StepTallFog(map);
+                // (each stage's code under a fixed random state, its ticks seeded tick by tick: the same flows every run)
+                Rand.PushState((int)(StableHash("tallfog_" + stage) ^ (uint)(SeedArg ?? 717)));
+                SeedTicks("tallfog_ticks_" + stage);
+                try
+                {
+                    StepTallFog(map);
+                }
+                finally
+                {
+                    Rand.PopState();
+                    nextTickSeed = null;
+                }
                 return;
             }
             if (stage.StartsWith("mt_"))
@@ -1270,11 +1293,22 @@ namespace ProjectZ.Dev
         private static int savedTicks;
         private static int ticksAfterLoad;
 
+        // Seeded ticks (opt-in: SeedTicks before StartTicks / TickUntil): every tick of that run under its own random state
+        // (the run's seed + the tick's index), so the game's randomness does not depend on how many ticks a frame takes.
+        private static int? tickSeed, nextTickSeed;
+
+        private static void SeedTicks(string name)
+        {
+            nextTickSeed = (int)(StableHash(name) ^ (uint)Math.Max(0, SeedArg ?? 717));
+        }
+
         private static void StartTicks(int n, string next)
         {
             ticksLeft = n;
             ticksTotal = n;
             stage = next;
+            tickSeed = nextTickSeed;
+            nextTickSeed = null;
         }
 
         private static void DoTicks(Map map)
@@ -1283,7 +1317,22 @@ namespace ProjectZ.Dev
             TickManager tm = Find.TickManager;
             while (ticksLeft > 0 && sw.ElapsedMilliseconds < 200)
             {
-                tm.DoSingleTick();
+                if (tickSeed.HasValue)
+                {
+                    Rand.PushState(tickSeed.Value + (ticksTotal - ticksLeft) * 7919);
+                    try
+                    {
+                        tm.DoSingleTick();
+                    }
+                    finally
+                    {
+                        Rand.PopState();
+                    }
+                }
+                else
+                {
+                    tm.DoSingleTick();
+                }
                 ticksLeft--;
                 if (tickWatch != null && (ticksTotal - ticksLeft) % watchEvery == 0)
                 {

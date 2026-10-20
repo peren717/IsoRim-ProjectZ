@@ -162,6 +162,7 @@ namespace ProjectZ.Dev
 
         private static readonly List<LCheck> lChecks = new List<LCheck>();
         private static int lIdx;
+        private static string lCheckName = "";
 
         private sealed class LShot
         {
@@ -223,6 +224,8 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     LCheck c = lChecks[lIdx++];
+                    lCheckName = c.name;
+                    fTickRuns = 0;
                     LReset(map);
                     Out($"---- check {c.name}");
                     Seeded(c.name, () => c.run(map));
@@ -340,6 +343,10 @@ namespace ProjectZ.Dev
         private static void SetupLos(Map map)
         {
             lMap = map;
+            if (mode == "finalsay" || mode == "lobbed")
+            {
+                FQuiet(map, true);
+            }
             AnnexMapComponent an = ProjectZ.Annex(map);
             List<Pawn> cols = Colonists(map).Where(p => !p.WorkTagIsDisabled(WorkTags.Violent)).ToList();
             for (int i = 0; i < 3 && cols.Count < 2; i++)
@@ -358,7 +365,18 @@ namespace ProjectZ.Dev
             // a LW x LH open field, the one with the fewest cells to fix
             CellRect found = CellRect.Empty;
             int bestBad = int.MaxValue;
-            for (int z = 3; z + LH < an.groundZ - 3; z += 4)
+            if (mode == "finalsay" || mode == "lobbed")
+            {
+                // a fixed field (the middle of the ground rows), so it is the same every run even where the generated map
+                // differs a little between runs; LReset clears it for every check (rock, water, roofs, things)
+                CellRect fixedRect = new CellRect((map.Size.x - LW) / 2, Mathf.Max(3, (an.groundZ - LH) / 2), LW, LH);
+                if (fixedRect.maxZ < an.groundZ - 3 && fixedRect.ExpandedBy(2).InBounds(map) && !fixedRect.ExpandedBy(2).Cells.Any(c => c.GetThingList(map).Any(t => !t.def.destroyable)))
+                {
+                    found = fixedRect;
+                    bestBad = -1;
+                }
+            }
+            for (int z = 3; bestBad >= 0 && z + LH < an.groundZ - 3; z += 4)
             {
                 for (int x = 3; x + LW < map.Size.x - 3; x += 4)
                 {
@@ -430,6 +448,10 @@ namespace ProjectZ.Dev
                 }
             }
             mRaiders.Clear();
+            if (mode == "finalsay" || mode == "lobbed")
+            {
+                FQuiet(map, false);
+            }
             mShooter = mTarget = null;
             mProj = null;
             int i = 0;
