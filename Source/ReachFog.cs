@@ -479,7 +479,8 @@ namespace ProjectZ
         }
 
         // A column changed (a floor or a roof built or gone): the edges of the regions round its cells on every level,
-        // and the ceilings, are worked out again.
+        // and the ceilings, are worked out again; those regions are no longer known clear, so their cells (and the ceiling
+        // walk above them: a shaft mined up into a tunnel already scanned) are revealed again.
         public static void ColumnChanged(IntVec3 c, Map map)
         {
             if (Current.ProgramState != ProgramState.Playing || ReachFog.Off)
@@ -487,7 +488,7 @@ namespace ProjectZ
                 return;
             }
             ReachFogMap comp = For(map);
-            if (comp == null || comp.edges.Count == 0)
+            if (comp == null || (comp.edges.Count == 0 && comp.clear.Count == 0))
             {
                 comp?.Ask();
                 return;
@@ -515,6 +516,7 @@ namespace ProjectZ
                         if (r != null)
                         {
                             comp.edges.Remove(r.id);
+                            comp.clear.Remove(r.id);
                         }
                     }
                 }
