@@ -777,6 +777,11 @@ namespace ProjectZ.Dev
                 StepJump(map);
                 return;
             }
+            if (stage.StartsWith("jd_"))
+            {
+                StepJumpDiag(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -1085,6 +1090,10 @@ namespace ProjectZ.Dev
                     else if (mode == "jump")
                     {
                         stage = "jp_setup";
+                    }
+                    else if (mode == "jumpdiag")
+                    {
+                        stage = "jd_setup";
                     }
                     else if (mode == "explode")
                     {
