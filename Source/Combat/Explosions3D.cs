@@ -49,6 +49,10 @@ namespace ProjectZ.Combat
                     res.Add(c);
                 }
             }
+            if (AimFloor.IsVirtualCentre(center, map))
+            {
+                return res;   // a directional spew aimed at another floor: its cone on the target's floor only (AimFloor)
+            }
             IntVec3 gc = ProjectZ.GroundCellOf(center, map);
             float hc = kc * Heights.Storey + Heights.Middle;
             for (int k = an.MinLevel; k <= an.MaxLevel; k++)

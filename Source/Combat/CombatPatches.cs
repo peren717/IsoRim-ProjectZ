@@ -668,6 +668,10 @@ namespace ProjectZ.Combat
     // saved: a projectile still in flight on load flies on as a plain one.
     public static class Flights
     {
+        // Set by AimFloor while a directional spray (acid, foam) launches a drop at a cell of another floor: the drop is
+        // aimed at that cell (it flies the clear line to it), not a miss.
+        public static bool AimedAtCell;
+
         public sealed class Flight
         {
             public float hs;
@@ -836,7 +840,8 @@ namespace ProjectZ.Combat
             }
             if (!lobbed)
             {
-                bool aimed = land == kd && (__instance.usedTarget.HasThing || __instance.intendedTarget.HasThing);
+                // (a spray's drop aimed at a cell the caster sees counts as aimed: AimFloor.Launch)
+                bool aimed = land == kd && (__instance.usedTarget.HasThing || __instance.intendedTarget.HasThing || Flights.AimedAtCell);
                 // An aimed shot along a clear line of sight (Los3D from the shoot line's source, the spawn cell) flies at
                 // its heights (eye to the clear aim height) and never stops on a slab or roof: the line crossed none.
                 float aim = Los3D.AimChest;

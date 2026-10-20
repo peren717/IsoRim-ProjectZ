@@ -31,6 +31,8 @@ namespace ProjectZ.Dev
     //                                   no-designator fall-through, language shots (TestFloorUI)
     //                                   save: load a player save (-projectzsave=<name>), describe its stairs and colonists,
     //                                   tick it (-projectzsaveticks=N) until everything planned upstairs is built (TestSave)
+    //                                   aimfloor (alias flamediag): flame spews, sprays, burners, beams and the foam turret
+    //                                   between floors (AimFloor), -projectzfloors=3 -projectzseed=7 (TestFlame)
     //                                   router2: the two-level stair-end router (oracle on seeded layouts, bridge, turn-around,
     //                                   wasted work, fixtures; TestRouter2), -projectzfloors=3 -projectzseed=7; routerperf: router
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
@@ -780,6 +782,11 @@ namespace ProjectZ.Dev
                 StepBulletPitch(map);
                 return;
             }
+            if (stage.StartsWith("fz_"))
+            {
+                StepFlame(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -1098,6 +1105,10 @@ namespace ProjectZ.Dev
                     else if (mode == "bulletpitch")
                     {
                         stage = "i_setup";
+                    }
+                    else if (mode == "flamediag" || mode == "aimfloor")
+                    {
+                        stage = "fz_setup";
                     }
                     else if (mode == "range")
                     {

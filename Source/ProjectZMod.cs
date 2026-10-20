@@ -48,6 +48,8 @@ namespace ProjectZ
             harmony.PatchAll(typeof(ProjectZMod).Assembly);
             // radius effects stay on their centre's floor (an explicit list of vanilla methods)
             BandRadial.Patch(harmony);
+            // directional effects (flame spews, sprays, beams) aimed at another floor: laid out on the target's floor
+            Combat.AimFloor.Patch(harmony);
             IsoRimBridge.Init();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, default floors for new worlds=" + Settings.floors + " (effective " + WorldFloors.Default + ")");
