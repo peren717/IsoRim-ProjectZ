@@ -66,6 +66,10 @@ namespace ProjectZ.Dev
 
         // ---------------------------------------------------------------- helpers
 
+        // Where every check looks for its site from: a fixed point (the middle of the ground rows), not where the
+        // colonists happen to stand after the start's frames, so the sites are the same every run.
+        private static IntVec3 FgHome(Map map) => new IntVec3(map.Size.x / 2, 0, ProjectZ.GroundZ(map) / 2);
+
         private static bool FgBlocker(IntVec3 c, Map map)
         {
             Building e = c.GetEdifice(map);
@@ -567,6 +571,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     Info($"tallfog: map {map.Size}, tile {map.Tile} {map.TileInfo?.hilliness}, floors {a.floors}; fill {Mountains.LastSeconds:0.00} s, tops {Mountains.LastTops}, rim {Mountains.LastRim}, holes {Mountains.LastHoles}, fogged band cells {Mountains.LastFogged}");
+                    FQuiet(map, true);   // (no wild animals, visitors or sleeping threats walking into the checks' sites)
                     FgGenChecks(map, a);
                     LvCheck(map, "G1 floor HUD: no level reached, only the ground and level 1 are offered", 0, 1);
                     fgGenHash = FgHash(map);
@@ -585,7 +590,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G2 stairs onto the rim
                 case "fg_g2":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     Pawn any = Colonists(map).FirstOrDefault();
                     fgStairs = IntVec3.Invalid;
                     foreach (IntVec3 p in Near(home, 90, map))
@@ -690,7 +695,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G2b a slab bridge, then a step next to fog
                 case "fg_g2b":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     fgU = fgB = IntVec3.Invalid;
                     fgGap.Clear();
                     int tried = 0;
@@ -805,7 +810,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G3 a jump pack onto the rim (close, far)
                 case "fg_g3":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     fgPawn = Colonists(map).FirstOrDefault(p => !p.Downed && p.health.capacities.CapableOf(PawnCapacityDefOf.Moving));
                     Apparel pack = (Apparel)ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("Apparel_PackJump"));
                     fgPawn.apparel.Wear(pack, dropReplacedApparel: false);
@@ -876,7 +881,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G4 pods with a tame animal, a mech; shuttles
                 case "fg_g4":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     fgU = IntVec3.Invalid;
                     int skip = fgVariant;
                     foreach (IntVec3 g in Near(home, 90, map))
@@ -902,7 +907,7 @@ namespace ProjectZ.Dev
                     {
                         // a shuttle can't land on a fogged plateau (its footprint all in a plateau's fog, not rock)
                         IntVec3 f = IntVec3.Invalid;
-                        foreach (IntVec3 g in Near(RtHome(map), 110, map))
+                        foreach (IntVec3 g in Near(FgHome(map), 110, map))
                         {
                             IntVec3 c = Levels.Cell(g, 1, map);
                             if (c.IsValid && TmTop(c, map) && map.fogGrid.IsFogged(c) && GenAdj.OccupiedRect(c, ThingDefOf.Shuttle.defaultPlacingRot, ThingDefOf.Shuttle.size).ExpandedBy(1).Cells.All(x => x.InBounds(map) && map.fogGrid.IsFogged(x) && TmTop(x, map)))
@@ -960,7 +965,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G5 non-player arrivals open nothing
                 case "fg_g5":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     List<IntVec3> rims = new List<IntVec3>();
                     fgWalkTo.Clear();
                     fgActorTo.Clear();
@@ -1091,7 +1096,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G6 nothing placed in fog
                 case "fg_g6":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     IntVec3 f = IntVec3.Invalid;
                     foreach (IntVec3 g in Near(home, 90, map))
                     {
@@ -1161,7 +1166,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ G7 mining from an opened plateau
                 case "fg_g7":
                 {
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     fgMine = fgBehind = fgStand = IntVec3.Invalid;
                     int bestOre = -1;
                     foreach (IntVec3 g in Near(home, 100, map))
@@ -1243,7 +1248,7 @@ namespace ProjectZ.Dev
                         stage = "fg_g9";
                         return true;
                     }
-                    IntVec3 home = RtHome(map);
+                    IntVec3 home = FgHome(map);
                     fgPawn = Colonists(map).Where(p => !p.Downed).OrderByDescending(p => p.GetStatValue(StatDefOf.PsychicSensitivity)).FirstOrDefault();
                     for (int i = 0; i < 6 && fgPawn.GetPsylinkLevel() < 6; i++)
                     {

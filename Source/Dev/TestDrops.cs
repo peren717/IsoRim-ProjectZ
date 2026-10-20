@@ -387,6 +387,7 @@ namespace ProjectZ.Dev
 
         private static void SetupDrops(Map map)
         {
+            FQuiet(map, true);   // (only the raids fired here: no incidents, wild animals or visitors)
             List<Pawn> cols = Colonists(map);
             // The middle of the map, levelled: rock, water, ruins and natural roofs cleared (the scene, not under test).
             int gz = ProjectZ.GroundZ(map);

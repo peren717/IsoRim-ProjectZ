@@ -209,8 +209,43 @@ namespace ProjectZ.Dev
         private static void FTicks(int max, Func<bool> cond, Action<Map> then)
         {
             fThen = then;
+            SeedTicks($"{lCheckName}_ticks_{fTickRuns++}");   // (the check's ticks seeded tick by tick)
             TickUntil(max, cond, "m_fs_then", 1);
         }
+
+        private static int fTickRuns;
+
+        // finalsay / lobbed: nothing but the check's own pawns on the map (no wild animals, visitors, sleeping threats; no
+        // new wild animals, incidents or mental breaks), so no stray pawn walks into a fixture or becomes a target.
+        private static bool fQuietPatched;
+
+        private static void FQuiet(Map map, bool first)
+        {
+            if (!fQuietPatched)
+            {
+                fQuietPatched = true;
+                new Harmony("Peren.IsoRimProjectZ.test.quiet").Patch(AccessTools.Method(typeof(WildAnimalSpawner), nameof(WildAnimalSpawner.WildAnimalSpawnerTick)),
+                    prefix: new HarmonyMethod(typeof(TestRunner), nameof(FNoWildSpawnPrefix)));
+            }
+            if (first)
+            {
+                NoAmbushes(map);
+            }
+            Find.Storyteller.storytellerComps.Clear();
+            Find.Storyteller.incidentQueue.Clear();
+            DebugSettings.enableRandomMentalStates = false;
+            List<Pawn> stray = map.mapPawns.AllPawnsSpawned.Where(p => p.Faction != Faction.OfPlayer && !p.Destroyed).ToList();
+            foreach (Pawn p in stray)
+            {
+                p.Destroy();
+            }
+            if (first)
+            {
+                Info($"quiet: {stray.Count} pawns not of the colony removed ({string.Join(", ", stray.Select(p => p.kindDef.defName).Distinct().Take(10))}); wild animal spawning, incidents and random mental breaks off");
+            }
+        }
+
+        private static bool FNoWildSpawnPrefix() => false;
 
         private static bool StepFinalSay(Map map)
         {
@@ -409,18 +444,18 @@ namespace ProjectZ.Dev
             bool ok = shooter.jobs.TryTakeOrderedJob(j, JobTag.DraftedOrder);
             Result($"{name}: the attack-ground order is taken", ok && shooter.CurJobDef == JobDefOf.AttackStatic, $"job {shooter.CurJobDef?.defName}, can hit the cell {FVerb(shooter).CanHitTarget(cell)}");
             int b = fImps.Count;
-            FTicks(4000, () => FImpsOf(shooter, b).Count >= 15, m =>
+            FTicks(8000, () => FImpsOf(shooter, b).Count >= 30, m =>   // (30 shots: some interceptions are near certain at 65% fill)
             {
                 List<FImp> l = FImpsOf(shooter, b);
                 int inter = l.Count(i => i.hit != null && i.hit.def == ThingDefOf.Sandbags && i.at != i.dest);
                 string d = $"impacts {l.Count}, interceptions by the sandbags {inter}: {FImpList(l)}";
                 if (cross || !hostile)
                 {
-                    Result($"{name}: the sandbags intercept shots ({(cross ? "ProjectZ's flight decides" : "the game")})", l.Count >= 10 && inter > 0, d);
+                    Result($"{name}: the sandbags intercept shots ({(cross ? "ProjectZ's flight decides" : "the game")})", l.Count >= 20 && inter > 0, d);
                 }
                 else
                 {
-                    Result($"{name}: never intercepted (the hostile value shows on one floor)", l.Count >= 10 && inter == 0, d);
+                    Result($"{name}: never intercepted (the hostile value shows on one floor)", l.Count >= 20 && inter == 0, d);
                 }
                 Hostile.AllOff();
             });
@@ -732,8 +767,20 @@ namespace ProjectZ.Dev
             {
                 if (kind == Lob.Direct)
                 {
-                    Result($"{name}: a flyOverhead arrow declared direct flies as a direct shot (flight) and comes down on floor 2, never on the slab over it", l.Count >= 5 && l.All(i => i.flight && !i.lobbed && i.floor == 1) && l.Any(i => i.hit == r),
-                        $"impacts {l.Count}, hits {l.Count(i => i.hit == r)}: {FImpList(l)}");
+                    // over the floor-2 slab: a direct flight onto floor 2 (never the slab over it on floor 3); a wild miss whose
+                    // spot is off the slab's edge (open air on floor 2) comes down on the top of its column, as every
+                    // flyOverhead shot does (the raider stands in the slab's 2nd row, so some misses go there)
+                    CellRect slab = CellRect.FromLimits(LG(SX0, SZ0), LG(SX1, SZ1));
+                    List<FImp> over = l.Where(i => slab.Contains(i.g)).ToList(), off = l.Where(i => !slab.Contains(i.g)).ToList();
+                    bool overOk = over.All(i => i.flight && !i.lobbed && i.floor == 1);
+                    bool offOk = off.All(i => !i.lobbed && i.floor != 2 && FOnTop(i, m));
+                    if (off.Count > 0)
+                    {
+                        Info($"{name}: off the slab: {string.Join("; ", off.Select(i => $"{(i.hit == null ? "-" : i.hit.def.defName)} at {i.at} (ground {i.g}, floor {i.floor + 1}), destination {i.dest} (ground {ProjectZ.GroundCellOf(i.dest, m)}, floor {ProjectZ.FloorOf(i.dest, m) + 1}), flight {i.flight}"))}");
+                    }
+                    Result($"{name}: a flyOverhead arrow declared direct flies as a direct shot (flight) and comes down on floor 2, never on the slab over it (misses off the slab's edge: on the top of their column)",
+                        l.Count >= 5 && overOk && offOk && l.Any(i => i.hit == r),
+                        $"impacts {l.Count} (over the slab {over.Count}, off its edge {off.Count}), hits {l.Count(i => i.hit == r)}: {FImpList(l)}");
                 }
                 else
                 {

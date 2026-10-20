@@ -236,6 +236,7 @@ namespace ProjectZ.Dev
             switch (stage)
             {
                 case "fz_setup":
+                    FQuiet(map, true);   // (no stray pawns in the field, no new ones)
                     Seeded("aimfloor_setup", () => SetupFlame(map));
                     return true;
                 case "fz_case":
@@ -287,6 +288,7 @@ namespace ProjectZ.Dev
                 }
                 case "fz_after":
                     // let the effect finish (the burst ends, fires catch, damage lands)
+                    SeedTicks("aimfloor_after_" + fzCases[fzCase].name);
                     StartTicks(300, "fz_report");
                     return true;
                 case "fz_report":
@@ -423,6 +425,7 @@ namespace ProjectZ.Dev
             }
             // the screenshot: a beam in mid sweep, a thrown explosive half way, the rest just after the cast
             bool beam = c.gun == "Gun_Incinerator" || c.gun == "Gun_BeamGraser";
+            SeedTicks("aimfloor_cast_" + c.name);   // (the cast's ticks seeded tick by tick)
             TickUntil(600, () => beam ? fzBeamShots >= 3 : c.thrown ? FzMidFlight() : fzAppliedAt >= 0 && Find.TickManager.TicksGame - fzAppliedAt >= 2, "fz_cast", 1);
         }
 
@@ -574,11 +577,15 @@ namespace ProjectZ.Dev
             float h0 = fzArc[0].y, hn = fzArc[fzArc.Count - 1].y, top = fzArc.Max(v => v.y);
             float step = 0f, back = 0f;
             Vector3 g0 = new Vector3(ProjectZ.GroundCellOf(sp, map).x + 0.5f, 0f, ProjectZ.GroundCellOf(sp, map).z + 0.5f);
+            // "moves away from the thrower": progress along the throw (its first sample toward its last), so a launch point
+            // off the thrower's cell centre (the hand) passing by that centre is not counted as a step back
+            Vector2 dir = new Vector2(fzArc[fzArc.Count - 1].x - fzArc[0].x, fzArc[fzArc.Count - 1].z - fzArc[0].z);
+            dir = dir.sqrMagnitude > 1e-6f ? dir.normalized : Vector2.zero;
             for (int i = 1; i < fzArc.Count; i++)
             {
                 step = Mathf.Max(step, Mathf.Abs(fzArc[i].y - fzArc[i - 1].y));
-                float d1 = new Vector2(fzArc[i].x - g0.x, fzArc[i].z - g0.z).magnitude, d0 = new Vector2(fzArc[i - 1].x - g0.x, fzArc[i - 1].z - g0.z).magnitude;
-                back = Mathf.Max(back, d0 - d1);
+                float along = Vector2.Dot(new Vector2(fzArc[i].x - fzArc[i - 1].x, fzArc[i].z - fzArc[i - 1].z), dir);
+                back = Mathf.Max(back, -along);
             }
             float startD = new Vector2(fzArc[0].x - g0.x, fzArc[0].z - g0.z).magnitude;
             Vector3 last = fzArc[fzArc.Count - 1];
