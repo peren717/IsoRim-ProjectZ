@@ -28,4 +28,10 @@
     <defaultKeyCodeA>LeftShift</defaultKeyCodeA>
   </KeyBindingDef>
 
+  <KeyBindingDef>
+    <defName>PZ_PeekUpper</defName>
+    <label>peek upper floors (hold)</label>
+    <category>ProjectZ</category>
+  </KeyBindingDef>
+
 </Defs>

@@ -70,6 +70,8 @@ namespace ProjectZ.Dev
     //                                   talltower: sun shadows of a 3-storey tower built by colonists (3x the one-storey
     //                                   block), the joints between storeys, hidden floors, walls taken down; run with
     //                                   -projectzfloors=3 (TestTallTower; tools: tallshadow.ps1)
+    //                                   peek: the peek key (ProjectZ) fades the upper floors through IsoRim API 7, pointer
+    //                                   unchanged, IsoRim lists no key; run with -projectzfloors=3 (TestPeek)
     //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
     //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
@@ -793,6 +795,11 @@ namespace ProjectZ.Dev
                 StepWorldFloors(map);
                 return;
             }
+            if (stage.StartsWith("pk_"))
+            {
+                StepPeek(map);
+                return;
+            }
             if (stage.StartsWith("h_"))
             {
                 StepTallTower(map);
@@ -1007,6 +1014,10 @@ namespace ProjectZ.Dev
                     else if (mode == "bugs4")
                     {
                         stage = "y_setup";
+                    }
+                    else if (mode == "peek")
+                    {
+                        stage = "pk_setup";
                     }
                     else if (mode == "talltower")
                     {

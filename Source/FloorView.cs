@@ -13,6 +13,7 @@ namespace ProjectZ
         public static KeyBindingDef PZ_FloorUp;
         public static KeyBindingDef PZ_FloorDown;
         public static KeyBindingDef PZ_FloorScrollHold;
+        public static KeyBindingDef PZ_PeekUpper;
 
         static PZKeyDefOf()
         {
