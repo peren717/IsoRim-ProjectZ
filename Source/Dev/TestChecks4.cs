@@ -6,6 +6,7 @@ using RimWorld;
 using UnityEngine;
 using Verse;
 using Verse.AI;
+using ProjectZ.Patches;
 
 namespace ProjectZ.Dev
 {
@@ -19,7 +20,9 @@ namespace ProjectZ.Dev
     //      (the menu follows the verb's can-hit, Los3D).
     //   F  Odyssey floods: a seasonal flood (river cells, a river fixture at the ground's north edge) and a torrential-rain
     //      flood (a pond fixture at the north edge): seeds only on the ground, and no flood water ever above the ground
-    //      (void rows, open air, slabs, rock tops), while the water does reach the ground's north row.
+    //      (void rows, open air, slabs, rock tops), while the water does reach the ground's north row (the ground spread
+    //      rule, GroundSpreadPatches). The flood's checks accept the same terrain on a ground cell and refuse it on a band
+    //      and a void cell (vanilla's own checks accept all three), and the hook runs during the real spread (not inlined).
     public static partial class TestRunner
     {
         private static CellRect k4S, k4S2, k4A, k4B;
@@ -33,6 +36,7 @@ namespace ProjectZ.Dev
         private static Thing k4Flood;
         private static int k4FirstLeak, k4WatchTicks, k4FloodStart;
         private static string k4FloodName;
+        private static int k4FloodCalls;
         private static CellRect k4River, k4Pond, k4FloorStrip;
 
         private static IntVec3 K4Up(IntVec3 g, Map map) => ProjectZ.CellOnFloor(g, 1, map);
@@ -453,6 +457,16 @@ namespace ProjectZ.Dev
                     bool fired = def != null && def.Worker.TryExecute(parms);
                     k4Flood = map.listerThings.ThingsOfDef(ThingDefOf.SeasonalFlood).FirstOrDefault();
                     K4FloodStart(map, "seasonal", $"incident can fire now {canFire}, fired {fired}");
+                    if (k4Flood != null)
+                    {
+                        // a cleared ground cell of the fixture area (no water, nothing built), the cell over it on floor 2, a void cell
+                        IntVec3 fg = new IntVec3(36, 0, a.groundZ - 10);
+                        System.Reflection.MethodInfo pot = AccessTools.Method(typeof(Flood), "CanFloodPotentiallySpreadInto");
+                        System.Reflection.MethodInfo can = AccessTools.Method(typeof(Flood), "CanFloodSpreadInto");
+                        GsGate(map, "F Flood.CanFloodPotentiallySpreadInto", DefDatabase<TerrainDef>.GetNamed("Soil"), fg, K4Up(fg, map), new IntVec3(36, 0, a.groundZ + 1), c => (bool)pot.Invoke(k4Flood, new object[] { c }));
+                        GsGate(map, "F Flood.CanFloodSpreadInto", DefDatabase<TerrainDef>.GetNamed("Soil"), fg, K4Up(fg, map), new IntVec3(36, 0, a.groundZ + 1), c => (bool)can.Invoke(k4Flood, new object[] { c }));
+                    }
+                    k4FloodCalls = GroundSpread.FloodCalls;
                     TickUntil(150000, () => K4FloodWatch(map), "k4_f1_check", 250);
                     return true;
                 }
@@ -491,6 +505,7 @@ namespace ProjectZ.Dev
                     Traverse.Create(map.weatherDecider).Field("curWeatherDuration").SetValue(10000000);
                     k4Flood = map.listerThings.ThingsOfDef(ThingDefOf.TorrentialRainFlood).FirstOrDefault();
                     K4FloodStart(map, "torrential rain", $"weather {map.weatherManager.curWeather?.defName}, pond fresh water body {map.waterBodyTracker?.Bodies?.Count(b => b.cells.Contains(k4Pond.CenterCell))}");
+                    k4FloodCalls = GroundSpread.FloodCalls;
                     TickUntil(150000, () => K4FloodWatch(map), "k4_f2_check", 250);
                     return true;
                 }
@@ -641,6 +656,7 @@ namespace ProjectZ.Dev
             Info($"{name}: after {k4WatchTicks} ticks (flood {(k4Flood == null ? "none" : k4Flood.Destroyed ? "destroyed" : "running")}, outdoor temp {map.mapTemperature.OutdoorTemp:0.0}): {ground} ground cells flooded, {north} in the ground's north row; first water above the ground after {(k4FirstLeak < 0 ? "never" : k4FirstLeak + " ticks")}");
             Result($"{name}: the water reaches the ground's north row (the test sees the edge)", north > 0, $"{north} north-row cells flooded");
             Result($"{name}: no flood water above the ground (void rows, open air, slabs, rock tops)", n == 0, detail);
+            GsRan(name, GroundSpread.FloodCalls - k4FloodCalls);
         }
 
         private static int K4ClearFlood(Map map)

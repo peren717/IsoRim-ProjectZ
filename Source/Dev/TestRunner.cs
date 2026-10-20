@@ -322,6 +322,10 @@ namespace ProjectZ.Dev
             {
                 K4Patch(h);
             }
+            if (mode == "checks4b")
+            {
+                K4bPatch(h);
+            }
             if (mode == "range")
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GuardPrefix)));
