@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
 using Verse;
+using Verse.AI;
 
 namespace ProjectZ
 {
@@ -86,6 +87,14 @@ namespace ProjectZ
                     t.Destroy(DestroyMode.Vanish);
                 }
             }
+            // 2b. pawns on U step to a neighbour on the same level (user 2026-10-19); with none free they fall (step 6)
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (i < list.Count && list[i] is Pawn p)
+                {
+                    StepAside(p, u, map);
+                }
+            }
             // 3. the boundary (TerrainChanged_FloorRoof_Patch: FloorRoof.Changed(U) puts C's roof by the shaft rule)
             map.terrainGrid.SetTerrain(u, PZDefOf.PZ_OpenAir);
             // 4. C's roof (again: also when the terrain hook found nothing to change)
@@ -108,6 +117,75 @@ namespace ProjectZ
             LastOpenMs = sw.Elapsed.TotalMilliseconds;
             MaxOpenMs = System.Math.Max(MaxOpenMs, LastOpenMs);
             ProjectZ.DebugLog($"shaft opened over {c} (U {u}): roof {map.roofGrid.RoofAt(c)?.defName ?? "none"}, U roof {map.roofGrid.RoofAt(u)?.defName ?? "none"}, {LastOpenMs:0.00} ms");
+        }
+
+        public static int SteppedAside;
+
+        private static readonly AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> peModeRef = AccessTools.FieldRefAccess<Pawn_PathFollower, PathEndMode>("peMode");
+
+        // A pawn on a top that opens steps to the free neighbour (8-way, same level, not open air or about to open) nearest
+        // where it was heading (its path, else its job's cell on this level), else nearest its spot. Its job goes on.
+        private static void StepAside(Pawn p, IntVec3 u, Map map)
+        {
+            IntVec3 goal = IntVec3.Invalid;
+            if (p.pather != null && p.pather.Moving && p.pather.Destination.IsValid)
+            {
+                goal = p.pather.Destination.Cell;
+            }
+            else if (p.CurJob != null)
+            {
+                foreach (TargetIndex ti in new[] { TargetIndex.C, TargetIndex.B, TargetIndex.A })
+                {
+                    LocalTargetInfo t = p.CurJob.GetTarget(ti);
+                    if (t.IsValid && t.Cell != u && t.Cell.InBounds(map) && ProjectZ.SameBand(t.Cell, u, map))
+                    {
+                        goal = t.Cell;
+                        break;
+                    }
+                }
+            }
+            IntVec3 best = IntVec3.Invalid;
+            int bestScore = int.MaxValue;
+            for (int i = 0; i < 8; i++)
+            {
+                IntVec3 n = u + GenAdj.AdjacentCells[i];
+                if (!n.InBounds(map) || !ProjectZ.SameBand(n, u, map) || Gravity.Air(n, map) || !n.Standable(map) || AboutToOpen(n, map))
+                {
+                    continue;
+                }
+                int score = (n - u).LengthHorizontalSquared + (goal.IsValid && goal.InBounds(map) && ProjectZ.SameBand(goal, u, map) ? 10 * (n - goal).LengthHorizontalSquared : 0);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    best = n;
+                }
+            }
+            if (!best.IsValid)
+            {
+                return;
+            }
+            bool moving = p.pather != null && p.pather.Moving;
+            LocalTargetInfo dest = moving ? p.pather.Destination : LocalTargetInfo.Invalid;
+            PathEndMode pe = moving ? peModeRef(p.pather) : PathEndMode.None;
+            p.Position = best;
+            p.Notify_Teleported(endCurrentJob: false, resetTweenedPos: false);
+            if (moving && dest.IsValid && p.Spawned)
+            {
+                p.pather.StartPath(dest, pe);   // (the teleport stops the pather: on its way again)
+            }
+            SteppedAside++;
+            ProjectZ.DebugLog($"{p} stepped aside from opening top {u} to {best}");
+        }
+
+        // A cell whose own top is set to open: marked Mine below, or a Remove roof hole under it.
+        private static bool AboutToOpen(IntVec3 n, Map map)
+        {
+            if (MineSide.MarkAt(n, map, MineDir.FromAbove))
+            {
+                return true;
+            }
+            IntVec3 b = FloorRoof.Below(n, map);
+            return b.IsValid && b.InBounds(map) && map.areaManager.NoRoof[b] && Hole.CanOpen(b, map);
         }
     }
 
