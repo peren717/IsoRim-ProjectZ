@@ -14,14 +14,11 @@ namespace ProjectZ.Dev
     // stairs face west with their exits over the west wall (one-cell floor islands, as the dead-end stairs above); the
     // good stairs face north at the east end onto D. One colonist does cleaning only:
     //   r_a   a filth on D walled in on its floor (no way there at all): not reachable, no job, the router answers fast;
-    //   r_fog a filth on the ground in a walled pocket under a hole in D, its landing cell fogged: reachable only by a
-    //         jump into fog, so not for the player's pawns (StairRegions.FogBlocks): no job, the router answers fast;
-    //         the landing revealed: reachable, the colonist jumps in and cleans it;
-    //   r_cap a filth on D, the colonist outside H2's west wall: the three decoy stairs are the router's three best
-    //         candidates (straight-line order) and all lead nowhere, the good one ranks 4th: the old router (cut at 3
-    //         per step) found no path while reachability said yes, so the job came back for ever; now the region-graph
-    //         fallback takes the good stairs and the filth is cleaned, with no job ended for want of a path.
-    //   -projectzoldroute shows the old router failing r_cap.
+    //   r_fog a filth on the ground in a walled pocket under a hole in D, its landing cell fogged: before 2026-10-19 only a
+    //         jump got in; with no jumps nothing does: not reachable, no job, the router answers fast, fogged or revealed;
+    //         (rewritten for the jump removal: it used to expect the jump in once the landing was revealed)
+    //   r_cap a filth on D, the colonist outside H2's west wall: the three decoy stairs come first in straight-line order
+    //         and all lead nowhere, the good one ranks 4th: the router (A* over the stairs' ends) takes the good stairs.
     public static partial class TestRunner
     {
         private static int cOx, cOz;
@@ -99,28 +96,27 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     bool reach = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
                     (double ms, bool found) = CTimedPath(map, cFilth);
-                    Result("routes: a place reachable only by a jump into fog is not reachable for the player's pawns, never given as a job, and the router says no at once",
+                    Result("routes: a pocket under a hole (only a jump would get in: no jumps since 2026-10-19), landing fogged: not reachable, never given as a job, the router says no at once",
                         !reach && !found && !cJobSeen && !cFilth.Destroyed && ms < 5,
                         $"reach {reach}, path {found} in {ms:0.00} ms, job seen {cJobSeen}, filth left {!cFilth.Destroyed}; {CStats()}");
                     map.fogGrid.Unfog(cA);
                     bool reach2 = cPawn.CanReach(cFilth, PathEndMode.Touch, Danger.Deadly);
-                    Result("routes: the landing revealed, the place is reachable", reach2 && !cA.Fogged(map), $"reach {reach2}, landing fogged {cA.Fogged(map)}");
+                    Result("routes: the landing revealed, the pocket is still not reachable (fog never decided it)", !reach2 && !cA.Fogged(map), $"reach {reach2}, landing fogged {cA.Fogged(map)}");
                     CMark();
-                    TickUntil(8000, () => cFilth.Destroyed, "k_r_fog_clean", 60);
+                    TickUntil(1500, () => (cJobSeen |= CJobOn(cFilth)) && false, "k_r_fog_clean", 30);
                     return true;
                 }
                 case "k_r_fog_clean":
                 {
                     tickWatch = null;
-                    Result("routes: revealed, the colonist jumps into the pocket and cleans the filth", cFilth.Destroyed && PZStats.jumps > cJumpsAt,
-                        $"cleaned {cFilth.Destroyed} after {ticksTotal} ticks, colonist at {cPawn.Position}; {CStats()}");
+                    Result("routes: revealed, still no job for the pocket's filth, nobody went in (no jump), no job ended for want of a path", !cFilth.Destroyed && !cJobSeen && PZStats.jumps == cJumpsAt && kPatherFails == cFailsAt,
+                        $"filth left {!cFilth.Destroyed} after {ticksTotal} ticks, job seen {cJobSeen}, colonist at {cPawn.Position}; {CStats()}");
                     // r_cap: out of the pocket, west of H2 (the pocket filth gone either way, so it does not draw the cleaner)
                     if (!cFilth.Destroyed)
                     {
                         cFilth.Destroy();
                     }
-                    // the pocket is a trap once revealed (jumps lead in, nothing out): close the hole, and out with
-                    // whoever is in it (the cleaner, an animal that wandered in), so nobody walks off toward it
+                    // the hole is closed again (a fixture for the next case only), and out with anything that is in the pocket
                     map.terrainGrid.SetTerrain(UpS(cA, map), PZDefOf.PZ_UpperFloor);
                     map.roofGrid.SetRoof(cA, RoofDefOf.RoofConstructed);
                     foreach (Pawn p in map.mapPawns.AllPawnsSpawned.Where(p => p.Position == cA || p.Position == cB).ToList())

@@ -133,7 +133,7 @@ namespace ProjectZ
             }
             FloorHeat.Dirty();
             SlabPeel.Dirty(map);
-            JumpGrid.For(map)?.Dirty();
+            ReachFog.Request(map);
             map.reachability?.ClearCache();
             // The upper decks' cells turned to open air (walkability changed: vanilla's path-cost pass dirtied their
             // regions). Rebuild now: vanilla's vacuum rebuild right after a take-off (a map with a grav anchor) walks

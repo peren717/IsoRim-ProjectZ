@@ -9,14 +9,14 @@ namespace ProjectZ
 {
     // THE fog rule on maps with floors (user 2026-10-19, final): every place the player's pawns can reach is revealed.
     // Reach is walking and stairs, both ways, as in vanilla: vanilla's regions and their links plus ProjectZ's stairs
-    // links (StairRegions.LinkRegions, the pathing graph's own test). Voluntary jumps are not reach (switch Jumps, off).
+    // links (StairRegions.LinkRegions, the pathing graph's own test). There are no voluntary jumps (removed 2026-10-19).
     // One more connection, for the reveal only (never for pathing): an open hole joins the spaces it opens into, like
     // vanilla mining into a cave (d929578's hole rule, folded in): the space round the hole's top U leads down to where a
     // fall through it lands (Column.Landing); and back up only when U is covered (a shaft inside the mountain: the cave a
     // hole was mined up into); a hole to the sky shows only U and the rock round it, never the plateau round it.
     // The walk starts from the regions of the player's pawns (vanilla's own set: Pawn.SpawnSetup's unfog, the player's
     // faction or player controlled) and has two rules of its own:
-    //   - fog is no obstacle (pathing keeps the player's pawns out of fog over floor links, StairRegions.FogBlocks; a
+    //   - fog is no obstacle (vanilla: fog only adds path cost; a
     //     reveal that minded it could never reveal anything);
     //   - a closed door stops it (vanilla: the room behind a door opens when a pawn opens the door).
     // Terrain only: no allowed areas, danger or forbidden doors.
@@ -26,7 +26,7 @@ namespace ProjectZ
     // with the rock round it (one cell per level, never a flood). Nothing that is not reached opens: a plateau or terrace
     // only a jump or a climb gets to, a cave sealed by rock, a room behind a closed door.
     // Runs batched (at most once a frame, only when asked) after: regions rebuilt (rock mined, holes, floors, walls,
-    // doors built), floor links changed (stairs built or gone, a column's roofs: JumpGrid.Dirty), a player pawn opening
+    // doors built), floor links changed (stairs built or gone, a column's roofs: JumpGrid.ColumnChanged), a player pawn opening
     // a door into fog, a player pawn spawned or teleported, and once after load or generation (existing holes too).
     // Regions found clear (no fog in them, round them or above them) are remembered by id (fog only goes, except a
     // refog, which forgets them all), so a run after the first only walks the region graph.
@@ -41,8 +41,6 @@ namespace ProjectZ
         // test only (-projectznoreachfog): the rule never runs, to show the old fog
         public static bool Off;
 
-        // Voluntary jumps down count as reach (JumpGrid links). Off: the user removed them from reach (2026-10-19).
-        public static bool Jumps;
 
         public static bool PlayerPawn(Pawn p) => p != null && (p.Faction == Faction.OfPlayer || p.IsPlayerControlled);
 
@@ -186,7 +184,6 @@ namespace ProjectZ
                     }
                 }
                 HoleLinks(map, rg);
-                JumpGrid jg = Jumps ? JumpGrid.For(map) : null;
                 IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
                 for (int i = 0; i < pawns.Count; i++)
                 {
@@ -213,14 +210,6 @@ namespace ProjectZ
                         for (int i = 0; i < up.Count; i++)
                         {
                             Visit(up[i]);
-                        }
-                    }
-                    if (jg != null)
-                    {
-                        List<Jump> jumps = jg.Down(r);
-                        for (int i = 0; i < jumps.Count; i++)
-                        {
-                            Visit(jumps[i].to);
                         }
                     }
                 }
@@ -358,6 +347,8 @@ namespace ProjectZ
                 listening = true;
                 map.events.CellFogChanged += FogChanged;
                 map.events.MapFogged += Forget;
+                // (regions rebuilt: rock mined, holes, floors, walls and doors built; was JumpGrid.Dirty's job)
+                map.events.RegionsRoomsChanged += Ask;
             }
         }
 

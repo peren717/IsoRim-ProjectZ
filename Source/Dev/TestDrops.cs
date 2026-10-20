@@ -19,7 +19,7 @@ namespace ProjectZ.Dev
     //   A2 a centre-drop raid with every colonist in R2: pods land inside R2 (its thin roof punched), the slab stays.
     //   A3 a centre-drop raid with every colonist in H's ground room (under the slab): no pod lands under a slab.
     //   A4 a scattered (random) drop raid: pods land on the platform too; the raiders who landed upstairs come down
-    //      (stairs or jumps) while assaulting, then all retreat off the map (exit lord); none stuck.
+    //      by the stairs (no jumps since 2026-10-19) while assaulting, then all retreat off the map (exit lord); none stuck.
     public static partial class TestRunner
     {
         private static IntVec3 aO, aStairsP, aStairsH;
@@ -280,7 +280,7 @@ namespace ProjectZ.Dev
                 case "a_assault":
                 {
                     int gone = aUpIds.Count(id => Gone(map, id));
-                    Result("raiders who landed on floor 2 come down to the ground while assaulting (stairs or jumps)", aUpIds.Count > 0 && aDownIds.Count + gone == aUpIds.Count && aDownIds.Count > 0,
+                    Result("raiders who landed on floor 2 come down to the ground while assaulting (by the stairs: no jumps)", aUpIds.Count > 0 && aDownIds.Count + gone == aUpIds.Count && aDownIds.Count > 0,
                         $"{aUpIds.Count} landed upstairs: reached the ground {aDownIds.Count}, dead/downed/gone {gone}; {Counts()}; still upstairs {string.Join(", ", aUpIds.Where(id => !aDownIds.Contains(id) && !Gone(map, id)).Select(id => AWhere(map, id)))}");
                     // retreat: each raid lord goes to its own exit toil (what its give-up and losses triggers do)
                     List<Pawn> raiders = map.mapPawns.AllPawnsSpawned.Where(p => AScatter(p) && !p.Downed && !p.Dead).ToList();

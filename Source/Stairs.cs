@@ -127,6 +127,7 @@ namespace ProjectZ
         private void Changed()
         {
             map.reachability?.ClearCache();
+            Patches.RouteGraph.For(map)?.StairsChanged();
             SlabPeel.Dirty(map);
             ReachFog.Request(map);
             ProjectZ.DebugLog($"stairs on {map}: {links.Count} link(s)");
@@ -146,16 +147,19 @@ namespace ProjectZ
             return false;
         }
 
-        // A link is usable when both ends can be stood on.
+        // A link is usable when the stairs stand and the ramp and both ends can be stood on (RouteGraph.Usable: the same).
         public bool Usable(StairLink l)
         {
-            return l.stairs != null && l.stairs.Spawned && l.top.InBounds(map) && l.top.Walkable(map) && l.bottom.Walkable(map);
+            if (l.stairs == null || !l.stairs.Spawned || !l.top.InBounds(map) || !l.top.Walkable(map) || !l.bottom.Walkable(map))
+            {
+                return false;
+            }
+            IntVec3 low = l.stairs.Position - l.stairs.Rotation.FacingCell;
+            return low.InBounds(map) && low.Walkable(map) && l.stairs.Position.Walkable(map);
         }
 
-        // THE link test for a traveller: usable, and both ends let it in as the game's region search would (a door it
-        // can't or may not open, a fence, danger: Region.Allows). Reachability (StairRegions.Partners + its region
-        // entry test) and the path splicer (StairRouter.StairStep) agree through this, so a blocked exit means "can't
-        // reach" and a re-path, never a path the follower can't walk.
+        // The link test for a traveller (RouteGraph.Passable: the same): usable, and its cells' regions let it in as the
+        // game's region search would (a door it can't or may not open, a fence, danger: Region.Allows).
         public bool Passable(StairLink l, TraverseParms tp)
         {
             if (!Usable(l))
@@ -164,7 +168,8 @@ namespace ProjectZ
             }
             Region t = map.regionGrid.GetValidRegionAt_NoRebuild(l.top);
             Region b = map.regionGrid.GetValidRegionAt_NoRebuild(l.bottom);
-            return t != null && b != null && t.Allows(tp, isDestination: false) && b.Allows(tp, isDestination: false);
+            Region lo = map.regionGrid.GetValidRegionAt_NoRebuild(l.stairs.Position - l.stairs.Rotation.FacingCell);
+            return t != null && b != null && lo != null && t.Allows(tp, isDestination: false) && b.Allows(tp, isDestination: false) && lo.Allows(tp, isDestination: false);
         }
     }
 
@@ -355,9 +360,6 @@ namespace ProjectZ
             {
                 return;
             }
-            // (a stairs building site is no landing for jumps: those changed too)
-            JumpGrid.For(map)?.Dirty();
-            map.reachability?.ClearCache();
             foreach (IntVec3 c in rect)
             {
                 if (!c.InBounds(map))

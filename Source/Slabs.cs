@@ -818,6 +818,19 @@ namespace ProjectZ
                     JobFailReason.Is("PZ_FartherFirst".Translate());
                 }
                 __result = false;
+                return;
+            }
+            // K2: the floor of a stairs exit, when taking it up cuts the floor above off from the map edge (the worker
+            // stands up there, one step nearer other stairs: SlabPeel.Parent)
+            if (__result && Slab.At(c, pawn.Map) && StairGrid.For(pawn.Map) != null)
+            {
+                Patches.RouteGraph g = Patches.RouteGraph.For(pawn.Map);
+                int link = g?.LinkOfTop(c) ?? -1;
+                if (link >= 0 && g.CutSide(link) > 0)
+                {
+                    JobFailReason.Is("PZ_WouldCutOff".Translate());
+                    __result = false;
+                }
             }
         }
     }

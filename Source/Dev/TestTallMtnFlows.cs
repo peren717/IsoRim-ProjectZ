@@ -19,7 +19,7 @@ namespace ProjectZ.Dev
     //      natural rock floor (R40), the thick roof above stays, the face behind is revealed as vanilla;
     //   F4 vanilla collapse under a rock floor: a 15x15 block of band rock taken away, CollapsedRocks fall, the thick
     //      roof and the floor above stay;
-    //   F5 a colonist on a level-2 top ordered down to the level-1 top below jumps off the cliff (no stairs there);
+    //   F5 a colonist on a level-2 top ordered down to the level-1 top below with no stairs there never jumps (no jumps since 2026-10-19);
     //   F6 a jump pack jump from the ground onto a level-1 top; a rock cell is refused;
     //   F7 sight never through rock (every sampled line through a rock column is blocked), a grenade-size explosion at
     //      the foot of a cliff leaves an animal behind the rim unhurt, a mortar shell aimed at mountain ground explodes
@@ -257,9 +257,12 @@ namespace ProjectZ.Dev
                     return true;
                 case "tm_f_jumped":
                 {
-                    bool ok = tfJumper.Spawned && tfJumper.Position == tfJumpTo;
-                    Result("F5 a colonist on a level-2 top ordered to the level-1 top below jumps off the cliff (no stairs there)", ok && PZStats.jumps > tfJumpsBefore,
-                        $"{tfJumper} at {tfJumper.Position} (level {ProjectZ.FloorOf(tfJumper.Position, map)}), target {tfJumpTo}; jumps {PZStats.jumps - tfJumpsBefore}");
+                    // (no voluntary jumps since 2026-10-19: with no stairs from that top down there the colonist stays up; where
+                    // stairs built earlier join the two tops it may walk round by them; it never jumps)
+                    int lv = ProjectZ.FloorOf(tfJumper.Position, map);
+                    bool ok = tfJumper.Spawned && PZStats.jumps == tfJumpsBefore && (lv == 2 || tfJumper.Position == tfJumpTo);
+                    Result("F5 a colonist on a level-2 top ordered to the level-1 top below (no stairs there) never jumps off the cliff: it stays up (or walks round by stairs)", ok,
+                        $"{tfJumper} at {tfJumper.Position} (level {lv}), target {tfJumpTo}; jumps {PZStats.jumps - tfJumpsBefore}");
                     stage = "tm_f_pack";
                     return true;
                 }
@@ -552,7 +555,7 @@ namespace ProjectZ.Dev
             tfJumpsBefore = PZStats.jumps;
             tfJumper.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, tfJumpTo), JobTag.Misc);
             Info($"F5 {tfJumper} on {tfJumpFrom} (level 2) ordered to {tfJumpTo} (level 1)");
-            TickUntil(3000, () => tfJumper.Position == tfJumpTo, "tm_f_jumped", 15);
+            TickUntil(1200, () => tfJumper.Position == tfJumpTo, "tm_f_jumped", 15);
         }
 
         // ---------------------------------------------------------------- F6

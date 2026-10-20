@@ -5,119 +5,41 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using Verse;
+using Verse.AI;
 
 namespace ProjectZ.Patches
 {
-    // Links between floors in the region graph (design §2.4 B step 2, §8.4; stairs-jump design §3): at QUERY time the
-    // region of a stair's high end and the region of its exit count as neighbours (both ways), and the region of a cell a
-    // pawn can jump down from leads to the landing's region (one way only, JumpGrid). Nothing is written into
-    // region.links, so districts, rooms and temperature stay per floor: the two floods that build districts
-    // (FloodAndSetDistricts, FloodAndSetNewRegionIndex) see no links at all.
+    // Reachability between floors (isorim-pz-pathing-redesign.md: "the same graph and the same rules as the paths").
+    // Floors are joined by stairs only, both ways (no jumps: user 2026-10-19). Nothing is written into region.links, so
+    // districts, rooms and temperature stay per floor: the two floods that build districts see no stairs at all.
+    //   - Reachability.CheckRegionBasedReachability on a map with floors (the game has already picked its start and
+    //     destination regions and asked its cache): the parts' components first (different components: no, at once);
+    //     then the game's own search on the floor when start and destination share a part; then the stairs' ends
+    //     (RouteGraph.StairReach), each floor question asked of the floor-only instance (Reach2).
+    //   - The game's region searches (GenClosest, job scans, flee and exit searches ...): each dequeued region's stair
+    //     partners are queued like linked neighbours (BFSWorker_Patch).
+    //   - Traversal modes that break walls, between floors: their dig parts' components (CheckCellBasedReachability).
+    // Fog is no obstacle to reach (vanilla: fog only adds path cost, avoidFog).
     internal static class StairRegions
     {
-        // > 0 while districts are being built, or while a search must stay on one floor (no links then).
+        // > 0 while districts are being built, or while a search must stay on one floor (no stairs then).
         [ThreadStatic]
         internal static int suppress;
 
-        // The regions one step away from 'region' over stairs (either way) and jumps (down only); null for most regions.
-        // fogBlocked: no link into a fogged cell (FogBlocks).
-        internal static List<Region> Partners(Region region, Map map, bool fogBlocked)
+        // The regions one stair step away from 'region' (either way); null for most regions.
+        internal static List<Region> Partners(Region region, Map map)
         {
-            List<FloorLink> found = scratch ??= new List<FloorLink>();
-            found.Clear();
-            Links(region, map, withJumps: true, fogBlocked, found);
-            List<Region> into = null;
-            for (int i = 0; i < found.Count; i++)
-            {
-                Region to = found[i].to;
-                if (found[i].stair >= 0 || into == null || !into.Contains(to))
-                {
-                    (into ??= new List<Region>()).Add(to);
-                }
-            }
-            found.Clear();
-            return into;
+            return RouteGraph.For(map)?.PartnersOf(region);
         }
 
-        [ThreadStatic]
-        private static List<FloorLink> scratch;
-
-        // One link out of a region to another floor: a stairs link (index into StairGrid.links; jump -1) or a jump
-        // (index into JumpGrid.Down(from region); stair -1).
-        internal struct FloorLink
-        {
-            public Region to;
-            public int stair;
-            public int jump;
-        }
-
-        // Fog: the player's pawns never go into fog over a floor link (vanilla never lets them be sent into fog: work
-        // givers skip fogged things, orders can't target fog, and on the ground fog sits behind rock; a stairs exit or a
-        // jump landing would be a way in). Others (raiders, animals, visitors) go as in vanilla, where fog is no
-        // obstacle. A search with a pawn: that pawn's faction (fixed per pawn, so the reachability cache, keyed by pawn,
-        // stays right whether it is drafted or not); without a pawn: the query's own fog flag (TraverseParms.avoidFog,
-        // vanilla's fogBlocked); a region search whose traveller is unknown (the BFS hook): blocked.
-        internal static bool FogBlocks(TraverseParms tp)
-        {
-            return tp.pawn != null ? tp.pawn.Faction != null && tp.pawn.Faction.IsPlayer : tp.avoidFog;
-        }
-
-        // The stairs link, taken up (onto its exit) or down (onto its high end), enters fog.
-        internal static bool IntoFog(StairLink l, bool up, Map map) => (up ? l.top : l.bottom).Fogged(map);
-
-        internal static bool IntoFog(Jump j, Map map) => j.land.Fogged(map);
-
-        // THE rule for which links join floors, shared by reachability (Partners: stairs and jumps) and the path router
-        // (StairRouter: its candidates and RegionRoute, stairs only in the first pass): each usable stairs link touching
-        // 'region' (either way), then, withJumps, each jump down out of it; with fogBlocked none that enters fog. The
-        // traveller's own test (Region.Allows: doors, fences, danger) is the caller's entry test, as in the game's
-        // region searches.
-        internal static void Links(Region region, Map map, bool withJumps, bool fogBlocked, List<FloorLink> into)
-        {
-            StairGrid g = StairGrid.For(map);
-            if (g != null)
-            {
-                RegionGrid rg = map.regionGrid;
-                List<StairLink> links = g.links;
-                for (int i = 0; i < links.Count; i++)
-                {
-                    StairLink l = links[i];
-                    if (!LinkRegions(g, l, rg, out Region b, out Region t))
-                    {
-                        continue;
-                    }
-                    if (b == region && !(fogBlocked && IntoFog(l, true, map)))
-                    {
-                        into.Add(new FloorLink { to = t, stair = i, jump = -1 });
-                    }
-                    else if (t == region && !(fogBlocked && IntoFog(l, false, map)))
-                    {
-                        into.Add(new FloorLink { to = b, stair = i, jump = -1 });
-                    }
-                }
-            }
-            JumpGrid jg = withJumps ? JumpGrid.For(map) : null;
-            if (jg != null)
-            {
-                List<Jump> jumps = jg.Down(region);
-                for (int i = 0; i < jumps.Count; i++)
-                {
-                    if (jumps[i].to.valid && !(fogBlocked && IntoFog(jumps[i], map)))
-                    {
-                        into.Add(new FloorLink { to = jumps[i].to, stair = -1, jump = i });
-                    }
-                }
-            }
-        }
-
-        // The regions a usable stairs link joins (bottom b, top t; false when unusable or one region): Links' per-link
-        // test, also read by the reveal walk (ReachFog), so both see the same stairs.
+        // The regions a usable stairs link joins (bottom b = H's, top t = E's; false when unusable or one region), read by
+        // the reveal walk (ReachFog), so both see the same stairs.
         internal static bool LinkRegions(StairGrid g, StairLink l, RegionGrid rg, out Region b, out Region t)
         {
             b = t = null;
             if (!Dev.TestRunner.NoExitFix && !g.Usable(l))
             {
-                return false;   // (the traveller's own test, Region.Allows, is the search's entry test: StairGrid.Passable)
+                return false;
             }
             b = rg.GetValidRegionAt_NoRebuild(l.bottom);
             t = rg.GetValidRegionAt_NoRebuild(l.top);
@@ -154,10 +76,7 @@ namespace ProjectZ.Patches
     }
 
     // Region breadth-first searches (GenClosest, job scans, flee and exit searches, CanReach's helpers ...): right after
-    // a region is taken from the open queue, its stair and jump partners are queued like linked neighbours (same entry
-    // test, J2). A search starting upstairs so reaches the ground over a jump; one starting on the ground never goes up
-    // without stairs. These searches do not know their traveller, so no partner here enters fog (StairRegions.FogBlocks:
-    // the stricter rule; reachability itself applies it per traveller).
+    // a region is taken from the open queue, its stair partners are queued like linked neighbours (same entry test, J2).
     [HarmonyPatch]
     public static class BFSWorker_Patch
     {
@@ -200,7 +119,7 @@ namespace ProjectZ.Patches
             }
             if (done != 1)
             {
-                Log.Error("[ProjectZ] RegionTraverser.BFSWorker.BreadthFirstTraverseWork is not in the expected form: stairs and jumps are left out of region searches.");
+                Log.Error("[ProjectZ] RegionTraverser.BFSWorker.BreadthFirstTraverseWork is not in the expected form: stairs are left out of region searches.");
             }
             return list;
         }
@@ -216,7 +135,7 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            List<Region> partners = StairRegions.Partners(region, map, fogBlocked: true);
+            List<Region> partners = StairRegions.Partners(region, map);
             if (partners == null)
             {
                 return;
@@ -226,7 +145,7 @@ namespace ProjectZ.Patches
             for (int i = 0; i < partners.Count; i++)
             {
                 Region r = partners[i];
-                if (r.closedIndex[pos] != closed && (r.type & types) != RegionType.None && (entryCondition == null || entryCondition(region, r)))
+                if (r.valid && r.closedIndex[pos] != closed && (r.type & types) != RegionType.None && (entryCondition == null || entryCondition(region, r)))
                 {
                     queueM.Invoke(worker, new object[] { r });
                 }
@@ -234,11 +153,9 @@ namespace ProjectZ.Patches
         }
     }
 
-    // The reachability cache, one way (J3). The game's cache stores (district A, district B) sorted, so a result for
-    // A -> B also answers B -> A; with one-way jumps that is wrong (upstairs -> ground can be true while ground ->
-    // upstairs is false). On maps with floors the results of our own search go into the game's own dictionary under
-    // directed keys (from, to | 1 << 30: never equal to a sorted vanilla key), and only those are read. Every way the
-    // game clears its cache (all, per pawn, per hostile) clears these too.
+    // ProjectZ's own entries in the game's reachability cache, kept apart from the game's (directed keys: from, to |
+    // 1 << 30, never equal to a sorted vanilla key), so another mod's or the game's entries made without the stairs are
+    // never read for a question that needed them. Every way the game clears its cache clears these too.
     internal static class DirCache
     {
         private const int Directed = 1 << 30;
@@ -287,12 +204,12 @@ namespace ProjectZ.Patches
         // 1 true, 0 false, -1 unknown.
         internal static int Get(ReachabilityCache c, District from, District to, TraverseParms tp)
         {
-            return Ok ? get(c, from.ID, to.ID | Directed, tp) : -1;
+            return Ok && from != null && to != null ? get(c, from.ID, to.ID | Directed, tp) : -1;
         }
 
         internal static void Add(ReachabilityCache c, District from, District to, TraverseParms tp, bool reachable)
         {
-            if (Ok)
+            if (Ok && from != null && to != null)
             {
                 add(c, from.ID, to.ID | Directed, tp, reachable);
             }
@@ -307,6 +224,29 @@ namespace ProjectZ.Patches
         internal static readonly AccessTools.FieldRef<Reachability, List<Region>> DestRef = AccessTools.FieldRefAccess<Reachability, List<Region>>("destRegions");
         internal static readonly AccessTools.FieldRef<Reachability, uint> ReachedRef = AccessTools.FieldRefAccess<Reachability, uint>("reachedIndex");
         internal static readonly AccessTools.FieldRef<Reachability, ReachabilityCache> CacheRef = AccessTools.FieldRefAccess<Reachability, ReachabilityCache>("cache");
+        internal static readonly AccessTools.FieldRef<Reachability, bool> WorkingRef = AccessTools.FieldRefAccess<Reachability, bool>("working");
+    }
+
+    // The question being answered (CanReach's own arguments): the stairs search asks the floor-only instance the same
+    // question from each stairs end. Read at the start of the search (nested CanReach calls overwrite it).
+    internal static class ReachCtx
+    {
+        internal static IntVec3 start;
+        internal static LocalTargetInfo dest;
+        internal static PathEndMode mode;
+        internal static bool valid;
+    }
+
+    [HarmonyPatch(typeof(Reachability), nameof(Reachability.CanReach), new[] { typeof(IntVec3), typeof(LocalTargetInfo), typeof(PathEndMode), typeof(TraverseParms) })]
+    public static class CanReach_Ctx_Patch
+    {
+        public static void Prefix(IntVec3 start, LocalTargetInfo dest, PathEndMode peMode)
+        {
+            ReachCtx.start = start;
+            ReachCtx.dest = dest;
+            ReachCtx.mode = peMode;
+            ReachCtx.valid = true;
+        }
     }
 
     // Final say between floors (FinalSay) for the two reachability hooks: a check whose start and destination regions are
@@ -336,7 +276,8 @@ namespace ProjectZ.Patches
         private static int FloorOf(Region r, Map map) => ProjectZ.FloorOf(new IntVec3(r.extentsClose.minX, 0, r.extentsClose.minZ), map);
     }
 
-    // The cache read on maps with floors: the directed entries only.
+    // The cache read on maps with floors: ProjectZ's entries only; and "no route" remembered by the router (RouteGraph
+    // memo) answers no for that traveller meanwhile.
     [HarmonyPatch(typeof(Reachability), "GetCachedResult")]
     public static class GetCachedResult_Patch
     {
@@ -344,7 +285,7 @@ namespace ProjectZ.Patches
         public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result, out byte __state)
         {
             __state = FinalSay.Pass;
-            if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
+            if (RouteGraph.IsFloorOnly(__instance) || ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
             {
                 return true;
             }
@@ -360,7 +301,7 @@ namespace ProjectZ.Patches
         [HarmonyPriority(Priority.Last)]
         public static void Postfix(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result, byte __state)
         {
-            if (__state == FinalSay.NotRun && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
+            if (__state == FinalSay.NotRun && !RouteGraph.IsFloorOnly(__instance) && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
             {
                 // another mod's prefix skipped ours: read the cache here
                 FinalSay.PrefixSkipped++;
@@ -376,13 +317,21 @@ namespace ProjectZ.Patches
 
         private static bool Run(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result)
         {
-            if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
+            Map map = ReachRefs.MapRef(__instance);
+            RouteGraph g = RouteGraph.For(map);
+            if (g == null)
             {
                 return true;
             }
             DirCache.Init();
             List<Region> starts = ReachRefs.StartRef(__instance);
             List<Region> dests = ReachRefs.DestRef(__instance);
+            if (traverseParams.pawn != null && ReachCtx.valid && starts.Count > 0 && g.Memo(traverseParams.pawn, ReachCtx.dest.Cell, g.PartOf(starts[0])))
+            {
+                Dev.PZStats.routeMemoHits++;
+                __result = BoolUnknown.False;
+                return false;
+            }
             ReachabilityCache cache = ReachRefs.CacheRef(__instance);
             bool unknown = false;
             for (int i = 0; i < starts.Count; i++)
@@ -411,15 +360,14 @@ namespace ProjectZ.Patches
         }
     }
 
-    // Reachability.CheckRegionBasedReachability on maps with floors: the game's search plus each dequeued region's stair
-    // and jump partners, writing directed cache entries (J1).
+    // Reachability.CheckRegionBasedReachability on maps with floors (see StairRegions).
     [HarmonyPatch(typeof(Reachability), "CheckRegionBasedReachability")]
     public static class CheckRegionBasedReachability_Patch
     {
         public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref bool __result, out byte __state)
         {
             __state = FinalSay.Pass;
-            if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
+            if (RouteGraph.IsFloorOnly(__instance) || ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
             {
                 return true;
             }
@@ -437,7 +385,7 @@ namespace ProjectZ.Patches
         [HarmonyPriority(Priority.Last)]
         public static void Postfix(Reachability __instance, TraverseParms traverseParams, ref bool __result, byte __state)
         {
-            if (__state == FinalSay.NotRun && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
+            if (__state == FinalSay.NotRun && !RouteGraph.IsFloorOnly(__instance) && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
             {
                 FinalSay.PrefixSkipped++;
                 bool mine = false;
@@ -447,71 +395,216 @@ namespace ProjectZ.Patches
             FinalSay.Bool(__state, ref __result);
         }
 
-        private static bool Run(Reachability __instance, TraverseParms traverseParams, ref bool __result)
+        private static readonly HashSet<int> sParts = new HashSet<int>();
+        private static readonly HashSet<int> dParts = new HashSet<int>();
+
+        private static bool Run(Reachability __instance, TraverseParms tp, ref bool __result)
         {
             Map map = ReachRefs.MapRef(__instance);
-            if (ProjectZ.Annex(map) == null)
+            RouteGraph g = RouteGraph.For(map);
+            if (g == null || StairGrid.For(map) == null)
             {
-                return true;
+                return true;   // no stairs: the game's search
             }
             DirCache.Init();
+            IntVec3 cStart = ReachCtx.start;
+            LocalTargetInfo cDest = ReachCtx.dest;
+            PathEndMode cMode = ReachCtx.mode;
+            bool haveCtx = ReachCtx.valid;
             Queue<Region> open = ReachRefs.OpenRef(__instance);
             List<Region> starts = ReachRefs.StartRef(__instance);
             List<Region> dests = ReachRefs.DestRef(__instance);
             uint reached = ReachRefs.ReachedRef(__instance);
             ReachabilityCache cache = ReachRefs.CacheRef(__instance);
-            while (open.Count > 0)
+            Dev.PZStats.reachRuns++;
+            g.EnsureComps();
+            sParts.Clear();
+            dParts.Clear();
+            for (int i = 0; i < starts.Count; i++)
             {
-                Region region = open.Dequeue();
-                for (int i = 0; i < region.links.Count; i++)
+                int p = g.PartOf(starts[i]);
+                if (p >= 0)
                 {
-                    RegionLink link = region.links[i];
-                    for (int j = 0; j < 2; j++)
+                    sParts.Add(p);
+                }
+            }
+            for (int i = 0; i < dests.Count; i++)
+            {
+                int p = g.PartOf(dests[i]);
+                if (p >= 0)
+                {
+                    dParts.Add(p);
+                }
+            }
+            // 1. parts in different components: never joined
+            bool joined = false, samePart = false;
+            foreach (int sp in sParts)
+            {
+                int cs = g.CompOf(sp);
+                foreach (int dp in dParts)
+                {
+                    samePart |= sp == dp;
+                    joined |= cs == g.CompOf(dp);
+                }
+            }
+            if (!joined)
+            {
+                Dev.PZStats.reachFastNo++;
+                AddAll(cache, starts, dests, tp, false);
+                __result = false;
+                return false;
+            }
+            // 2. the game's own search on the floor
+            if (samePart)
+            {
+                while (open.Count > 0)
+                {
+                    Region region = open.Dequeue();
+                    for (int i = 0; i < region.links.Count; i++)
                     {
-                        if (Visit(link.regions[j], traverseParams, open, starts, dests, reached, cache))
+                        RegionLink link = region.links[i];
+                        for (int j = 0; j < 2; j++)
                         {
-                            __result = true;
-                            return false;
+                            Region r = link.regions[j];
+                            if (r == null || r.reachedIndex == reached || !r.type.Passable() || !r.Allows(tp, isDestination: false))
+                            {
+                                continue;
+                            }
+                            if (dests.Contains(r))
+                            {
+                                for (int k = 0; k < starts.Count; k++)
+                                {
+                                    DirCache.Add(cache, starts[k].District, r.District, tp, true);
+                                }
+                                __result = true;
+                                return false;
+                            }
+                            open.Enqueue(r);
+                            r.reachedIndex = reached;
                         }
                     }
                 }
-                List<Region> partners = StairRegions.Partners(region, map, StairRegions.FogBlocks(traverseParams));
-                for (int i = 0; partners != null && i < partners.Count; i++)
+            }
+            open.Clear();
+            // 3. over the stairs
+            bool ok = haveCtx && g.StairReach(cStart, sParts, cDest, cMode, dParts, tp);
+            if (ok)
+            {
+                District d = dests.Count > 0 ? dests[0].District : null;
+                bool one = true;
+                for (int i = 1; i < dests.Count; i++)
                 {
-                    if (Visit(partners[i], traverseParams, open, starts, dests, reached, cache))
+                    one &= dests[i].District == d;
+                }
+                if (one)
+                {
+                    for (int k = 0; k < starts.Count; k++)
                     {
-                        __result = true;
-                        return false;
+                        DirCache.Add(cache, starts[k].District, d, tp, true);
                     }
                 }
             }
+            else
+            {
+                AddAll(cache, starts, dests, tp, false);
+            }
+            __result = ok;
+            return false;
+        }
+
+        private static void AddAll(ReachabilityCache cache, List<Region> starts, List<Region> dests, TraverseParms tp, bool v)
+        {
             for (int l = 0; l < starts.Count; l++)
             {
                 for (int m = 0; m < dests.Count; m++)
                 {
-                    DirCache.Add(cache, starts[l].District, dests[m].District, traverseParams, false);
+                    DirCache.Add(cache, starts[l].District, dests[m].District, tp, v);
                 }
             }
-            __result = false;
-            return false;
         }
+    }
 
-        private static bool Visit(Region r, TraverseParms tp, Queue<Region> open, List<Region> starts, List<Region> dests, uint reached, ReachabilityCache cache)
+    // Traversal modes the game answers by a cell flood (breaking walls, or keeping out of water), between floors: the
+    // dig parts' components over the stairs (wall breakers), or the stairs' ends with the floor-only instance (water).
+    [HarmonyPatch(typeof(Reachability), "CheckCellBasedReachability")]
+    public static class CheckCellBasedReachability_Patch
+    {
+        private static readonly HashSet<int> sParts = new HashSet<int>();
+        private static readonly HashSet<int> dParts = new HashSet<int>();
+
+        public static bool Prefix(Reachability __instance, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms traverseParams, ref bool __result)
         {
-            if (r == null || r.reachedIndex == reached || !r.type.Passable() || !r.Allows(tp, isDestination: false))
+            if (RouteGraph.IsFloorOnly(__instance))
             {
-                return false;
-            }
-            if (dests.Contains(r))
-            {
-                for (int k = 0; k < starts.Count; k++)
-                {
-                    DirCache.Add(cache, starts[k].District, r.District, tp, true);
-                }
                 return true;
             }
-            open.Enqueue(r);
-            r.reachedIndex = reached;
+            Map map = ReachRefs.MapRef(__instance);
+            RouteGraph g = RouteGraph.For(map);
+            if (g == null || StairGrid.For(map) == null || !dest.IsValid)
+            {
+                return true;
+            }
+            int ls = Levels.LevelOf(start, map), ld = Levels.LevelOf(dest.Cell, map);
+            if (ls == ld || ls == Levels.None || ld == Levels.None)
+            {
+                return true;   // one floor: the game's flood
+            }
+            if (RouteGraph.DigMode(traverseParams.mode))
+            {
+                int key = RouteGraph.DigKey(traverseParams.mode);
+                int sp = g.DigPartAt(start, key);
+                for (int i = 0; i < 8 && sp <= 0; i++)
+                {
+                    sp = g.DigPartAt(start + GenAdj.AdjacentCells[i], key);
+                }
+                bool ok = false;
+                if (sp > 0)
+                {
+                    int cs = g.DigCompOf(sp, key);
+                    CellRect r = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+                    if (peMode != PathEndMode.OnCell)
+                    {
+                        r = r.ExpandedBy(1);
+                    }
+                    foreach (IntVec3 c in r)
+                    {
+                        if (c.InBounds(map) && ProjectZ.SameBand(c, dest.Cell, map))
+                        {
+                            int dp = g.DigPartAt(c, key);
+                            if (dp > 0 && g.DigCompOf(dp, key) == cs)
+                            {
+                                ok = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                __result = ok;
+                return false;
+            }
+            // (no closed doors, no water: the stairs' ends, each floor flooded the game's way)
+            sParts.Clear();
+            dParts.Clear();
+            g.EnsureComps();
+            int s0 = g.PartAt(start);
+            if (s0 >= 0)
+            {
+                sParts.Add(s0);
+            }
+            CellRect dr = dest.HasThing ? dest.Thing.OccupiedRect() : CellRect.SingleCell(dest.Cell);
+            if (peMode != PathEndMode.OnCell)
+            {
+                dr = dr.ExpandedBy(1);
+            }
+            foreach (IntVec3 c in dr)
+            {
+                int p = g.PartAt(c);
+                if (p >= 0)
+                {
+                    dParts.Add(p);
+                }
+            }
+            __result = sParts.Count > 0 && g.StairReach(start, sParts, dest, peMode, dParts, traverseParams);
             return false;
         }
     }

@@ -28,7 +28,8 @@ namespace ProjectZ.Dev
     //      vanilla Mine from the plateau is mined from above (cells open, revealed); the stairs placed in the pit (ground
     //      view, stairs tool with the x-ray) are built from the rim with nobody going down; the exit top stays; a colonist
     //      walks down into the pit and back up; deconstructed from above
-    //   D6 falls: a one-floor jump (J1) does no harm but staggers; a two-floor jump (J2) hurts
+    //   D6 falls: a drop of one floor (J1) does no harm but staggers; of two floors (J2) hurts (no voluntary jumps since
+    //      2026-10-19: the pawn stands on a floor laid over the open air past the edge, and the floor is taken up under it)
     //   D7 IsoRim's x-ray: the stairs tool on the ground shows the floor above only; the Mine tool on the ground the floor
     //      above, on level 1 both ways; no tool nothing
     // Shots (IsoRim): md_*.png.
@@ -54,6 +55,17 @@ namespace ProjectZ.Dev
         private static IntVec3 L1(IntVec3 g, Map map) => Levels.Cell(g, 1, map);
 
         private static float MdInjury(Pawn p) => p.health.hediffSet.hediffs.OfType<Hediff_Injury>().Sum(h => h.Severity);
+
+        // D6: a floor laid over the open air just past the edge 'from' (over the landing 'down'), the pawn moved onto it,
+        // and the floor taken up under it (Slab.Remove: the pawn falls by the gravity rule and lands, JumpGrid.Landed).
+        private static void MdDrop(Map map, Pawn p, IntVec3 from, IntVec3 down)
+        {
+            IntVec3 air = Levels.Cell(Levels.Ground(down, map), Levels.LevelOf(from, map), map);
+            map.terrainGrid.SetTerrain(air, PZDefOf.PZ_UpperFloor);
+            Teleport(p, air);
+            Slab.Remove(air, map, doLeavings: false);
+            Info($"D6 drop: {p} on a floor at {air} (over {down}) taken up: now at {p.Position}");
+        }
 
         private static List<Pawn> MdCrew(Map map) => mdCrewIds.Select(id => map.mapPawns.AllPawnsSpawned.FirstOrDefault(p => p.thingIDNumber == id)).Where(p => p != null).ToList();
 
@@ -682,7 +694,7 @@ namespace ProjectZ.Dev
                     Draft(p, true);
                     mdHurt0 = MdInjury(p);
                     mdFlag = false;
-                    p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, mdJ1Down), JobTag.Misc);
+                    MdDrop(map, p, mdJ1, mdJ1Down);
                     MuRun(40, 44000, () => ProjectZ.FloorOf(muP1.Position, map) == 0 && mdFlag, "md_d6_j1", () =>
                     {
                         if (!mdFlag && ProjectZ.FloorOf(muP1.Position, map) == 0 && muP1.stances?.stagger != null && muP1.stances.stagger.Staggered)
@@ -706,7 +718,7 @@ namespace ProjectZ.Dev
                 case "md_d6_j1":
                 {
                     float hurt = MdInjury(muP1) - mdHurt0;
-                    Result("D6 a jump of one floor (plateau edge to the ground): no injury, staggered", ProjectZ.FloorOf(muP1.Position, map) == 0 && hurt <= 0f && mdFlag && JumpGrid.HurtLandings == mdHurts,
+                    Result("D6 a drop of one floor (a floor taken up under a pawn over the plateau edge, to the ground): no injury, staggered", ProjectZ.FloorOf(muP1.Position, map) == 0 && hurt <= 0f && mdFlag && JumpGrid.HurtLandings == mdHurts,
                         $"{muP1} at {muP1.Position}, new injury {hurt:0.0}, staggered seen {mdFlag}; landings staggered {JumpGrid.Staggers - mdStaggers}, hurt {JumpGrid.HurtLandings - mdHurts}");
                     if (!mdJ2.IsValid)
                     {
@@ -721,7 +733,7 @@ namespace ProjectZ.Dev
                     Draft(p, true);
                     mdHurt0 = MdInjury(p);
                     mdHurts = JumpGrid.HurtLandings;
-                    p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, mdJ2Down), JobTag.Misc);
+                    MdDrop(map, p, mdJ2, mdJ2Down);
                     MuRun(40, 44100, () => ProjectZ.FloorOf(muP2.Position, map) == 0 && JumpGrid.HurtLandings > mdHurts, "md_d6_j2");
                     return true;
                 }
@@ -729,7 +741,7 @@ namespace ProjectZ.Dev
                 case "md_d6_j2":
                 {
                     float hurt = MdInjury(muP2) - mdHurt0;
-                    Result("D6 a jump of two floors (level-2 edge to the ground): bruised", ProjectZ.FloorOf(muP2.Position, map) == 0 && hurt > 0f && JumpGrid.HurtLandings > mdHurts,
+                    Result("D6 a drop of two floors (a floor taken up under a pawn over the level-2 edge, to the ground): bruised", ProjectZ.FloorOf(muP2.Position, map) == 0 && hurt > 0f && JumpGrid.HurtLandings > mdHurts,
                         $"{muP2} at {muP2.Position}, new injury {hurt:0.0}; landings hurt {JumpGrid.HurtLandings - mdHurts}");
                     MdEnd(map, "D6", "md_d7");
                     return true;

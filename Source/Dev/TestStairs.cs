@@ -19,7 +19,7 @@ namespace ProjectZ.Dev
     //   house A: 9x7, stairs inside (east side, up to the north), a floor over all of it but the stairwell;
     //   house B: 7x7, a floor over its west half only; two ornate doors in its south wall (one under the floor);
     //   flows: F4 jump only without a route (+ save mid-jump), stairs shots, F1 break the stairs with everyone upstairs,
-    //          F5 the ground never goes up, F6 raiders upstairs, F7 rescue by jumping + panic from fire, F2 rebuild from
+    //          F5 the ground never goes up, F6 raiders upstairs, F7 a rescue and a fire panic without stairs, F2 rebuild from
     //          upstairs only (+ save mid-frame), F3 auto-rebuild, height rule, lock, door, ghost shots.
     public static partial class TestRunner
     {
@@ -29,7 +29,7 @@ namespace ProjectZ.Dev
         private static IntVec3 farGround;
         private static string walkerId, builderId, carrierId, patientId, panicId, raiderId, fleerId;
         private static int tripsLeft, climbsAt, jumpsAt, jumpsColAt, jumpsHosAt, resetsAt, landingsAt;
-        private static int rimTicks, offRimWorkTicks, jumpsBeforeLoad;
+        private static int rimTicks, offRimWorkTicks, jumpsBeforeLoad, sErrorsAt, sFindsAt;
         private static bool hungry;
         private static bool savedJump, savedFrame;
         private static IntVec3 jumpFrom;
@@ -154,7 +154,9 @@ namespace ProjectZ.Dev
                 }
                 case "s_f4_wall":
                 {
-                    // Wall the exit off from the rest of the upper floor: the only way down is a jump.
+                    // Wall the exit off from the rest of the upper floor. Before 2026-10-19 the only way down was then a
+                    // jump; jumps are gone (user decision): the pawn is on a ledge with no way down, so the ground is not
+                    // reachable, no path is found (at once), and the pawn stays where it is without errors or loops.
                     Pawn w = ById(map, walkerId);
                     Building_Stairs st = StairsA(map);
                     IntVec3 e = st.TopCell;
@@ -171,19 +173,45 @@ namespace ProjectZ.Dev
                     Teleport(w, start);
                     Heal(w);
                     Mark();
+                    sErrorsAt = errors;
+                    bool reach = w.CanReach(farGround, PathEndMode.OnCell, Danger.Deadly);
+                    System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+                    PawnPath pp = map.pathFinder.FindPathNow(w.Position, farGround, TraverseParms.For(w), PathFinderCostTuning.For(w), PathEndMode.OnCell);
+                    double ms = sw.Elapsed.TotalMilliseconds;
+                    bool found = pp != null && pp.Found;
+                    pp?.Dispose();
+                    Result("F4 walled off (a ledge only a jump would leave): the ground is not reachable, no path, answered at once", !reach && !found && ms < 5,
+                        $"exit {e} walled off ({tempWalls.Count} walls); {w} at {w.Position}: reach {reach}, path {found} in {ms:0.00} ms");
                     GoTo(w, farGround);
+                    StartTicks(600, "s_f4_stay");
+                    return true;
+                }
+                case "s_f4_stay":
+                {
+                    Pawn w = ById(map, walkerId);
+                    Result("F4 walled off: the pawn stays on its floor (no jump), no error", w != null && ProjectZ.FloorOf(w.Position, map) == 1 && PZStats.jumps - jumpsAt == 0 && errors == sErrorsAt,
+                        $"{w} at {w?.Position} job {w?.CurJobDef?.defName}; errors {errors - sErrorsAt}; {Counts()}");
+                    foreach (Thing t in tempWalls)
+                    {
+                        if (!t.Destroyed)
+                        {
+                            t.Destroy();
+                        }
+                    }
+                    tempWalls.Clear();
+                    // F8: the same order with the exit open again: saved in the middle of the stair step down
                     savedJump = false;
-                    Info($"F4: exit {e} walled off ({tempWalls.Count} walls); walker {w} at {w.Position}");
-                    TickUntil(3000, () => Links.Kind(w) == StepKind.Jump && w.pather.MovePercentage > 0.35f && w.pather.MovePercentage < 0.75f, "s_f4_arc", 1);
+                    GoTo(w, farGround);
+                    TickUntil(3000, () => Links.Kind(w) == StepKind.StairDown && w.pather.MovePercentage > 0.3f && w.pather.MovePercentage < 0.8f, "s_f4_arc", 1);
                     return true;
                 }
                 case "s_f4_arc":
                 {
                     tickWatch = null;
                     Pawn w = ById(map, walkerId);
-                    if (w == null || Links.Kind(w) != StepKind.Jump)
+                    if (w == null || Links.Kind(w) != StepKind.StairDown)
                     {
-                        Result("F4 walled off: the pawn jumps", false, $"no jump seen; {w} at {w?.Position}, {Counts()}");
+                        Result("F8 the walker takes the stair step down", false, $"no step seen; {w} at {w?.Position}, {Counts()}");
                         stage = "s_shots";
                         return true;
                     }
@@ -193,17 +221,17 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "s_f4_arc_take":
-                    Capture("stairs_jump_arc");
+                    Capture("stairs_step_down");
                     stage = savedJump ? "s_f4_land" : "s_f4_save";
                     return true;
                 case "s_f4_save":
                 {
-                    // F8a: save in the middle of the jump step, load, the step starts again from its cell.
+                    // F8a: save in the middle of the stair step, load, the step starts again from its cell.
                     savedJump = true;
                     savedTicks = Find.TickManager.TicksGame;
-                    jumpsBeforeLoad = jumpsColonists;
+                    jumpsBeforeLoad = climbsColonists;
                     GameDataSaveLoader.SaveGame("pz_jump");
-                    Result("F8 saved pz_jump mid-jump", File.Exists(GenFilePaths.FilePathForSavedGame("pz_jump")), $"walker at {jumpFrom}");
+                    Result("F8 saved pz_jump mid-step", File.Exists(GenFilePaths.FilePathForSavedGame("pz_jump")), $"walker at {jumpFrom}");
                     stage = "s_f4_loaded";
                     pendingLoad = "pz_jump";
                     return true;
@@ -211,9 +239,9 @@ namespace ProjectZ.Dev
                 case "s_f4_loaded":
                 {
                     Pawn w = ById(map, walkerId);
-                    // (the game runs a few ticks after loading before the test pauses it: the restarted jump may be done already)
-                    bool reset = w != null && PZStats.climbResets > resetsAt && (w.Position == jumpFrom || jumpsColonists > jumpsBeforeLoad);
-                    Result("F8 reload mid-jump: reset to its cell, the jump starts again", reset, $"{w} at {w?.Position} (saved at {jumpFrom}), resets {PZStats.climbResets - resetsAt}, job {w?.CurJobDef?.defName}");
+                    // (the game runs a few ticks after loading before the test pauses it: the restarted step may be done already)
+                    bool reset = w != null && PZStats.climbResets > resetsAt && (w.Position == jumpFrom || climbsColonists > jumpsBeforeLoad || ProjectZ.FloorOf(w.Position, map) == 0);
+                    Result("F8 reload mid-step: reset to its cell, the step starts again", reset, $"{w} at {w?.Position} (saved at {jumpFrom}), resets {PZStats.climbResets - resetsAt}, job {w?.CurJobDef?.defName}");
                     if (w != null && (!w.Drafted || w.CurJobDef != JobDefOf.Goto))
                     {
                         GoTo(w, farGround);
@@ -225,24 +253,10 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     Pawn w = ById(map, walkerId);
-                    if (w != null && ProjectZ.FloorOf(w.Position, map) != 0)
-                    {
-                        TickUntil(3000, () => ProjectZ.FloorOf(w.Position, map) == 0, "s_f4_land", 1);
-                        return true;
-                    }
-                    Result("F4 walled off: the pawn jumps down one floor, lands staggered, unhurt (one floor: no bruise)", w != null && jumpsColonists - jumpsColAt >= 1 && !HasBruise(w) && w.stances?.stagger != null && w.stances.stagger.Staggered && !w.Downed, $"{w} at {w?.Position}, bruised {HasBruise(w)}, staggered {w?.stances?.stagger?.Staggered}, downed {w?.Downed}; {Counts()}");
-                    ShotAt(map, 1, ProjectZ.GroundCellOf(w.Position, map), 7f);
-                    Wait(3, "s_f4_land_take");
-                    return true;
-                }
-                case "s_f4_land_take":
-                    Capture("stairs_jump_land");
-                    foreach (Thing t in map.listerThings.ThingsOfDef(ThingDefOf.Wall).Where(t => ProjectZ.FloorOf(t.Position, map) == 1 && sHouseA.ExpandedBy(1).Contains(ProjectZ.GroundCellOf(t.Position, map))).ToList())
-                    {
-                        t.Destroy();
-                    }
+                    Result("F8 after the reload the walker goes on down the stairs (no jump)", w != null && ProjectZ.FloorOf(w.Position, map) == 0 && PZStats.jumps - jumpsAt == 0, $"{w} at {w?.Position}; {Counts()}");
                     stage = "s_shots";
                     return true;
+                }
 
                 // ---- stairs and stairwell shots: floor 2, floor 1 (roofs on: no lid over the well), a pawn on the step
                 case "s_shots":
@@ -315,6 +329,8 @@ namespace ProjectZ.Dev
                     Find.PlaySettings.autoRebuild = false;
                     Mark();
                     climbsAt = climbsColonists + climbsHostiles;
+                    sErrorsAt = errors;
+                    sFindsAt = PZStats.finds;
                     StairsA(map).Destroy(DestroyMode.KillFinalize);
                     Info($"F1: stairs destroyed with {OnFloor(map, cols, 1)} colonists upstairs, hungry, meals only on the ground");
                     TickUntil(2500, () => OnFloor(map, Colonists(map), 0) == Colonists(map).Count, "s_f1_check", 30);
@@ -325,23 +341,25 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     hungry = false;
                     List<Pawn> cols = Colonists(map);
-                    Result("F1 stairs broken: every upstairs colonist jumps down for food within 2500 ticks (one floor: unhurt)", OnFloor(map, cols, 0) == cols.Count && jumpsColonists - jumpsColAt >= cols.Count && climbsColonists + climbsHostiles - climbsAt == 0 && cols.All(p => !HasBruise(p) && !p.Downed),
-                        $"{OnFloor(map, cols, 0)} of {cols.Count} down after {ticksTotal - ticksLeft} ticks; bruised {cols.Count(HasBruise)}, downed {cols.Count(p => p.Downed)}; {Counts()}");
+                    // (before 2026-10-19 they jumped down; jumps are gone: they wait upstairs, the player builds stairs, F2)
+                    Result("F1 stairs broken: the colonists upstairs stay there (no jump), no error, no job loop over the stairs", OnFloor(map, cols, 1) == cols.Count && PZStats.jumps - jumpsAt == 0 && errors == sErrorsAt && PZStats.finds - sFindsAt <= 3 * cols.Count,
+                        $"{OnFloor(map, cols, 1)} of {cols.Count} upstairs after {ticksTotal - ticksLeft} ticks; errors {errors - sErrorsAt}, router searches {PZStats.finds - sFindsAt}; {Counts()}");
                     stage = "s_f5";
                     return true;
                 }
 
-                // ---- F5: with the stairs gone, the ground never paths up
+                // ---- F5: with the stairs gone, the ground never paths up (and nothing paths down: no jumps)
                 case "s_f5":
                 {
                     Pawn g = Colonists(map).First();
+                    Teleport(g, CellFinder.StandableCellNear(farGround, map, 3f));
                     IntVec3 upCell = UpInner(map, sHouseA).First();
                     TraverseParms tp = TraverseParms.For(TraverseMode.PassDoors);
                     bool down = map.reachability.CanReach(upCell, g.Position, PathEndMode.OnCell, tp);
                     bool up = map.reachability.CanReach(g.Position, upCell, PathEndMode.OnCell, tp);
                     bool pawnUp = g.CanReach(upCell, PathEndMode.OnCell, Danger.Deadly);
                     int cacheCount = ((ReachabilityCache)AccessTools.Field(typeof(Reachability), "cache").GetValue(map.reachability)).Count;
-                    Result("F5 one way: upstairs -> ground true, then ground -> upstairs false (cache kept)", down && !up && !pawnUp && cacheCount > 0, $"down {down}, up {up}, pawn up {pawnUp}, cache entries {cacheCount}");
+                    Result("F5 no stairs: neither way (upstairs -> ground false, ground -> upstairs false; cache kept)", !down && !up && !pawnUp && cacheCount > 0, $"down {down}, up {up}, pawn up {pawnUp}, cache entries {cacheCount}");
                     Mark();
                     GoTo(g, upCell);
                     walkerId = g.ThingID;
@@ -386,7 +404,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
 
-                // ---- F6: raiders upstairs without stairs jump down to attack, and to flee
+                // ---- F6: raiders upstairs without stairs: no way down (no jumps, user 2026-10-19: stranded raiders are left as they are)
                 case "s_f6":
                 {
                     foreach (Pawn p in Colonists(map))
@@ -405,7 +423,8 @@ namespace ProjectZ.Dev
                     fleerId = f.ThingID;
                     LordMaker.MakeNewLord(f.Faction, new LordJob_ExitMapBest(LocomotionUrgency.Jog), map, new List<Pawn> { f });
                     Mark();
-                    TickUntil(4000, () =>
+                    sErrorsAt = errors;
+                    TickUntil(1500, () =>
                     {
                         Pawn ra = ById(map, raiderId);
                         Pawn fl = ById(map, fleerId);
@@ -418,8 +437,8 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn ra = ById(map, raiderId);
                     Pawn fl = ById(map, fleerId);
-                    Result("F6 a raider upstairs without stairs jumps down to attack", ra != null && ProjectZ.FloorOf(ra.Position, map) == 0 && jumpsHostiles - jumpsHosAt >= 1, $"{ra} at {ra?.Position} job {ra?.CurJobDef?.defName}; {Counts()}");
-                    Result("F6 a fleeing raider upstairs jumps down and leaves the map", fl == null && jumpsHostiles - jumpsHosAt >= 2, $"fleer still here: {fl} at {fl?.Position} {fl?.CurJobDef?.defName}; {Counts()}");
+                    Result("F6 a raider upstairs without stairs stays there (no jump), no error", ra != null && ProjectZ.FloorOf(ra.Position, map) == 1 && jumpsHostiles - jumpsHosAt == 0 && errors == sErrorsAt, $"{ra} at {ra?.Position} job {ra?.CurJobDef?.defName}; errors {errors - sErrorsAt}; {Counts()}");
+                    Result("F6 a raider upstairs without stairs told to leave stays there too (no jump)", fl != null && ProjectZ.FloorOf(fl.Position, map) == 1 && jumpsHostiles - jumpsHosAt == 0, $"fleer {fl} at {fl?.Position} {fl?.CurJobDef?.defName}; {Counts()}");
                     foreach (Pawn h in map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer)).ToList())
                     {
                         h.Destroy();
@@ -428,7 +447,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
 
-                // ---- F7: an upstairs colonist carries a downed one down to a bed by jumping (one floor: neither bruised)
+                // ---- F7: no stairs (F1 broke them): a rescue down to a bed on the ground can't happen (no jumps), nothing breaks
                 case "s_f7":
                 {
                     List<Pawn> cols = Colonists(map);
@@ -477,7 +496,8 @@ namespace ProjectZ.Dev
                     Job rescue = JobMaker.MakeJob(JobDefOf.Rescue, patient, bed);
                     rescue.count = 1;
                     carrier.jobs.TryTakeOrderedJob(rescue, JobTag.DraftedOrder);
-                    TickUntil(5000, () => patient.InBed() || ProjectZ.FloorOf(patient.PositionHeld, map) == 0 && carrier.carryTracker.CarriedThing == null, "s_f7_check", 30);
+                    sErrorsAt = errors;
+                    TickUntil(1500, () => patient.InBed() || ProjectZ.FloorOf(patient.PositionHeld, map) == 0 && carrier.carryTracker.CarriedThing == null, "s_f7_check", 30);
                     return true;
                 }
                 case "s_f7_check":
@@ -485,7 +505,7 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn carrier = ById(map, carrierId);
                     Pawn patient = map.mapPawns.AllPawns.FirstOrDefault(p => p.ThingID == patientId);
-                    Result("F7 a colonist upstairs carries a downed one down by jumping; one floor: neither bruised", carrier != null && patient != null && ProjectZ.FloorOf(patient.PositionHeld, map) == 0 && jumpsColonists - jumpsColAt >= 1 && !HasBruise(carrier) && !HasBruise(patient),
+                    Result("F7 without stairs a rescue to the ground is not possible: carrier and patient stay upstairs (no jump), no error", carrier != null && patient != null && ProjectZ.FloorOf(patient.PositionHeld, map) == 1 && ProjectZ.FloorOf(carrier.Position, map) == 1 && jumpsColonists - jumpsColAt == 0 && errors == sErrorsAt,
                         $"{carrier} at {carrier?.Position}; {patient} at {patient?.PositionHeld} in bed {patient?.InBed()}; bruises: carrier {HasBruise(carrier)}, patient {patient?.health.hediffSet.hediffs.Count(h => h.def.defName == "Bruise")}; {Counts()}");
                     stage = "s_f7_panic";
                     return true;
@@ -514,14 +534,14 @@ namespace ProjectZ.Dev
                     bool started = c.mindState.mentalStateHandler.TryStartMentalState(panic, null, forced: true);
                     Mark();
                     Info($"F7 panic: fires upstairs {map.listerThings.ThingsInGroup(ThingRequestGroup.Fire).Count}, {c} panics {started}");
-                    TickUntil(2500, () => ProjectZ.FloorOf(c.Position, map) == 0, "s_f7_panic_check", 10);
+                    TickUntil(1000, () => ProjectZ.FloorOf(c.Position, map) == 0, "s_f7_panic_check", 10);
                     return true;
                 }
                 case "s_f7_panic_check":
                 {
                     tickWatch = null;
                     Pawn c = ById(map, panicId);
-                    Result("F7 a colonist panicking from a fire upstairs flees by jumping", c != null && ProjectZ.FloorOf(c.Position, map) == 0 && jumpsColonists - jumpsColAt >= 1, $"{c} at {c?.Position} state {c?.MentalStateDef?.defName}; {Counts()}");
+                    Result("F7 a colonist panicking from a fire upstairs without stairs stays upstairs (no jump)", (c == null || ProjectZ.FloorOf(c.Position, map) == 1) && jumpsColonists - jumpsColAt == 0, $"{c} at {c?.Position} state {c?.MentalStateDef?.defName}; {Counts()}");
                     panicId = null;
                     c?.MentalState?.RecoverFromState();
                     foreach (Thing t in map.listerThings.ThingsInGroup(ThingRequestGroup.Fire).ToList())

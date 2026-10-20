@@ -11,7 +11,7 @@ namespace ProjectZ.Dev
     // Mode holefog, the fixtures (fixed-seed tall-mountain map as mode minedown: -projectztallmountains -projectzfloors=4
     // -projectzmapsize=250). Setup finds three sites far apart, saves pz_holefog; every check reloads it, builds its own
     // fixture (rock carved by script into a hidden, fogged cave: what the player would dig into) and runs real jobs:
-    //   F1 mine below twice from a level-2 top (a colonist digs a pit into level 1, jumps into it, digs on into the ground
+    //   F1 mine below twice from a level-2 top (a colonist digs a pit into level 1, one falls into it (no jumps), digs on into the ground
     //      rock): a two-floor drop over a hidden ground cave next to the bottom; the column and the cave are revealed,
     //      the outside unchanged
     //   F2 mine above from a ground chamber into level-1 rock next to a hidden level-1 cave: the cave is revealed (a
@@ -186,7 +186,7 @@ namespace ProjectZ.Dev
                         HfEnd(map, "F1", "hf_f2");
                         return true;
                     }
-                    // the pit floor marked Mine below: a colonist must get down into the pit (a jump) and dig from there
+                    // the pit floor marked Mine below: a colonist must be down in the pit and dig from there
                     bool ok = HfOrder(new Designator_MineBelow(), c1, out string why);
                     Info($"F1 Mine below on the pit floor {c1}: {why}");
                     if (!ok)
@@ -194,6 +194,15 @@ namespace ProjectZ.Dev
                         Result("F1 Mine below on the pit floor", false, why);
                         HfEnd(map, "F1", "hf_f2");
                         return true;
+                    }
+                    // (no voluntary jumps since 2026-10-19: one of the crew falls in the way a pawn gets into a pit now, off the
+                    // open top: the gravity rule's fall, one floor, no harm)
+                    Pawn faller = HfCrew(map).FirstOrDefault();
+                    if (faller != null)
+                    {
+                        Teleport(faller, u2);
+                        bool fell = Gravity.FallPawn(faller, u2, false);
+                        Info($"F1 {faller} fell into the pit: {fell}, now at {faller.Position} L{Levels.LevelOf(faller.Position, map)}");
                     }
                     hfSeen = HfFogged(hfCave, map) == hfCave.Count;
                     MuRun(600, 47100, () => g.GetFirstMineable(map) == null && Shaft.Is(g, map), "hf_f1_pit2");
@@ -205,7 +214,7 @@ namespace ProjectZ.Dev
                     IntVec3 g = hfG1, c1 = HL(g, 1, map), u2 = HL(g, 2, map);
                     bool open = g.GetFirstMineable(map) == null && c1.GetTerrain(map) == PZDefOf.PZ_OpenAir && Shaft.Is(g, map);
                     IntVec3 land = Column.Landing(u2, map, false, true, out int fallen, out _);
-                    Result("F1 the colonist jumped into the pit and mined the ground rock below it: a shaft two floors deep (level-2 top to the ground)", open && land == g,
+                    Result("F1 the colonist who fell into the pit mined the ground rock below it: a shaft two floors deep (level-2 top to the ground)", open && land == g,
                         $"ground {HfCell(g, map)}, level 1 {HfCell(c1, map)}, top {HfCell(u2, map)}; a fall into the top lands at {land}; crew {string.Join(", ", HfCrew(map).Select(p => $"{p} {p.Position} L{Levels.LevelOf(p.Position, map)}"))}");
                     Result("F1 the fall column is revealed down to the landing (level 1 passed, the ground bottom)", !map.fogGrid.IsFogged(c1) && !map.fogGrid.IsFogged(g),
                         $"{HfCell(c1, map)}; {HfCell(g, map)}");

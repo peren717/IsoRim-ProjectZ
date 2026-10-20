@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -7,29 +6,18 @@ using Verse.AI;
 
 namespace ProjectZ
 {
-    // Jumping down (design §3): a one-way link from a walkable upper-floor cell c over its open-air neighbour n (one of
-    // four sides: a slab edge, a hole, the stairwell) down to the first floor or ground below n whose column is open
-    // (Column.OpenAbove: no landing on roofs). Reachability, region searches and the router see it as a link from c's
-    // region to the landing's region, never the other way. Pawns only take it when no stair route exists (StairRouter
-    // pass 2); landing staggers them, and bruises them from two floors down (JumpGrid.Hurts).
-    public struct Jump
-    {
-        public Region to;
-        public IntVec3 from;
-        public IntVec3 land;
-    }
-
+    // Falls and landings between floors (design §3). Voluntary jumping down was taken out of pathing and reachability
+    // (user, 2026-10-19: floors are joined by stairs only, isorim-pz-pathing-redesign.md). What stays here: the landing of
+    // everything that drops between floors (holes, slab collapses, gravity, shafts: Landed and the one hurt rule Hurts) and
+    // the geometry of a fall off an upper-floor edge (LandingFrom: tests and fixtures only, never a path). The class keeps
+    // its name: saves list it (a pawn saved in the middle of an old jump starts again where it stands, PathPatches).
     public class JumpGrid : MapComponent
     {
-        public const int JumpTicks = 30;
         public const float DamagePerFloor = 3f;   // Blunt, twice (vanilla bruises), from HurtFrom floors down
         public const int HurtFrom = 2;            // a drop of one floor only staggers (user 2026-10-19)
         public const int StaggerTicks = 60;
 
-        private static readonly List<Jump> None = new List<Jump>();
-        private readonly Dictionary<Region, List<Jump>> byRegion = new Dictionary<Region, List<Jump>>();
         private readonly List<KeyValuePair<Pawn, int>> landings = new List<KeyValuePair<Pawn, int>>();
-        private bool listening;
 
         public JumpGrid(Map map) : base(map)
         {
@@ -38,7 +26,7 @@ namespace ProjectZ
         private static Map lastMap;
         private static JumpGrid last;
 
-        // The jump index of a map with floors, else null (last map cached).
+        // The landing component of a map with floors, else null (last map cached).
         public static JumpGrid For(Map map)
         {
             if (map == null || ProjectZ.Annex(map) == null)
@@ -53,81 +41,23 @@ namespace ProjectZ
             return last;
         }
 
-        public void Dirty()
-        {
-            byRegion.Clear();
-            Patches.GroundParts.Dirty(map);
-            // (regions rebuilt or a column's landings changed: what can be reached may have changed)
-            ReachFog.Request(map);
-        }
-
-        private void Listen()
-        {
-            if (!listening && map.events != null)
-            {
-                listening = true;
-                map.events.RegionsRoomsChanged += Dirty;
-                map.events.CellFogChanged += FogChanged;
-                map.events.MapFogged += MapFogged;
-            }
-        }
-
-        // The player's pawns take no stairs or jump into fog (StairRegions.FogBlocks): when fog comes or goes where a
-        // jump can land (a column open above) or at a stairs end, reachability answers change. (The game's own cache
-        // never minds fog: on the ground it never changes what can be reached.)
-        private void FogChanged(IntVec3 c, bool fogged)
-        {
-            if (c.InBounds(map) && (Column.OpenAbove(c, map) || StairEnd(c)))
-            {
-                map.reachability?.ClearCache();
-            }
-        }
-
-        private void MapFogged()
-        {
-            map.reachability?.ClearCache();
-        }
-
-        private bool StairEnd(IntVec3 c)
-        {
-            StairGrid g = StairGrid.For(map);
-            if (g == null)
-            {
-                return false;
-            }
-            for (int i = 0; i < g.links.Count; i++)
-            {
-                if (g.links[i].top == c || g.links[i].bottom == c)
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public override void FinalizeInit()
-        {
-            base.FinalizeInit();
-            Listen();
-        }
-
-        // A roof or floor changed in a column: landings there may have changed.
+        // A roof or floor changed in a column: where a fall through an open hole lands may have changed, which the reveal
+        // rule's hole links read (ReachFog). Pathing does not mind (no jumps).
         public static void ColumnChanged(IntVec3 c, Map map)
         {
-            JumpGrid g = For(map);
-            if (g == null)
+            if (For(map) == null)
             {
                 return;
             }
             IntVec3 up = StairShape.Above(c, map);
             if (up.IsValid && up.InBounds(map) && up.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
-                g.Dirty();
-                map.reachability?.ClearCache();
+                ReachFog.Request(map);
             }
         }
 
-        // Where a pawn standing on c lands if it jumps over its neighbour in direction dir; false if it can't.
+        // Where something stepping off c over its open-air neighbour in direction dir would land, and how many floors it
+        // would fall; false where it can't. Geometry only (tests, fixtures): no pawn ever jumps down on its own.
         public static bool LandingFrom(IntVec3 c, IntVec3 dir, Map map, out IntVec3 land, out int fallen)
         {
             land = IntVec3.Invalid;
@@ -154,9 +84,9 @@ namespace ProjectZ
                 {
                     continue;   // open air on this floor too: falls on
                 }
-                if (!cj.Walkable(map) || !Column.OpenAbove(cj, map) || StairSite(cj, map))
+                if (!cj.Walkable(map) || !Column.OpenAbove(cj, map))
                 {
-                    return false;   // no landing on a roof, on something impassable or on a stairs building site, and no falling further
+                    return false;   // no landing on a roof or on something impassable
                 }
                 land = cj;
                 fallen = k - j;
@@ -165,74 +95,7 @@ namespace ProjectZ
             return false;
         }
 
-        // A blueprint or frame of stairs in a cell: nobody lands on the building site (a stairwell over one is no way down
-        // until the stairs stand; then they are the way).
-        private static bool StairSite(IntVec3 c, Map map)
-        {
-            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
-            for (int i = 0; i < list.Count; i++)
-            {
-                if ((list[i] is Blueprint || list[i] is Frame) && StairDefs.Is(list[i].def.entityDefToBuild))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // The jumps out of a region (empty for the ground and most regions). Built on first ask.
-        public List<Jump> Down(Region region)
-        {
-            if (region == null || !region.valid)
-            {
-                return None;
-            }
-            if (byRegion.TryGetValue(region, out List<Jump> list))
-            {
-                return list;
-            }
-            Listen();
-            list = None;
-            if (ProjectZ.FloorOf(region.AnyCell, map) >= 1)
-            {
-                RegionGrid rg = map.regionGrid;
-                foreach (IntVec3 c in region.Cells)
-                {
-                    for (int d = 0; d < 4; d++)
-                    {
-                        if (LandingFrom(c, GenAdj.CardinalDirections[d], map, out IntVec3 land, out int fallen))
-                        {
-                            Region to = rg.GetValidRegionAt_NoRebuild(land);
-                            if (to != null && to != region)
-                            {
-                                if (ReferenceEquals(list, None))
-                                {
-                                    list = new List<Jump>();
-                                }
-                                list.Add(new Jump { to = to, from = c, land = land });
-                            }
-                        }
-                    }
-                }
-            }
-            byRegion[region] = list;
-            return list;
-        }
-
-        // Is the step from -> to a jump (to = a landing from 'from')? Floors fallen, or 0.
-        public static int JumpStep(IntVec3 from, IntVec3 to, Map map)
-        {
-            for (int d = 0; d < 4; d++)
-            {
-                if (LandingFrom(from, GenAdj.CardinalDirections[d], map, out IntVec3 land, out int fallen) && land == to)
-                {
-                    return fallen;
-                }
-            }
-            return 0;
-        }
-
-        // A pawn just landed (every drop between floors comes here: jumps, falls through holes and shafts, gravity, slab
+        // A pawn just landed (every drop between floors comes here: falls through holes and shafts, gravity, slab
         // collapses): staggered on this map's next tick, and bruised from HurtFrom floors down.
         public void Landed(Pawn p, int fallen)
         {
@@ -294,21 +157,19 @@ namespace ProjectZ
         }
     }
 
-    // One step of a path that is not a walk to a neighbouring cell: a stair step (H <-> E) or a jump (c -> landing).
+    // One step of a path that is not a walk to a neighbouring cell: a stair step (H <-> E).
     public enum StepKind
     {
         None,
         StairUp,
-        StairDown,
-        Jump
+        StairDown
     }
 
     // The single place that says what a pawn's current step is, and how it is drawn (rise and horizontal position).
     public static class Links
     {
-        public static StepKind Kind(Pawn p, out int fallen)
+        public static StepKind Kind(Pawn p)
         {
-            fallen = 0;
             Pawn_PathFollower pather = p.pather;
             if (pather == null || !pather.Moving || !p.Spawned)
             {
@@ -332,11 +193,8 @@ namespace ProjectZ
             {
                 return ProjectZ.FloorOf(next, map) > ProjectZ.FloorOf(pos, map) ? StepKind.StairUp : StepKind.StairDown;
             }
-            fallen = JumpGrid.JumpStep(pos, next, map);
-            return fallen > 0 ? StepKind.Jump : StepKind.None;
+            return StepKind.None;
         }
-
-        public static StepKind Kind(Pawn p) => Kind(p, out int _);
 
         // How high a ramp cell lifts a pawn standing on it (cells over its floor): the middle of its third.
         public static float RampHeight(IntVec3 c, Map map)
@@ -350,7 +208,7 @@ namespace ProjectZ
 
         // The pawn's height over the floor of the cell it stands on. On and next to a ramp it follows where the pawn is
         // DRAWN (the tweened position), projected onto the ramp's axis (RampRise): rising smoothly along L0 -> L1 -> H and
-        // on over the step onto the exit, the same function going down; during a jump it falls.
+        // on over the step onto the exit, the same function going down.
         public static float Rise(Pawn p)
         {
             if (!p.Spawned || ProjectZ.Annex(p.Map) == null)
@@ -358,13 +216,7 @@ namespace ProjectZ
                 return 0f;
             }
             Map map = p.Map;
-            StepKind kind = Kind(p, out int fallen);
             float storey = IsoRimBridge.StoreyHeight;
-            if (kind == StepKind.Jump)
-            {
-                float pct = p.pather != null ? Mathf.Clamp01(p.pather.MovePercentage) : 0f;
-                return -fallen * storey * pct * pct;
-            }
             Building_Stairs s = p.Position.GetEdifice(map) as Building_Stairs;
             if (s == null && p.pather != null && p.pather.Moving && p.pather.nextCell.IsValid && p.pather.nextCell.InBounds(map))
             {
@@ -395,8 +247,8 @@ namespace ProjectZ
             return h * Mathf.Clamp01((1f - side) / 0.5f);
         }
 
-        // Where a pawn is drawn across the floor during a stair step or jump: from its cell toward the next one's column,
-        // on its own floor's rows (the rise is added by ThingOffset).
+        // Where a pawn is drawn across the floor during a stair step: from its cell toward the next one's column, on its
+        // own floor's rows (the rise is added by ThingOffset).
         public static bool StepTween(Pawn p, out Vector3 at)
         {
             at = Vector3.zero;
@@ -416,7 +268,8 @@ namespace ProjectZ
         }
     }
 
-    // Compatibility for older callers (tests): +1 going up the stairs, -1 down, 0 otherwise.
+    // The stair step's time (path cost = time: the step costs StepTicks in the router, Patches/Router.cs) and, for older
+    // callers (tests), the direction of a pawn's current step: +1 up, -1 down, 0 otherwise.
     public static class Climb
     {
         public const int StepTicks = 30;

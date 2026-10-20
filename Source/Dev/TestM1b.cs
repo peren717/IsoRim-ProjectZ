@@ -668,7 +668,38 @@ namespace ProjectZ.Dev
         public static long findLegs;          // path finder legs run by them
         public static double findMsMax;       // the slowest, ms
         public static int routeUnreachable;   // answered "no" by reachability at once
-        public static int routeBudgetOuts;    // the stair search ran out of legs
-        public static int regionRoutes;       // routes found by the region-graph fallback
+        public static int routeBudgetOuts;    // (old router; unused)
+        public static int regionRoutes;       // (old router; unused)
+        // router2 (Patches/Router.cs, RouteGraph.cs)
+        public static double findMsTotal;     // all Find calls, ms
+        public static int routesBuilt;        // stairs routes joined
+        public static int routeMemos;         // "no route" remembered
+        public static int routeMemoHits;      // answered from that memory
+        public static int routeGiveUps;       // too many failed legs
+        public static long routerExpanded;    // A* expansions (failed searches)
+        public static int routerLegsChecked;  // real legs run
+        public static int routerLegsRefused;  // legs the floor-only reachability refused (no path finder search)
+        public static int routerLegFails;     // real legs that found no path
+        public static int routerDeferred;     // follower requests queued
+        public static int routerQueueMax;
+        public static int routerWaitTicksMax; // the longest a queued request waited
+        public static int routerBudgetWaits;  // ticks the budget left requests for the next tick
+        public static int sameFloorRequests;  // follower requests left to the game on one floor
+        public static int sameFloorRouted;    // ... of them checked over the stairs (option C: the stairs' bound beaten by 20 %)
+        public static int reachRuns;          // reachability searches on maps with floors
+        public static int reachFastNo;        // ... answered no by the components alone
+        public static int stairReach;         // ... that searched the stairs' ends
+
+        // per-Find times (ms), kept for the performance test
+        public static readonly List<double> findTimes = new List<double>();
+        public static bool keepTimes;
+
+        public static void RecordFind(double ms)
+        {
+            if (keepTimes && findTimes.Count < 200000)
+            {
+                findTimes.Add(ms);
+            }
+        }
     }
 }
