@@ -17,6 +17,7 @@ namespace ProjectZ.Dev
     //   X3 tool in hand, the ground viewed: only the floor above (two-way x-ray)  xray_ground.png
     //   X4 X1 at pitch 35.3 and 60, camera turns 0 and 90 (each floor on its own plane) xray_l1_p<pitch>_y<turn>.png
     //   X5 placing stairs, the ground viewed: only the floor above, same views   xray_stairs_p<pitch>_y<turn>.png
+    //   X6-X9 Mine above / Mine below (TestXrayCmds.cs)
     // Read from IsoRim by name (MineXray.Shown, OutlineQuads, BuildMs).
     public static partial class TestRunner
     {
@@ -215,7 +216,7 @@ namespace ProjectZ.Dev
                         IsoRimBridge.SetOption("freeYaw", xrOldYaw);
                         IsoRimBridge.SetOption("isoPitch", xrOldPitch);
                         Find.DesignatorManager.Deselect();
-                        Finish();
+                        Wait(5, "xr_cmds");   // X6-X9: Mine above / Mine below (TestXrayCmds)
                         return true;
                     }
                     XrView(map, 0);
@@ -230,7 +231,7 @@ namespace ProjectZ.Dev
                     Wait(5, "xr_stairs");
                     return true;
             }
-            return false;
+            return StepXrayCmds(map);
         }
 
         // The views of X4 and X5: (pitch, camera turn).
