@@ -15,6 +15,8 @@ namespace ProjectZ.Dev
     //   X1 Mine tool in hand: the x-ray is drawn (outline, pawns, crosshair)      xray_tool.png, xray_tool_wide.png
     //   X2 no tool: nothing drawn                                                  xray_none.png
     //   X3 tool in hand, the ground viewed: only the floor above (two-way x-ray)  xray_ground.png
+    //   X4 X1 at pitch 35.3 and 60, camera turns 0 and 90 (each floor on its own plane) xray_l1_p<pitch>_y<turn>.png
+    //   X5 placing stairs, the ground viewed: only the floor above, same views   xray_stairs_p<pitch>_y<turn>.png
     // Read from IsoRim by name (MineXray.Shown, OutlineQuads, BuildMs).
     public static partial class TestRunner
     {
@@ -148,7 +150,32 @@ namespace ProjectZ.Dev
 
                 case "xr_wide":
                     Capture("xray_tool_wide");
-                    Wait(5, "xr_none_set");
+                    xrShot = 0;
+                    xrOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+                    xrOldPitch = (float)IsoRimBridge.SetOption("isoPitch", 35.3f);
+                    Wait(5, "xr_views");
+                    return true;
+
+                // X4: the same with two camera turns and two pitches (each floor on its own plane: the floor below lower,
+                // the floor above higher than the crosshair).
+                case "xr_views":
+                    if (xrShot >= XrViews.GetLength(0))
+                    {
+                        IsoRimBridge.SetOption("freeYaw", 0f);
+                        IsoRimBridge.SetOption("isoPitch", 35.3f);
+                        Wait(5, "xr_none_set");
+                        return true;
+                    }
+                    XrView(map, 1);
+                    Wait(40, "xr_views_cap");
+                    return true;
+
+                case "xr_views_cap":
+                    Capture("xray_l1_" + XrViewName());
+                    Result("xray X4: both floors drawn at " + XrViewName(), XrGet("ShownDown") is bool d4 && d4 && XrGet("ShownUp") is bool u4 && u4,
+                        $"down {XrGet("ShownDown")}, up {XrGet("ShownUp")}");
+                    xrShot++;
+                    Wait(5, "xr_views");
                     return true;
 
                 case "xr_none_set":
@@ -176,11 +203,49 @@ namespace ProjectZ.Dev
 
                 case "xr_ground_check":
                     Result("xray X3: the ground viewed: no floor below, the floor above shown (two-way x-ray)", XrGet("ShownDown") is bool dn && !dn && XrGet("ShownUp") is bool upx && upx, $"shown {XrGet("Shown")}, down {XrGet("ShownDown")}, up {XrGet("ShownUp")}");
-                    Find.DesignatorManager.Deselect();
-                    Finish();
+                    Find.DesignatorManager.Select(new Designator_Build(PZDefOf.PZ_Stairs));
+                    xrShot = 0;
+                    Wait(5, "xr_stairs");
+                    return true;
+
+                // X5: placing stairs on the ground: only the floor above, on its own plane, at every view.
+                case "xr_stairs":
+                    if (xrShot >= XrViews.GetLength(0))
+                    {
+                        IsoRimBridge.SetOption("freeYaw", xrOldYaw);
+                        IsoRimBridge.SetOption("isoPitch", xrOldPitch);
+                        Find.DesignatorManager.Deselect();
+                        Finish();
+                        return true;
+                    }
+                    XrView(map, 0);
+                    Wait(40, "xr_stairs_cap");
+                    return true;
+
+                case "xr_stairs_cap":
+                    Capture("xray_stairs_" + XrViewName());
+                    Result("xray X5: placing stairs on the ground: only the floor above at " + XrViewName(), XrGet("ShownDown") is bool d5 && !d5 && XrGet("ShownUp") is bool u5 && u5,
+                        $"down {XrGet("ShownDown")}, up {XrGet("ShownUp")}");
+                    xrShot++;
+                    Wait(5, "xr_stairs");
                     return true;
             }
             return false;
+        }
+
+        // The views of X4 and X5: (pitch, camera turn).
+        private static readonly float[,] XrViews = { { 35.3f, 0f }, { 35.3f, 90f }, { 60f, 0f }, { 60f, 90f } };
+        private static int xrShot;
+        private static float xrOldYaw, xrOldPitch;
+
+        private static string XrViewName() => $"p{Mathf.RoundToInt(XrViews[xrShot, 0])}_y{Mathf.RoundToInt(XrViews[xrShot, 1])}";
+
+        private static void XrView(Map map, int floor)
+        {
+            IsoRimBridge.SetOption("isoPitch", XrViews[xrShot, 0]);
+            IsoRimBridge.SetOption("freeYaw", XrViews[xrShot, 1]);
+            ShotAt(map, floor, xrCells[4], 9f);
+            Find.UIRoot.screenshotMode.Active = true;
         }
 
         // The pointer held on the rock above the tunnel: IsoRim's designator cell and its cut-away pointer.
