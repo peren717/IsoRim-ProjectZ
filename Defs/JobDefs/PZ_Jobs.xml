@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Place a siege ladder (Source/SiegeLadder.cs): go to the foot, one second's work, the ladder stands. -->
+  <JobDef>
+    <defName>PZ_PlaceSiegeLadder</defName>
+    <driverClass>ProjectZ.JobDriver_PlaceSiegeLadder</driverClass>
+    <reportString>placing a ladder.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+  </JobDef>
+
+</Defs>

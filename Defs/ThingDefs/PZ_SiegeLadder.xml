@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Temporary siege ladder and the mechanoids' lift (isorim-pz-siege-ladders-design.md, Source/SiegeLadder.cs). Placed
+       by the place-ladder job at the foot of an open-air column; the link goes up the column to a cell beside it on a higher
+       floor. Not buildable by the player (no designation category); claimable after the raid; falls apart one day after
+       it (CompSiegeLadder). Deconstructing returns half the cost list: 5 cloth, 1 component. Placeholder sprites.
+       PZ_EmergencyLadder: the player's (same class and comp), a blueprint on the top cell turned toward the open side,
+       no materials, about a second's work, counts down from completion, gives nothing back. -->
+  <ThingDef Name="PZ_SiegeLadderBase" ParentName="BuildingBase" Abstract="True">
+    <thingClass>ProjectZ.Building_SiegeLadder</thingClass>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>Standable</passability>
+    <pathCost>4</pathCost>
+    <fillPercent>0.1</fillPercent>
+    <castEdgeShadows>false</castEdgeShadows>
+    <blockWind>false</blockWind>
+    <rotatable>false</rotatable>
+    <size>(1,1)</size>
+    <tickerType>Rare</tickerType>
+    <building>
+      <isInert>true</isInert>
+      <ai_chillDestination>false</ai_chillDestination>
+      <claimable>true</claimable>
+      <deconstructible>true</deconstructible>
+    </building>
+    <comps>
+      <li Class="ProjectZ.CompProperties_SiegeLadder">
+        <ticks>60000</ticks>
+      </li>
+    </comps>
+  </ThingDef>
+
+  <ThingDef ParentName="PZ_SiegeLadderBase">
+    <defName>PZ_SiegeLadder</defName>
+    <label>improvised ladder</label>
+    <description>Disappears a day after the raid.</description>
+    <graphicData>
+      <texPath>ProjectZ/SiegeLadder</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <statBases>
+      <MaxHitPoints>60</MaxHitPoints>
+      <WorkToBuild>300</WorkToBuild>
+      <Flammability>1.0</Flammability>
+      <Beauty>-2</Beauty>
+    </statBases>
+    <costList>
+      <Cloth>10</Cloth>
+    </costList>
+  </ThingDef>
+
+  <ThingDef ParentName="PZ_SiegeLadderBase">
+    <defName>PZ_SiegeLift</defName>
+    <label>deployable lift</label>
+    <description>Disappears a day after the raid.</description>
+    <graphicData>
+      <texPath>ProjectZ/SiegeLift</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <statBases>
+      <MaxHitPoints>80</MaxHitPoints>
+      <WorkToBuild>300</WorkToBuild>
+      <Flammability>0</Flammability>
+      <Beauty>-2</Beauty>
+    </statBases>
+    <costList>
+      <ComponentIndustrial>2</ComponentIndustrial>
+    </costList>
+  </ThingDef>
+
+  <ThingDef ParentName="PZ_SiegeLadderBase">
+    <defName>PZ_EmergencyLadder</defName>
+    <label>improvised ladder</label>
+    <description>Disappears a day after it is built.</description>
+    <graphicData>
+      <texPath>ProjectZ/SiegeLadder</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>ProjectZ/SiegeLadder</uiIconPath>
+    <rotatable>true</rotatable>
+    <statBases>
+      <MaxHitPoints>60</MaxHitPoints>
+      <WorkToBuild>100</WorkToBuild>
+      <Flammability>1.0</Flammability>
+      <Beauty>-2</Beauty>
+    </statBases>
+    <designationCategory>Structure</designationCategory>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_EmergencyLadder</li>
+    </placeWorkers>
+    <comps Inherit="False">
+      <li Class="ProjectZ.CompProperties_SiegeLadder">
+        <ticks>60000</ticks>
+        <raidGate>false</raidGate>
+      </li>
+    </comps>
+    <uiOrder>2910</uiOrder>
+  </ThingDef>
+
+</Defs>

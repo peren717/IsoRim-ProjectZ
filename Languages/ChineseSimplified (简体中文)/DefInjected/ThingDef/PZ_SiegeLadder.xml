@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_SiegeLadder.label>临时梯子</PZ_SiegeLadder.label>
+  <PZ_SiegeLadder.description>袭击结束一天后消失。</PZ_SiegeLadder.description>
+  <PZ_SiegeLift.label>临时升降台</PZ_SiegeLift.label>
+  <PZ_SiegeLift.description>袭击结束一天后消失。</PZ_SiegeLift.description>
+  <PZ_EmergencyLadder.label>临时梯子</PZ_EmergencyLadder.label>
+  <PZ_EmergencyLadder.description>建好一天后消失。</PZ_EmergencyLadder.description>
+</LanguageData>

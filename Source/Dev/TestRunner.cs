@@ -36,6 +36,9 @@ namespace ProjectZ.Dev
     //                                   router2: the two-level stair-end router (oracle on seeded layouts, bridge, turn-around,
     //                                   wasted work, fixtures; TestRouter2), -projectzfloors=3 -projectzseed=7; routerperf: router
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
+    //                                   ladders: siege ladders, stage 1 (the generic vertical link, climbing, falls, the place-ladder
+    //                                   job, claim, countdown, deconstruct, hauling, the last way down, shots, save mid-climb;
+    //                                   TestLadders), -projectzfloors=5 -projectzseed=7
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
     //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
     //                                   failsoft: the patch state after -projectzfailpatch=<names> made those patches fail
@@ -635,6 +638,11 @@ namespace ProjectZ.Dev
                 StepRouter2(map);
                 return;
             }
+            if (stage.StartsWith("ld_"))
+            {
+                StepLadders(map);
+                return;
+            }
             if (stage.StartsWith("d3_"))
             {
                 StepDist3D(map);
@@ -992,6 +1000,10 @@ namespace ProjectZ.Dev
                     else if (mode == "router2")
                     {
                         stage = "r2_setup";
+                    }
+                    else if (mode == "ladders")
+                    {
+                        stage = "ld_setup";
                     }
                     else if (mode == "dist3d")
                     {

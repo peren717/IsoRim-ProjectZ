@@ -169,6 +169,11 @@ namespace ProjectZ
             {
                 Changed();
             }
+            if (removed > 0)
+            {
+                // pawns in the middle of its step stop, and climbers fall from the height they had reached (LinkSteps)
+                LinkSteps.LinkGone(map, s);
+            }
         }
 
         private void Changed()

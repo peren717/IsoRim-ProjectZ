@@ -229,12 +229,24 @@ namespace ProjectZ.Patches
         public static void Postfix(Pawn_PathFollower __instance)
         {
             Pawn pawn = PawnRef(__instance);
-            if (pawn == null || Links.Kind(pawn, out VLink link) == StepKind.None)
+            if (pawn == null)
             {
+                return;
+            }
+            if (Links.Kind(pawn, out VLink link) == StepKind.None)
+            {
+                // a path made over a link that is gone since: its step is no neighbour, so the path fails (asked again)
+                IntVec3 n = __instance.nextCell, pos = pawn.Position;
+                if (__instance.Moving && pawn.Spawned && n.IsValid && (Math.Abs(n.x - pos.x) > 1 || Math.Abs(n.z - pos.z) > 1) && ProjectZ.Annex(pawn.Map) != null)
+                {
+                    ProjectZ.DebugLog($"{pawn}: path step {pos} -> {n} over a link that is gone: path failed");
+                    LinkSteps.FailPath(pawn);
+                }
                 return;
             }
             __instance.nextCellCostTotal = link.stepTicks;
             __instance.nextCellCostLeft = link.stepTicks;
+            LinkSteps.For(pawn.Map)?.Began(pawn, link);
         }
     }
 

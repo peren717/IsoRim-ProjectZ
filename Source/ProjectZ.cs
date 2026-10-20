@@ -11,6 +11,9 @@ namespace ProjectZ
         public static TerrainDef PZ_OpenAir;
         public static TerrainDef PZ_UpperFloor;   // the wood slab (SlabDefs: test slabs with SlabDefs.Is, not against this)
         public static ThingDef PZ_Stairs;
+        public static ThingDef PZ_SiegeLadder;    // temporary siege ladder and the mechanoids' lift (SiegeLadder.cs)
+        public static ThingDef PZ_SiegeLift;
+        public static ThingDef PZ_EmergencyLadder;   // the player's emergency ladder (same class)
         public static RoofDef PZ_FloorRoof;
         public static RoofDef PZ_StairwellRoof;
         [MayRequireOdyssey]

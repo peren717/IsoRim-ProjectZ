@@ -71,7 +71,9 @@ namespace ProjectZ.Patches
                 return false;
             }
             RouteGraph g = RouteGraph.For(map);
-            if (g == null || !start.InBounds(map) || !dest.Cell.InBounds(map) || StairGrid.For(map) == null)
+            // (no links on the map: nothing between floors, unless the target is an emergency ladder still to be built, touched
+            // from its foot on another floor)
+            if (g == null || !start.InBounds(map) || !dest.Cell.InBounds(map) || StairGrid.For(map) == null && !(dest.HasThing && EmergencyLadder.IsPending(dest.Thing)))
             {
                 return false;
             }
@@ -132,6 +134,7 @@ namespace ProjectZ.Patches
             public int startMemoPart;
             public int destLevel;
             public bool rimGoal;
+            public IntVec3 footGoal;        // an emergency ladder not built yet: touched from its foot (EmergencyLadder)
             public int tc, td, stepExtra;
             public bool dig;
             public int digKey;
@@ -325,6 +328,8 @@ namespace ProjectZ.Patches
                 c.reachTp.mode = TraverseMode.PassDoors;
             }
             MoveTicks(tp, out c.tc, out c.td);
+            // (the cheapest floor change of any link: stairs, Climb.StepTicks per floor; a ladder costs 180 per floor, more:
+            // the heuristic stays admissible with ladders)
             c.stepExtra = Math.Max(0, Climb.StepTicks - c.tc);
             if (c.g == null || c.startLevel == Levels.None || !c.startGround.IsValid)
             {
@@ -346,6 +351,7 @@ namespace ProjectZ.Patches
             int dz = dest.Cell.z - dg.z;
             c.goalRect = new CellRect(rect.minX, rect.minZ - dz, rect.Width, rect.Height);
             c.rimGoal = peMode == PathEndMode.Touch && dest.HasThing && StairTouch.Is(dest.Thing);
+            c.footGoal = peMode != PathEndMode.OnCell && dest.HasThing && EmergencyLadder.PendingFoot(dest.Thing, out IntVec3 ft) ? ft : IntVec3.Invalid;
             StartRegions(map, start, tp, tmpRegions);
             c.startParts.Clear();
             c.startMemoPart = -1;
@@ -504,7 +510,7 @@ namespace ProjectZ.Patches
 
         // A goal leg the game's path finder can walk: on the destination's floor, or a stairs thing touched from the floor
         // above (its rim). A target touched across a stair step is reached only by standing on the other end (Immediate).
-        private static bool GoalLegOk(Ctx c, int level) => level == c.destLevel || c.rimGoal && level == Levels.LevelOf(c.dest.Thing.Position, c.map) + 1;
+        private static bool GoalLegOk(Ctx c, int level) => level == c.destLevel || c.rimGoal && level == Levels.LevelOf(c.dest.Thing.Position, c.map) + 1 || c.footGoal.IsValid && level == Levels.LevelOf(c.footGoal, c.map);
 
         // Dest on this stairs' ramp (or the stairs themselves): the pawn may walk to it from H.
         private static bool DestOnRamp(Ctx c, int link)
@@ -729,6 +735,13 @@ namespace ProjectZ.Patches
             }
             // goal: a stairs thing touched from the floor above ends on its rim (StairTouch T5)
             bool rim = e.mode == PathEndMode.Touch && e.target.HasThing && StairTouch.Is(e.target.Thing) && Levels.LevelOf(e.from, c.map) == Levels.LevelOf(e.target.Thing.Position, c.map) + 1;
+            // goal: an emergency ladder not built yet, from the floor of its foot: the leg ends on the foot
+            bool foot = c.footGoal.IsValid && e.target.HasThing && ReferenceEquals(e.target.Thing, c.dest.Thing) && Levels.LevelOf(e.from, c.map) == Levels.LevelOf(c.footGoal, c.map) && Levels.LevelOf(e.from, c.map) != c.destLevel;
+            if (foot)
+            {
+                e.target = c.footGoal;
+                e.mode = PathEndMode.OnCell;
+            }
             if (!c.dig && !rim && !c.g.FloorReach(e.from, e.target, e.mode, c.reachTp))
             {
                 e.banned = true;

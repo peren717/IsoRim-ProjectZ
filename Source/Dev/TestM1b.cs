@@ -354,7 +354,7 @@ namespace ProjectZ.Dev
         // Before every tick-watch check: who sleeps upstairs, how many colonists are up.
         private static void TickHook(Map map)
         {
-            if (mode == "m1c" || mode == "shuttles" || mode == "jump" || mode == "shipdeck" || mode == "shipset")
+            if (mode == "m1c" || mode == "shuttles" || mode == "jump" || mode == "shipdeck" || mode == "shipset" || mode == "ladders")
             {
                 KeepFed(map);
                 return;
@@ -659,6 +659,7 @@ namespace ProjectZ.Dev
         public static int spliceFails;
         public static int findNow;
         public static int climbResets;
+        public static int climbOverridesHeld;   // job overrides held off while a pawn climbs a ladder (LinkSteps)
         public static int jumps;
         public static int landings;
         public static int jumpRoutes;

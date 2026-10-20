@@ -69,4 +69,7 @@
   <PZ_BuiltHere>Something is built here</PZ_BuiltHere>
   <PZ_NotNaturalGround>Only bare natural ground opens</PZ_NotNaturalGround>
   <PZ_NoRoomToStand>No room to stand</PZ_NoRoomToStand>
+  <PZ_LadderAfterRaid>Disappears a day after the raid</PZ_LadderAfterRaid>
+  <PZ_LadderFallsApart>Disappears in {0}</PZ_LadderFallsApart>
+  <PZ_LadderNoDrop>Needs open air below its open side</PZ_LadderNoDrop>
 </LanguageData>

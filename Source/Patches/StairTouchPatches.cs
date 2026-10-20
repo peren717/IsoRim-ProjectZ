@@ -82,6 +82,11 @@ namespace ProjectZ.Patches
         // root is the other end of a stair step from a cell of the target.
         public static bool AcrossStep(IntVec3 root, LocalTargetInfo target, Map map)
         {
+            // (an emergency ladder not built yet: touched from the foot it will hang down to)
+            if (target.HasThing && EmergencyLadder.IsPending(target.Thing) && EmergencyLadder.PendingFoot(target.Thing, out IntVec3 foot) && foot == root)
+            {
+                return true;
+            }
             if (map == null || !target.IsValid || StairGrid.For(map) == null)
             {
                 return false;
@@ -103,7 +108,7 @@ namespace ProjectZ.Patches
         // the rim), 0 otherwise.
         public static int RemovalSide(Thing t)
         {
-            if (!(t is Building_Stairs s) || !s.Spawned || ProjectZ.Annex(s.Map) == null)
+            if (!(t is Building_Stairs || t is Building_SiegeLadder) || !(t is Building s) || !s.Spawned || ProjectZ.Annex(s.Map) == null)
             {
                 return 0;
             }
@@ -129,9 +134,25 @@ namespace ProjectZ.Patches
             {
                 return true;
             }
-            int k = Levels.LevelOf(t.Position, t.Map);
+            int k = BottomLevel(t);
             int r = Levels.LevelOf(root, t.Map);
-            return side > 0 ? r == k : r == k + 1;
+            return side > 0 ? r == k : r == TopLevel(t);
+        }
+
+        // The level of a link thing's top (stairs: the floor above; a ladder: span floors up).
+        public static int TopLevel(Thing t)
+        {
+            RouteGraph g = RouteGraph.For(t.Map);
+            int link = g == null ? -1 : g.LinkOf(t);
+            return link < 0 ? Levels.LevelOf(t.Position, t.Map) + 1 : Levels.LevelOf(g.links[link].top, t.Map);
+        }
+
+        // The level of a link thing's bottom (stairs: their own floor; a ladder: its foot, wherever the thing stands).
+        public static int BottomLevel(Thing t)
+        {
+            RouteGraph g = RouteGraph.For(t.Map);
+            int link = g == null ? -1 : g.LinkOf(t);
+            return link < 0 ? Levels.LevelOf(t.Position, t.Map) : Levels.LevelOf(g.links[link].bottom, t.Map);
         }
 
         // The rim cell a pawn upstairs should work from: nearest it that it can reach; Invalid if none.
@@ -200,6 +221,26 @@ namespace ProjectZ.Patches
                     }
                 }
             }
+            if (dest.HasThing && EmergencyLadder.PendingFoot(dest.Thing, out IntVec3 foot))
+            {
+                Region rf = foot.GetRegion(map);
+                if (rf != null && rf.Allows(traverseParams, isDestination: true) && !regions.Contains(rf))
+                {
+                    regions.Add(rf);
+                }
+                return;
+            }
+            if (dest.HasThing && dest.Thing is Building_SiegeLadder && dest.Thing.Spawned)
+            {
+                // K2 for a ladder: only the side that stays joined (its top was added across the step above)
+                int ls = StairTouch.RemovalSide(dest.Thing);
+                if (ls != 0)
+                {
+                    int keep = ls > 0 ? StairTouch.BottomLevel(dest.Thing) : StairTouch.TopLevel(dest.Thing);
+                    regions.RemoveAll(r => RouteGraph.LevelOfRegion(r, map) != keep);
+                }
+                return;
+            }
             if (!dest.HasThing || !StairTouch.Is(dest.Thing))
             {
                 return;
@@ -221,7 +262,7 @@ namespace ProjectZ.Patches
             {
                 // K2: only the side that stays joined
                 int k = Levels.LevelOf(dest.Thing.Position, map);
-                int keep = side > 0 ? k : k + 1;
+                int keep = side > 0 ? k : StairTouch.TopLevel(dest.Thing);
                 regions.RemoveAll(r => RouteGraph.LevelOfRegion(r, map) != keep);
             }
         }
@@ -246,7 +287,7 @@ namespace ProjectZ.Patches
                     __result = true;
                 }
             }
-            if (__result && target.HasThing && target.Thing is Building_Stairs && !StairTouch.TouchAllowedFrom(root, target.Thing))
+            if (__result && target.HasThing && (target.Thing is Building_Stairs || target.Thing is Building_SiegeLadder) && !StairTouch.TouchAllowedFrom(root, target.Thing))
             {
                 __result = false;
             }
@@ -263,6 +304,15 @@ namespace ProjectZ.Patches
         [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(Thing thing, Map map, List<Region> outRegions)
         {
+            if (EmergencyLadder.PendingFoot(thing, out IntVec3 foot))
+            {
+                Region rf = map.regionGrid.GetValidRegionAt_NoRebuild(foot);
+                if (rf != null && !outRegions.Contains(rf))
+                {
+                    outRegions.Add(rf);
+                }
+                return;
+            }
             if (!Stairwell.IsStairThing(thing) || ProjectZ.Annex(map) == null || !thing.Spawned)
             {
                 return;
@@ -353,6 +403,12 @@ namespace ProjectZ.Patches
         [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(Pawn toucher, Thing touchee, ref IntVec3 result, ref bool __result)
         {
+            if (!__result && toucher != null && EmergencyLadder.PendingFoot(touchee, out IntVec3 foot) && toucher.CanReach(foot, PathEndMode.OnCell, Danger.Deadly))
+            {
+                result = foot;   // an emergency ladder built from its foot
+                __result = true;
+                return;
+            }
             if (!__result && toucher != null && touchee != null && touchee.Spawned && ProjectZ.Annex(touchee.Map) != null && !StairTouch.Is(touchee))
             {
                 foreach (IntVec3 own in touchee.OccupiedRect())
@@ -364,6 +420,21 @@ namespace ProjectZ.Patches
                         return;
                     }
                 }
+            }
+            if (toucher != null && touchee is Building_SiegeLadder && touchee.Spawned)
+            {
+                // K2 for a ladder: from the side that stays joined; the top side works from the top cell (across the step)
+                if (__result && !StairTouch.TouchAllowedFrom(result, touchee))
+                {
+                    __result = false;
+                }
+                IntVec3 top = StairTouch.PairCell(touchee.Position, touchee.Map);
+                if (!__result && top.IsValid && StairTouch.TouchAllowedFrom(top, touchee) && toucher.CanReach(top, PathEndMode.OnCell, Danger.Deadly))
+                {
+                    result = top;
+                    __result = true;
+                }
+                return;
             }
             if (toucher == null || !StairTouch.Is(touchee))
             {

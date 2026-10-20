@@ -69,4 +69,7 @@
   <PZ_BuiltHere>此处有建筑</PZ_BuiltHere>
   <PZ_NotNaturalGround>只能挖开裸露的天然地面</PZ_NotNaturalGround>
   <PZ_NoRoomToStand>没有立足之处</PZ_NoRoomToStand>
+  <PZ_LadderAfterRaid>袭击结束一天后消失</PZ_LadderAfterRaid>
+  <PZ_LadderFallsApart>{0}后消失</PZ_LadderFallsApart>
+  <PZ_LadderNoDrop>开口一侧下方要是空的</PZ_LadderNoDrop>
 </LanguageData>
