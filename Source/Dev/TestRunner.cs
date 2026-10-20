@@ -164,6 +164,9 @@ namespace ProjectZ.Dev
     //                                   arguments as rocktop (TestMineDown)
     //                                   stepaside: pawns on a top that opens step aside, items fall, no free neighbour: a fall;
     //                                   the same arguments as minedown (TestStepAside)
+    //                                   mineabove2: Mine above with real jobs (one cell, a drag, rock also reachable on level 1,
+    //                                   rock also marked with vanilla Mine): U opens, stairs fit; with -projectzsave=<copy of a
+    //                                   player's save> its shafts and any U left closed; the same arguments as minedown (TestMineAbove2)
     //                                   holefog: fog round holes (ReachFog): with -projectzsave=<copy of a player's save> its
     //                                   holes loaded without and with the rule (U0-U1, shots); without, a fixed-seed tall-mountain map
     //                                   (F0 upper-level fog after generation and load, F1-F3 real digs into hidden caves); the same
@@ -202,7 +205,7 @@ namespace ProjectZ.Dev
         public static bool TallMountainsOverride;
 
         // Modes run on a mountainous tile (MtnTile); los3d too in a tall-mountain world (its mountain checks).
-        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "holefog" || mode == "reachfog" || mode == "los3d" && TallMountainsOverride;
+        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "los3d" && TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // -projectzoldroute: the stair router as before branch stairroute (no reachability check first, no memory of
@@ -309,7 +312,7 @@ namespace ProjectZ.Dev
             {
                 Seed = seed;
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
             }
@@ -448,7 +451,7 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "finders" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
             {
                 Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
             }
@@ -860,6 +863,11 @@ namespace ProjectZ.Dev
                 StepStepAside(map);
                 return;
             }
+            if (stage.StartsWith("ma_"))
+            {
+                StepMineAbove2(map);
+                return;
+            }
             if (stage.StartsWith("mu_"))
             {
                 StepMineUp(map);
@@ -894,7 +902,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "mineabove2" ? "ma_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node

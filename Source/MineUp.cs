@@ -157,6 +157,52 @@ namespace ProjectZ
         }
     }
 
+    // THE one place a marked rock's boundary opens: a rock carrying a Mine above / Mine below mark that is mined (every
+    // mining path ends in Mineable.DestroyMined: our vertical job, vanilla Mine or MineVein on the rock's own level, a
+    // blueprint's blocking rock, sappers, god mode) opens the boundary the mark names (Shaft.Open on the lower cell: the
+    // marked cell under the rock, or the rock's own cell under the marked top). The mark is read before the rock goes (the
+    // despawn takes it, DesignationManager_MineMarks_Patch). Rock destroyed any other way (explosions) opens nothing.
+    [HarmonyPatch(typeof(Mineable), nameof(Mineable.DestroyMined))]
+    public static class Mineable_MinedMarked_Patch
+    {
+        public static int Opened;
+
+        public static void Prefix(Mineable __instance, out (Map map, IntVec3 lower) __state)
+        {
+            __state = (null, IntVec3.Invalid);
+            Map map = __instance.Map;
+            if (map == null || !Mountains.On(map))
+            {
+                return;
+            }
+            IntVec3 u = __instance.Position;
+            MineDir dir = MineSide.Get(u, map);
+            IntVec3 lower = dir == MineDir.FromBelow ? FloorRoof.Below(u, map) : dir == MineDir.FromAbove ? u : IntVec3.Invalid;
+            if (lower.IsValid)
+            {
+                __state = (map, lower);
+            }
+        }
+
+        public static void Postfix(Pawn pawn, (Map map, IntVec3 lower) __state)
+        {
+            if (__state.map == null || !__state.lower.IsValid)
+            {
+                return;
+            }
+            Opened++;
+            int depth = MineUp.YieldPause();   // (only the rock's yield goes to the miner, not what falls)
+            try
+            {
+                Shaft.Open(__state.lower, __state.map, pawn);
+            }
+            finally
+            {
+                MineUp.YieldResume(depth);
+            }
+        }
+    }
+
     // The two commands (Orders, after vanilla Mine; tall-mountain maps only): a flat drag over cells of the viewed level, as
     // vanilla's area tools (not Designator_Mine, so IsoRim's block picking stays off). Vanilla Mine's icon with an arrow.
     public abstract class Designator_MineVertical : Designator_Cells
@@ -504,7 +550,7 @@ namespace ProjectZ
                 {
                     MineUp.MinedFromBelow++;
                 }
-                Shaft.Open(MineVertical.Lower(pos, Cell, map), map, actor);
+                // (the boundary opened as the rock was mined: Mineable_MinedMarked_Patch)
                 ReadyForNextToil();
             };
             mine.defaultCompleteMode = ToilCompleteMode.Never;
@@ -548,6 +594,17 @@ namespace ProjectZ
         }
 
         public static void YieldExit() => yieldDepth--;
+
+        // Outside the scope for a while (the boundary opening inside DestroyMined: what falls from the top lands below,
+        // not at the miner); returns the depth to restore.
+        public static int YieldPause()
+        {
+            int d = yieldDepth;
+            yieldDepth = 0;
+            return d;
+        }
+
+        public static void YieldResume(int depth) => yieldDepth = depth;
 
         internal static bool YieldScope(out IntVec3 at)
         {
