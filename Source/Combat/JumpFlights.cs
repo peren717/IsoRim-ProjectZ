@@ -408,10 +408,35 @@ namespace ProjectZ.Combat
 
         public static bool PoseOf(PawnFlyer f, out Pose p) => poses.TryGetValue(f.thingIDNumber, out p);
 
-        public static void Forget(PawnFlyer f) => poses.Remove(f.thingIDNumber);
+        // The take-off cell's offset from the cell of the flight's drawn start (startVec, the pawn's TrueCenter when it
+        // took off), by flyer: the drawn start can sit a row off the pawn's cell, in a void gap row or another floor's
+        // band. Kept as an offset so it follows startVec when a gravship carries the flight.
+        private static readonly Dictionary<int, IntVec3> startFix = new Dictionary<int, IntVec3>();
+        private static readonly HashSet<int> warned = new HashSet<int>();
 
-        // The cell the flight took off from.
-        public static IntVec3 StartCell(PawnFlyer f) => startVec(f).ToIntVec3();
+        public static void Forget(PawnFlyer f)
+        {
+            poses.Remove(f.thingIDNumber);
+            startFix.Remove(f.thingIDNumber);
+            warned.Remove(f.thingIDNumber);
+        }
+
+        // PawnFlyer.MakeFlyer: the pawn's cell at take-off.
+        public static void SetStart(PawnFlyer f, IntVec3 cell)
+        {
+            if (f != null && cell.IsValid)
+            {
+                startFix[f.thingIDNumber] = cell - startVec(f).ToIntVec3();
+            }
+        }
+
+        // The cell the flight took off from: the pawn's cell (a flight made without a spawned pawn, or loaded from a
+        // save: its drawn start's cell). Both ends' floors come from cells.
+        public static IntVec3 StartCell(PawnFlyer f)
+        {
+            IntVec3 c = startVec(f).ToIntVec3();
+            return startFix.TryGetValue(f.thingIDNumber, out IntVec3 fix) ? c + fix : c;
+        }
 
         // Floors of the flight's two ends; false for a flight on one floor (or a map without floors).
         public static bool Ends(PawnFlyer f, Map map, out int ks, out int kd)
@@ -421,7 +446,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            ks = ProjectZ.FloorOf(startVec(f).ToIntVec3(), map);
+            ks = ProjectZ.FloorOf(StartCell(f), map);
             kd = ProjectZ.FloorOf(destCell(f), map);
             return ks >= 0 && kd >= 0 && ks != kd;
         }
@@ -451,6 +476,12 @@ namespace ProjectZ.Combat
             float t2 = props.Worker.AdjustedProgress(t);
             float eh = effectiveHeight(f);
             Vector3 s = startVec(f);
+            if (ProjectZ.FloorOf(s.ToIntVec3(), map) != ks)
+            {
+                // drawn start off its floor's rows: start from the take-off cell's centre
+                Vector3 sc = StartCell(f).ToVector3Shifted();
+                s = new Vector3(sc.x, s.y, sc.z);
+            }
             Vector3 d = f.DestinationPos;
             Vector3 gs = new Vector3(s.x, s.y, s.z - Levels.Shift(map, ks));
             Vector3 gd = new Vector3(d.x, d.y, d.z - Levels.Shift(map, kd));
@@ -508,6 +539,26 @@ namespace ProjectZ.Combat
             // (moved onto the shadow floor's rows: IsoRim lifts it by that floor's height)
             drawLoc = new Vector3(drawLoc.x, drawLoc.y - back, drawLoc.z + Levels.Shift(f.Map, p.shadow) - Levels.Shift(f.Map, p.band));
         }
+
+        // A flight between floors drawn without its pose shows on the game's own path (sliding through other floors'
+        // rows): logged once per flyer, so it leaves a trace.
+        public static bool Warned(PawnFlyer f) => warned.Contains(f.thingIDNumber);
+
+        public static void CheckPosed(PawnFlyer f)
+        {
+            if (!f.Spawned || PoseOf(f, out _) || warned.Contains(f.thingIDNumber) || ProjectZ.Annex(f.Map) == null)
+            {
+                return;
+            }
+            IntVec3 s = StartCell(f), d = destCell(f);
+            int ks = ProjectZ.FloorOf(s, f.Map), kd = ProjectZ.FloorOf(d, f.Map);
+            if (ks == kd)
+            {
+                return;
+            }
+            warned.Add(f.thingIDNumber);
+            Log.Warning($"[ProjectZ] {f} flies from {s} (level {ks}, drawn start {startVec(f)}) to {d} (level {kd}) without its between-floors path: drawn on the game's own path.");
+        }
     }
 
     [HarmonyPatch(typeof(PawnFlyer), nameof(PawnFlyer.MakeFlyer))]
@@ -518,11 +569,15 @@ namespace ProjectZ.Combat
             __state = new KeyValuePair<Map, IntVec3>(pawn?.Map, pawn != null ? pawn.Position : IntVec3.Invalid);
         }
 
-        public static void Postfix(PawnFlyer __result, IntVec3 destCell, KeyValuePair<Map, IntVec3> __state)
+        public static void Postfix(PawnFlyer __result, IntVec3 destCell, Vector3? overrideStartVec, KeyValuePair<Map, IntVec3> __state)
         {
             if (__state.Key != null && __state.Value.IsValid)
             {
                 JumpFlights.SetLength(__result, __state.Key, __state.Value, destCell);
+                if (overrideStartVec == null)
+                {
+                    JumpFlights.SetStart(__result, __state.Value);
+                }
             }
         }
     }
@@ -544,6 +599,7 @@ namespace ProjectZ.Combat
     {
         public static void Prefix(PawnFlyer __instance, ref Vector3 drawLoc)
         {
+            JumpFlights.CheckPosed(__instance);
             JumpFlights.ShadowAt(__instance, ref drawLoc);
         }
     }

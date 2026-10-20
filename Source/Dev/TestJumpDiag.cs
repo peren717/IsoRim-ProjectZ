@@ -15,7 +15,7 @@ namespace ProjectZ.Dev
     // speed (the game ticks itself, one frame per draw), every drawn frame of the flyer logged to frames.tsv: the flyer's
     // tick, Position, the game's groundPos/effectivePos, JumpFlights' pose, where IsoRim shows the effectivePos
     // (Floors.Drawn) and what the pawn renderer gets (RenderPawnAt drawLoc, DrawHook floor matrix). Run with
-    // -projectzfloors=3.
+    // -projectzfloors=3 (fixed seed: -projectzseed=7).
     public static partial class TestRunner
     {
         private sealed class JdCase
@@ -24,6 +24,40 @@ namespace ProjectZ.Dev
             public IntVec3 from, to;
             public string who = "pack";
             public int view;   // floor viewed for the shots (0 ground)
+            // test-only: the flight's drawn start (startVec) forced off the take-off cell's floor at take-off:
+            // "voidBelow"/"voidAbove" = the void gap row under/over the take-off floor's band, "band" = level forceLevel's band
+            public string force;
+            public int forceLevel;
+        }
+
+        private static string jdForce;
+        private static int jdForceLevel;
+        private static IntVec3 jdForceFrom;
+        private static bool jdPoseSeen, jdWarnSeen, jdHaveFirst;
+        private static int jdFirstBand = -9;
+        private static Vector3 jdFirstT;
+        private static string jdForcedAt;
+        private static bool jdForcedOff;
+
+        // test-only MakeFlyer postfix (runs before ProjectZ's own, which reads the pawn's cell against this startVec):
+        // the drawn start moved off the take-off floor's rows, as a pawn drawn a row off its cell would leave it
+        public static void JdForceStart(PawnFlyer __result, Pawn pawn)
+        {
+            if (!Active || jdForce == null || __result == null || pawn == null || pawn != jdJumper && pawn != jdSang)
+            {
+                return;
+            }
+            Map map = Find.CurrentMap;
+            int L = ProjectZ.FloorOf(jdForceFrom, map);
+            Vector3 s = jdStart(__result);
+            float z = jdForce == "voidBelow" ? Levels.RowMin(map, L) - 0.5f
+                : jdForce == "voidAbove" ? Levels.RowMax(map, L) + 1.5f
+                : ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(jdForceFrom, map), jdForceLevel, map).z + 0.5f;
+            jdStart(__result) = new Vector3(jdForceFrom.x + 0.5f, s.y, z);
+            IntVec3 fc = jdStart(__result).ToIntVec3();
+            jdForcedOff = ProjectZ.FloorOf(fc, map) != L;
+            jdForcedAt = $"{fc} (level {ProjectZ.FloorOf(fc, map)}, void {ProjectZ.IsVoid(fc, map)}), take-off cell {jdForceFrom} (level {L})";
+            jdForce = null;   // once
         }
 
         private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> jdEff = AccessTools.FieldRefAccess<PawnFlyer, Vector3>("effectivePos");
@@ -187,6 +221,13 @@ namespace ProjectZ.Dev
                         jdRaw = true;
                         Info("jumpdiag: JumpFlights.Recompute removed (raw game flight)");
                     }
+                    jdForce = c.force;
+                    jdForceLevel = c.forceLevel;
+                    jdForceFrom = c.from;
+                    jdForcedAt = null;
+                    jdForcedOff = false;
+                    jdPoseSeen = jdWarnSeen = jdHaveFirst = false;
+                    jdFirstBand = -9;
                     v.OrderForceTarget(c.to);
                     jdFlyer = null;
                     jdFrames = 0;
@@ -222,6 +263,17 @@ namespace ProjectZ.Dev
                         }
                         jdLastT = gT;
                         jdHaveT = true;
+                        if (JumpFlights.PoseOf(jdFlyer, out JumpFlights.Pose fp))
+                        {
+                            if (!jdPoseSeen)
+                            {
+                                jdFirstBand = fp.band;
+                                jdFirstT = gT;
+                                jdHaveFirst = true;
+                            }
+                            jdPoseSeen = true;
+                        }
+                        jdWarnSeen |= JumpFlights.Warned(jdFlyer);
                         JdLog($"{c.name}\tT\t{Time.frameCount}\t{Find.TickManager.TicksGame}\t{jdTicks(jdFlyer)}/{jdTotal(jdFlyer)}\t{jdFlyer.Position}\t{ProjectZ.FloorOf(jdFlyer.Position, map)}\t{V(jdGround(jdFlyer))}\t{V(e)}\tposed {JumpFlights.PoseOf(jdFlyer, out JumpFlights.Pose pp)} band {pp.band}\tshownGround {V(gT)}");
                         if (jdShots < JdShotAt.Length && frac >= JdShotAt[jdShots])
                         {
@@ -237,6 +289,23 @@ namespace ProjectZ.Dev
                         Result($"{c.name}: lands where asked", there, $"at {p.Position} (level {ProjectZ.FloorOf(p.Position, map)}), asked {c.to}; frames {jdFrames}");
                         Result($"{c.name}: the drawn pawn moves smoothly (no frame-to-frame jump > 3 cells)", jdMaxOff <= 3f, $"largest step {jdMaxOff:0.00} cells; {jdFirstOff ?? "none"}");
                         Result($"{c.name}: the flyer's effectivePos stays over a smooth ground path (per frame, no probe patch needed)", jdMaxT <= 3f, $"largest step {jdMaxT:0.00} cells; {jdMaxTAt ?? "none"}");
+                        int fk = ProjectZ.FloorOf(c.from, map), tk = ProjectZ.FloorOf(c.to, map);
+                        if (c.force != null)
+                        {
+                            Result($"{c.name}: (setup) the drawn start was forced off the take-off floor", jdForcedAt != null && jdForcedOff, jdForcedAt ?? "not forced");
+                        }
+                        if (fk != tk && !jdRaw)
+                        {
+                            IntVec3 g0 = ProjectZ.GroundCellOf(c.from, map);
+                            float d0 = jdHaveFirst ? new Vector2(jdFirstT.x - (g0.x + 0.5f), jdFirstT.z - (g0.z + 0.5f)).magnitude : 999f;
+                            Result($"{c.name}: flown on the between-floors path from the take-off floor (posed, first band {fk}, starts over the take-off cell, no warning)",
+                                jdPoseSeen && jdFirstBand == fk && d0 <= 2.5f && !jdWarnSeen,
+                                $"posed {jdPoseSeen}, first band {jdFirstBand} (take-off level {fk}), first ground point {d0:0.00} cells from {g0}, warned {jdWarnSeen}");
+                        }
+                        if (fk != tk && jdRaw)
+                        {
+                            Result($"{c.name}: (raw flight) the unposed flight between floors is logged once", jdWarnSeen, $"warned {jdWarnSeen}");
+                        }
                         jdMaxT = 0f;
                         jdHaveT = false;
                         jdMaxTAt = null;
@@ -386,6 +455,7 @@ namespace ProjectZ.Dev
                 h.Patch(AccessTools.Method(typeof(PawnRenderer), "RenderPawnAt"), prefix: new HarmonyMethod(typeof(TestRunner), nameof(JdRenderPawn)) { priority = Priority.Last });
                 jdPatched = true;
             }
+            new Harmony("Peren.IsoRimProjectZ.jumpdiagforce").Patch(AccessTools.Method(typeof(PawnFlyer), nameof(PawnFlyer.MakeFlyer)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(JdForceStart)) { priority = Priority.First });
             if (an == null || an.floors < 3)
             {
                 Result("jumpdiag setup", false, $"needs 3 floors (-projectzfloors=3); floors {an?.floors}");
@@ -485,6 +555,13 @@ namespace ProjectZ.Dev
                 new JdCase { name = "down3_south", from = JdUp(28, 12, 2, map), to = JdO(28, 5), view = 2 },
                 new JdCase { name = "sang_down", from = JdUp(9, 10, 1, map), to = JdO(10, 3), who = "sang", view = 1 },
                 new JdCase { name = "sang_up", from = JdO(10, 3), to = JdUp(10, 11, 1, map), who = "sang", view = 1 },
+                // the suspected skip: the flight's drawn start (the pawn's TrueCenter) off its cell's floor at take-off
+                new JdCase { name = "forced_voidbelow_down", from = JdUp(8, 10, 1, map), to = JdO(8, 3), view = 1, force = "voidBelow" },
+                new JdCase { name = "forced_voidabove_down", from = JdUp(8, 10, 1, map), to = JdO(8, 3), view = 1, force = "voidAbove" },
+                new JdCase { name = "forced_band2_down", from = JdUp(8, 10, 1, map), to = JdO(8, 3), view = 1, force = "band", forceLevel = 2 },
+                new JdCase { name = "forced_voidabove_up", from = JdO(8, 3), to = JdUp(8, 11, 1, map), view = 1, force = "voidAbove" },
+                new JdCase { name = "forced_band1_up", from = JdO(8, 3), to = JdUp(8, 11, 1, map), view = 1, force = "band", forceLevel = 1 },
+                new JdCase { name = "forced_band0_sang_down", from = JdUp(9, 10, 1, map), to = JdO(10, 3), who = "sang", view = 1, force = "band", forceLevel = 0 },
             };
             // -projectzjdrepeat=N: the whole list N times (long sessions)
             if (GenCommandLine.TryGetCommandLineArg("projectzjdrepeat", out string rep) && int.TryParse(rep, out int nrep) && nrep > 1)
@@ -492,7 +569,7 @@ namespace ProjectZ.Dev
                 List<JdCase> one = jdCases.ToList();
                 for (int r = 1; r < nrep; r++)
                 {
-                    jdCases.AddRange(one.Select(c => new JdCase { name = c.name + "_r" + r, from = c.from, to = c.to, who = c.who, view = c.view }));
+                    jdCases.AddRange(one.Select(c => new JdCase { name = c.name + "_r" + r, from = c.from, to = c.to, who = c.who, view = c.view, force = c.force, forceLevel = c.forceLevel }));
                 }
             }
             jdCase = 0;
