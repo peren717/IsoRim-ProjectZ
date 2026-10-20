@@ -780,6 +780,11 @@ namespace ProjectZ.Dev
                 StepBulletPitch(map);
                 return;
             }
+            if (stage.StartsWith("fz_"))
+            {
+                StepFlame(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -1098,6 +1103,10 @@ namespace ProjectZ.Dev
                     else if (mode == "bulletpitch")
                     {
                         stage = "i_setup";
+                    }
+                    else if (mode == "flamediag")
+                    {
+                        stage = "fz_setup";
                     }
                     else if (mode == "range")
                     {
