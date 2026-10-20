@@ -97,50 +97,205 @@ namespace ProjectZ.Dev
             return h;
         }
 
-        // The cells a reveal from `start` (an upper band cell) is expected to open: its plateau, the band's non-rock cells
-        // (tops, slabs, landings, fogged holes) 4-connected to it through tops and fogged open air (the open sky stops it),
-        // and the rock 8-adjacent to them (vanilla's faces). Read from the map, not from ReachFog.
-        private static HashSet<int> FgExpected(Map map, IntVec3 start, out int fogged)
+        // The cells a reveal from `start` (an upper band cell) is expected to open: what a pawn there can walk to and what
+        // it can see from the edges, read from the map (terrain, buildings, roofs), not from ReachFog:
+        //   - the walk area: the walkable cells 4-connected to it on its band (rock, walls and closed doors stop it; fog
+        //     does not), with the rock 8-adjacent to them (vanilla's faces) and the ceiling of each (up through open air to
+        //     the first cell that is not open air, each open-air cell with its faces);
+        //   - each open-air cell 4-adjacent to the area on its band is an edge: its column down through open air (each
+        //     open-air cell with its faces) to the first cell that is not open air: rock is seen (that cell), a walkable
+        //     cell is seen with its own walk area on that band (same rules), whose edges are seen in turn (the cascade). A
+        //     roof on the way ends the view (a thick roof: nothing of that column is seen);
+        //   - an open-air cell with a roof over it on a ceiling column shows the walk areas round it.
+        // Nothing floods through open air: a top only reachable across a hole is neither walked to nor seen.
+        // Built per map state (the same tick and things) and kept: the candidate loops call this many times.
+        private static Map fgxMap;
+        private static int fgxTick = -1, fgxThings = -1;
+        private static readonly Dictionary<int, int> fgxAreaOf = new Dictionary<int, int>();
+        private static readonly List<List<int>> fgxOwn = new List<List<int>>();
+        private static readonly List<List<int>> fgxNext = new List<List<int>>();
+
+        private static bool FgOpenAir(IntVec3 c, Map map) => c.InBounds(map) && c.GetTerrain(map) == PZDefOf.PZ_OpenAir && c.GetEdifice(map) == null;
+
+        private static bool FgClosedDoor(IntVec3 c, Map map) => c.GetEdifice(map) is Building_Door d && !d.Open;
+
+        // An area can be entered at c: walkable, not a closed door.
+        private static bool FgEnters(IntVec3 c, Map map) => c.InBounds(map) && c.Walkable(map) && !FgClosedDoor(c, map);
+
+        private static void FgFaces(IntVec3 c, Map map, List<int> own)
         {
-            HashSet<int> e = new HashSet<int>();
-            fogged = 0;
-            int band = Levels.BandOfCell(start, map);
+            foreach (IntVec3 d in GenAdj.AdjacentCells)
+            {
+                IntVec3 n = c + d;
+                if (n.InBounds(map) && FgBlocker(n, map) && ProjectZ.SameBand(n, c, map))
+                {
+                    own.Add(map.cellIndices.CellToIndex(n));
+                }
+            }
+        }
+
+        // The walk area holding cell s (built on first use): its own cells and the areas its edges and covered ceilings show.
+        private static int FgArea(IntVec3 s, Map map)
+        {
             CellIndices ci = map.cellIndices;
-            Queue<IntVec3> q = new Queue<IntVec3>();
-            HashSet<int> seen = new HashSet<int> { ci.CellToIndex(start) };
-            q.Enqueue(start);
+            if (fgxAreaOf.TryGetValue(ci.CellToIndex(s), out int id))
+            {
+                return id;
+            }
+            id = fgxOwn.Count;
+            List<int> own = new List<int>();
+            List<IntVec3> lands = new List<IntVec3>();
+            fgxOwn.Add(own);
+            fgxNext.Add(new List<int>());
             List<IntVec3> area = new List<IntVec3>();
+            Queue<IntVec3> q = new Queue<IntVec3>();
+            fgxAreaOf[ci.CellToIndex(s)] = id;
+            q.Enqueue(s);
+            bool enters = FgEnters(s, map);
             while (q.Count > 0)
             {
                 IntVec3 c = q.Dequeue();
                 area.Add(c);
+                if (!enters)
+                {
+                    break;   // (a start that is no walkable cell: itself only)
+                }
                 foreach (IntVec3 d in GenAdj.CardinalDirections)
                 {
                     IntVec3 n = c + d;
-                    if (!n.InBounds(map) || Levels.BandOfCell(n, map) != band || !seen.Add(ci.CellToIndex(n)) || FgBlocker(n, map))
+                    if (n.InBounds(map) && ProjectZ.SameBand(n, c, map) && FgEnters(n, map) && !fgxAreaOf.ContainsKey(ci.CellToIndex(n)))
                     {
-                        continue;
+                        fgxAreaOf[ci.CellToIndex(n)] = id;
+                        q.Enqueue(n);
                     }
-                    bool openAir = n.GetTerrain(map) == PZDefOf.PZ_OpenAir;
-                    if (openAir && !map.fogGrid.IsFogged(n))
-                    {
-                        continue;   // the sky
-                    }
-                    q.Enqueue(n);
                 }
             }
             foreach (IntVec3 c in area)
             {
-                e.Add(ci.CellToIndex(c));
-                foreach (IntVec3 d in GenAdj.AdjacentCells)
+                own.Add(ci.CellToIndex(c));
+                FgFaces(c, map, own);
+                IntVec3 g = Levels.Ground(c, map);
+                int L = Levels.LevelOf(c, map);
+                if (!g.IsValid || L == Levels.None)
+                {
+                    continue;
+                }
+                // the edges: open air beside it on its band, down its column
+                foreach (IntVec3 d in GenAdj.CardinalDirections)
                 {
                     IntVec3 n = c + d;
-                    if (n.InBounds(map) && FgBlocker(n, map))
+                    if (!FgOpenAir(n, map) || !ProjectZ.SameBand(n, c, map))
                     {
-                        e.Add(ci.CellToIndex(n));
+                        continue;
+                    }
+                    IntVec3 ng = Levels.Ground(n, map);
+                    List<int> col = new List<int> { ci.CellToIndex(n) };
+                    FgFaces(n, map, col);
+                    IntVec3 land = IntVec3.Invalid;
+                    bool thick = false;
+                    for (int k = L - 1; ; k--)
+                    {
+                        IntVec3 below = Levels.Cell(ng, k, map);
+                        if (!below.IsValid)
+                        {
+                            break;
+                        }
+                        RoofDef r = map.roofGrid.RoofAt(below);
+                        if (r != null && r != PZDefOf.PZ_StairwellRoof)
+                        {
+                            thick = r.isThickRoof;
+                            break;   // a roof ends the view
+                        }
+                        if (FgOpenAir(below, map))
+                        {
+                            col.Add(ci.CellToIndex(below));
+                            FgFaces(below, map, col);
+                            continue;
+                        }
+                        land = below;
+                        break;
+                    }
+                    if (thick)
+                    {
+                        continue;
+                    }
+                    own.AddRange(col);
+                    if (land.IsValid)
+                    {
+                        if (FgEnters(land, map))
+                        {
+                            lands.Add(land);
+                        }
+                        else
+                        {
+                            own.Add(ci.CellToIndex(land));   // the rock (or whatever holds) the fall lands on
+                        }
+                    }
+                }
+                // the ceiling: up through open air to the first cell that is not open air
+                for (int k = L + 1; ; k++)
+                {
+                    IntVec3 up = Levels.Cell(g, k, map);
+                    if (!up.IsValid)
+                    {
+                        break;
+                    }
+                    own.Add(ci.CellToIndex(up));
+                    if (!FgOpenAir(up, map))
+                    {
+                        break;
+                    }
+                    FgFaces(up, map, own);
+                    if (map.roofGrid.Roofed(up))
+                    {
+                        foreach (IntVec3 d in GenAdj.CardinalDirections)
+                        {
+                            IntVec3 w = up + d;
+                            if (FgEnters(w, map) && ProjectZ.SameBand(w, up, map))
+                            {
+                                lands.Add(w);
+                            }
+                        }
                     }
                 }
             }
+            foreach (IntVec3 l in lands)
+            {
+                fgxNext[id].Add(FgArea(l, map));
+            }
+            return id;
+        }
+
+        private static HashSet<int> FgExpected(Map map, IntVec3 start, out int fogged)
+        {
+            int things = map.listerThings.AllThings.Count;
+            if (fgxMap != map || fgxTick != Find.TickManager.TicksGame || fgxThings != things)
+            {
+                fgxMap = map;
+                fgxTick = Find.TickManager.TicksGame;
+                fgxThings = things;
+                fgxAreaOf.Clear();
+                fgxOwn.Clear();
+                fgxNext.Clear();
+            }
+            HashSet<int> e = new HashSet<int>();
+            HashSet<int> done = new HashSet<int>();
+            Stack<int> st = new Stack<int>();
+            st.Push(FgArea(start, map));
+            while (st.Count > 0)
+            {
+                int a = st.Pop();
+                if (!done.Add(a))
+                {
+                    continue;
+                }
+                e.UnionWith(fgxOwn[a]);
+                foreach (int b in fgxNext[a])
+                {
+                    st.Push(b);
+                }
+            }
+            fogged = 0;
             foreach (int i in e)
             {
                 fogged += map.fogGrid.IsFogged(i) ? 1 : 0;

@@ -11,7 +11,9 @@ namespace ProjectZ.Dev
     // free neighbour the pawn falls (user 2026-10-19). The same fixed-seed map and arguments as minedown; the setup finds the
     // plateau block P (MdSites), puts the miners on it and saves pz_stepaside; every check reloads it, uses the real Mine
     // below designator, work giver and job under its own fixed seed:
-    //   S1 three colonists mine below five neighbouring cells (a plus) at once: all open, nobody falls
+    //   S1 three colonists mine below five neighbouring cells (a plus) at once: all open, or (user decision) four open and
+    //      the last one an isolated top (4 sides open air, every diagonal's corners open) nobody can touch, which keeps its
+    //      mark (vanilla-like), with no job-loop errors; nobody falls either way
     //   S2 a drafted colonist walking across the top at the moment it opens: steps aside, no fall, reaches its goal
     //   S3 an animal on the top: steps aside
     //   S4 wood on the top falls to the pit floor
@@ -66,6 +68,33 @@ namespace ProjectZ.Dev
                     saBadSpot = $"{p} spot {j.targetC.Cell} for top {j.targetB.Cell} tick {Find.TickManager.TicksGame}";
                 }
             }
+        }
+
+        // S1: four of the tops open and the remaining one an isolated top nobody can touch (its 4 sides open air, both corner
+        // cells of each diagonal open air) that still has its Mine below mark.
+        private static bool SaS1Stuck(List<IntVec3> tops, Map map, out IntVec3 last)
+        {
+            List<IntVec3> shut = tops.Where(t => !SaOpen(t, map)).ToList();
+            last = shut.Count == 1 ? shut[0] : IntVec3.Invalid;
+            if (!last.IsValid)
+            {
+                return false;
+            }
+            foreach (IntVec3 d in GenAdj.CardinalDirections)
+            {
+                if (!SaOpen(last + d, map))
+                {
+                    return false;
+                }
+            }
+            foreach (IntVec3 d in GenAdj.DiagonalDirections)
+            {
+                if (!SaOpen(last + new IntVec3(d.x, 0, 0), map) || !SaOpen(last + new IntVec3(0, 0, d.z), map))
+                {
+                    return false;
+                }
+            }
+            return MineSide.MarkAt(last, map, MineDir.FromAbove);
         }
 
         private static void SaMark(Map map, IEnumerable<IntVec3> tops)
@@ -146,7 +175,10 @@ namespace ProjectZ.Dev
                     MdWork(map, crew, WorkTypeDefOf.Mining);
                     int marked = tops.Count(t => MineSide.MarkAt(t, map, MineDir.FromAbove));
                     Info($"S1: {marked}/5 tops marked Mine below, crew {crew.Count}");
-                    MuRun(400, 51000, () => tops.All(t => SaOpen(t, map)), "sa_s1_done", () =>
+                    saErr0 = errors;
+                    int settled = 0;
+                    // (an untouchable last top is final: some 10 frames more to show no job loop round it)
+                    MuRun(400, 51000, () => tops.All(t => SaOpen(t, map)) || SaS1Stuck(tops, map, out _) && ++settled >= 10, "sa_s1_done", () =>
                     {
                         foreach (Pawn p in SaCrew(map))
                         {
@@ -165,8 +197,10 @@ namespace ProjectZ.Dev
                     List<IntVec3> tops = new[] { (0, 0), (1, 0), (-1, 0), (0, 1), (0, -1) }.Select(o => SaTop(o.Item1, o.Item2, map)).ToList();
                     int open = tops.Count(t => SaOpen(t, map));
                     List<Pawn> crew = SaCrew(map);
-                    Result("S1 three colonists mine below five neighbouring tops (a plus) at once: all open, nobody falls", open == 5 && !saFell && crew.All(p => ProjectZ.FloorOf(p.Position, map) == 1),
-                        $"open {open}/5, fell {saNote ?? "none"}; crew {string.Join(", ", crew.Select(p => $"{p} L{ProjectZ.FloorOf(p.Position, map)}"))}; stepped aside {Shaft.SteppedAside - saStep0}");
+                    bool stuck = SaS1Stuck(tops, map, out IntVec3 last);
+                    Result("S1 three colonists mine below five neighbouring tops (a plus) at once: all open, or four open and the last an untouchable isolated top that keeps its mark (no job loop); nobody falls",
+                        (open == 5 || stuck && errors == saErr0) && !saFell && crew.All(p => ProjectZ.FloorOf(p.Position, map) == 1),
+                        $"open {open}/5{(stuck ? $", last {last} untouchable, mark kept {MineSide.MarkAt(last, map, MineDir.FromAbove)}" : "")}; errors {errors - saErr0}; fell {saNote ?? "none"}; crew {string.Join(", ", crew.Select(p => $"{p} L{ProjectZ.FloorOf(p.Position, map)}"))}; stepped aside {Shaft.SteppedAside - saStep0}");
                     SaEnd(map, "S1", "sa_s2");
                     return true;
                 }
