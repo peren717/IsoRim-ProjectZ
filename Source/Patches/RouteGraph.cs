@@ -796,21 +796,38 @@ namespace ProjectZ.Patches
             reach2?.ClearCache();
             memo.Clear();
             // (the legs went through doors, fences and danger the game now judges again: a door forbidden, held open ...)
-            legs.Clear();
+            legsByPawn.Clear();
         }
 
+        // One pawn's reachability changed (its faction, guest status, a rope ...): its own legs and memo go.
         public void ClearReach2For(Pawn p)
         {
             reach2?.ClearCacheFor(p);
+            if (p == null)
+            {
+                return;
+            }
+            int id = p.thingIDNumber;
             if (memo.Count > 0)
             {
-                memo.Clear();
+                stalePawn.Clear();
+                foreach ((int who, IntVec3 dest, int part) k in memo.Keys)
+                {
+                    if (k.who == id)
+                    {
+                        stalePawn.Add(k);
+                    }
+                }
+                for (int i = 0; i < stalePawn.Count; i++)
+                {
+                    memo.Remove(stalePawn[i]);
+                }
+                stalePawn.Clear();
             }
-            if (legs.Count > 0)
-            {
-                legs.Clear();
-            }
+            legsByPawn.Remove(id);
         }
+
+        private readonly List<(int, IntVec3, int)> stalePawn = new List<(int, IntVec3, int)>();
 
         public void ClearReach2ForHostile(Thing t)
         {
@@ -912,13 +929,14 @@ namespace ProjectZ.Patches
             public int version;           // the floor's version when found
         }
 
-        private readonly Dictionary<(int who, IntVec3 from, IntVec3 to, int thing, PathEndMode mode), LegResult> legs = new Dictionary<(int, IntVec3, IntVec3, int, PathEndMode), LegResult>();
+        // per pawn (key -1: no pawn), so one pawn's changes clear its own legs only (ClearReach2For)
+        private readonly Dictionary<int, Dictionary<(int who, IntVec3 from, IntVec3 to, int thing, PathEndMode mode), LegResult>> legsByPawn = new Dictionary<int, Dictionary<(int, IntVec3, IntVec3, int, PathEndMode), LegResult>>();
 
         public static int Who(TraverseParms tp) => HashCode.Combine(tp.pawn?.thingIDNumber ?? -1, (int)tp.mode, (int)tp.maxDanger, tp.canBashDoors, tp.canBashFences, tp.avoidFog, tp.fenceBlocked, tp.avoidPersistentDanger);
 
-        public LegResult KnownLeg(int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode)
+        public LegResult KnownLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode)
         {
-            if (!legs.TryGetValue((who, from, to.Cell, to.HasThing ? to.Thing.thingIDNumber : -1, mode), out LegResult r))
+            if (!legsByPawn.TryGetValue(pid, out var legs) || !legs.TryGetValue((who, from, to.Cell, to.HasThing ? to.Thing.thingIDNumber : -1, mode), out LegResult r))
             {
                 return null;
             }
@@ -930,31 +948,49 @@ namespace ProjectZ.Patches
             return r;
         }
 
-        public void KeepLeg(int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode, LegResult r)
+        public void KeepLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode, LegResult r)
         {
             r.tick = Find.TickManager.TicksGame;
             r.version = LevelVersion(Levels.LevelOf(from, map));
+            if (!legsByPawn.TryGetValue(pid, out var legs))
+            {
+                legsByPawn[pid] = legs = new Dictionary<(int, IntVec3, IntVec3, int, PathEndMode), LegResult>();
+            }
             legs[(who, from, to.Cell, to.HasThing ? to.Thing.thingIDNumber : -1, mode)] = r;
         }
 
         private readonly List<(int, IntVec3, IntVec3, int, PathEndMode)> stale = new List<(int, IntVec3, IntVec3, int, PathEndMode)>();
+        private readonly List<int> stalePawns = new List<int>();
 
         private void PruneLegs()
         {
             int now = Find.TickManager.TicksGame;
-            stale.Clear();
-            foreach (KeyValuePair<(int, IntVec3, IntVec3, int, PathEndMode), LegResult> kv in legs)
+            stalePawns.Clear();
+            foreach (KeyValuePair<int, Dictionary<(int, IntVec3, IntVec3, int, PathEndMode), LegResult>> pk in legsByPawn)
             {
-                if (now - kv.Value.tick > LegTicks)
+                stale.Clear();
+                foreach (KeyValuePair<(int, IntVec3, IntVec3, int, PathEndMode), LegResult> kv in pk.Value)
                 {
-                    stale.Add(kv.Key);
+                    if (now - kv.Value.tick > LegTicks)
+                    {
+                        stale.Add(kv.Key);
+                    }
+                }
+                for (int i = 0; i < stale.Count; i++)
+                {
+                    pk.Value.Remove(stale[i]);
+                }
+                if (pk.Value.Count == 0)
+                {
+                    stalePawns.Add(pk.Key);
                 }
             }
-            for (int i = 0; i < stale.Count; i++)
+            for (int i = 0; i < stalePawns.Count; i++)
             {
-                legs.Remove(stale[i]);
+                legsByPawn.Remove(stalePawns[i]);
             }
             stale.Clear();
+            stalePawns.Clear();
         }
 
         // ---------------------------------------------------------------------------------------------- deferred requests

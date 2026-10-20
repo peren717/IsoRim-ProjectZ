@@ -455,7 +455,7 @@ namespace ProjectZ.Patches
             e = new Edge { kind = kind, est = est, from = from, target = target, mode = mode };
             if (kind == KindLeg && !c.estimatesOnly)
             {
-                RouteGraph.LegResult known = c.g.KnownLeg(c.who, from, target, mode);
+                RouteGraph.LegResult known = c.g.KnownLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, from, target, mode);
                 if (known != null)
                 {
                     if (known.nodes == null)
@@ -717,7 +717,7 @@ namespace ProjectZ.Patches
             if (!c.dig && !rim && !c.g.FloorReach(e.from, e.target, e.mode, c.reachTp))
             {
                 e.banned = true;
-                c.g.KeepLeg(c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
+                c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
                 Dev.PZStats.routerLegsRefused++;
                 return false;
             }
@@ -759,7 +759,7 @@ namespace ProjectZ.Patches
                 p?.Dispose();
                 e.banned = true;
                 c.failures++;
-                c.g.KeepLeg(c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
+                c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
                 Dev.PZStats.routerLegFails++;
                 if (Dev.TestRunner.Active)
                 {
@@ -785,7 +785,7 @@ namespace ProjectZ.Patches
                 LastViolation = $"leg {e.from} -> {e.target} ({e.mode}): real {e.cost} < estimate {e.est}";
             }
             Dev.PZStats.routerLegsChecked++;
-            c.g.KeepLeg(c.who, e.from, e.target, e.mode, new RouteGraph.LegResult { nodes = new List<IntVec3>(p.NodesReversed), cost = p.TotalCost });
+            c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult { nodes = new List<IntVec3>(p.NodesReversed), cost = p.TotalCost });
             p.Dispose();
             return true;
         }
