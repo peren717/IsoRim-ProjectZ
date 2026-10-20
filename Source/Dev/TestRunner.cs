@@ -34,6 +34,8 @@ namespace ProjectZ.Dev
     //                                   router2: the two-level stair-end router (oracle on seeded layouts, bridge, turn-around,
     //                                   wasted work, fixtures; TestRouter2), -projectzfloors=3 -projectzseed=7; routerperf: router
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
+    //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
+    //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
     //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
     //                                   staircolour: stairs of wood, steel and granite next to walls of the same stuff, day and
@@ -272,6 +274,7 @@ namespace ProjectZ.Dev
             VoidRule.Off = GenCommandLine.CommandLineArgPassed("projectznovoidrule");
             Gravity.Off = GenCommandLine.CommandLineArgPassed("projectznogravity");
             ReachFog.Off = GenCommandLine.CommandLineArgPassed("projectznoreachfog");
+            Patches.Dist3D.Off = GenCommandLine.CommandLineArgPassed("projectznodist3d");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
@@ -622,6 +625,11 @@ namespace ProjectZ.Dev
                 StepRouter2(map);
                 return;
             }
+            if (stage.StartsWith("d3_"))
+            {
+                StepDist3D(map);
+                return;
+            }
             if (stage.StartsWith("rp_"))
             {
                 StepRouterPerf(map);
@@ -931,6 +939,10 @@ namespace ProjectZ.Dev
                     else if (mode == "router2")
                     {
                         stage = "r2_setup";
+                    }
+                    else if (mode == "dist3d")
+                    {
+                        stage = "d3_setup";
                     }
                     else if (mode == "routerperf")
                     {
