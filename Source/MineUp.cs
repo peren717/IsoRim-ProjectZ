@@ -358,6 +358,8 @@ namespace ProjectZ
             return job;
         }
 
+        // Only a cell the job can mine from: touching the top by the game's own rule (a diagonal cell with both corner cells
+        // open air or walled does not touch it), the same check the mining toil fails on.
         public static IntVec3 StandFor(Pawn pawn, IntVec3 top, Map map)
         {
             IntVec3 best = IntVec3.Invalid;
@@ -365,7 +367,8 @@ namespace ProjectZ
             for (int i = 0; i < 8; i++)
             {
                 IntVec3 n = top + GenAdj.AdjacentCells[i];
-                if (!n.InBounds(map) || !ProjectZ.SameBand(n, top, map) || !n.Standable(map) || !pawn.CanReach(n, PathEndMode.OnCell, Danger.Deadly))
+                if (!n.InBounds(map) || !ProjectZ.SameBand(n, top, map) || !n.Standable(map) || !ReachabilityImmediate.CanReachImmediate(n, top, map, PathEndMode.Touch, pawn)
+                    || !pawn.CanReach(n, PathEndMode.OnCell, Danger.Deadly))
                 {
                     continue;
                 }

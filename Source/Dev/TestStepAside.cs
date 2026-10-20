@@ -16,6 +16,8 @@ namespace ProjectZ.Dev
     //   S3 an animal on the top: steps aside
     //   S4 wood on the top falls to the pit floor
     //   S5 the top ringed by walls and a cell about to open: the colonist on it falls (as before)
+    //   S6 neighbouring tops mined below, the middle one last: no work spot on a diagonal cell that cannot touch its top
+    //      (both corner cells open air), no job loop ("started 10 jobs in one tick"), all open
     public static partial class TestRunner
     {
         private static readonly List<int> saCrewIds = new List<int>();
@@ -24,6 +26,8 @@ namespace ProjectZ.Dev
         private static IntVec3 saU, saGoal, saFrom, saAfter;
         private static Pawn saP;
         private static string saNote;
+        private static string saBadSpot;
+        private static int saErr0;
 
         private static readonly AccessTools.FieldRef<JobDriver_Mine, int> saTicks = AccessTools.FieldRefAccess<JobDriver_Mine, int>("ticksToPickHit");
 
@@ -47,6 +51,21 @@ namespace ProjectZ.Dev
                 rock.HitPoints = 1;
             }
             return m;
+        }
+
+        // Every tick: a crew job from above whose work spot (C) cannot touch its top (B) by the game's touch rule.
+        private static void SaSpotWatch()
+        {
+            Map map = Find.CurrentMap;
+            foreach (Pawn p in SaCrew(map))
+            {
+                Job j = p.CurJob;
+                if (saBadSpot == null && j != null && j.def == PZMineDefOf.PZ_MineFromAbove && j.targetC.IsValid
+                    && !ReachabilityImmediate.CanReachImmediate(j.targetC.Cell, j.targetB, map, PathEndMode.Touch, p))
+                {
+                    saBadSpot = $"{p} spot {j.targetC.Cell} for top {j.targetB.Cell} tick {Find.TickManager.TicksGame}";
+                }
+            }
         }
 
         private static void SaMark(Map map, IEnumerable<IntVec3> tops)
@@ -341,7 +360,64 @@ namespace ProjectZ.Dev
                     Result("S5 a top ringed by walls and a cell about to open: the colonist on it falls into the pit (as before)",
                         SaOpen(saU, map) && ProjectZ.FloorOf(saP.Position, map) == 0 && ProjectZ.GroundCellOf(saP.Position, map).InHorDistOf(ProjectZ.GroundCellOf(saU, map), 1.5f) && Shaft.SteppedAside == saStep0,
                         $"open {SaOpen(saU, map)}; {saP} at {saP.Position} L{ProjectZ.FloorOf(saP.Position, map)}; stepped aside {Shaft.SteppedAside - saStep0}");
-                    SaEnd(map, "S5", null);
+                    SaEnd(map, "S5", "sa_s6");
+                    return true;
+                }
+
+                // ------------------------------------------------------------ S6: the middle top mined last, no diagonal spot
+                // that cannot touch it. Phase 1: the west and south tops (-1,0), (0,-1) are mined below (real jobs); phase 2:
+                // the middle top is marked, the crew south-west of it. The diagonal cell (-1,-1) is nearest but both its
+                // corner cells are open air: it cannot touch the middle (vanilla's corner rule), so it is never the spot.
+                case "sa_s6":
+                {
+                    SaStart(map);
+                    saErr0 = errors;
+                    saBadSpot = null;
+                    List<IntVec3> arms = new[] { SaTop(-1, 0, map), SaTop(0, -1, map) }.ToList();
+                    foreach (IntVec3 t in arms)
+                    {
+                        Thing rock = ProjectZ.GroundCellOf(t, map).GetFirstMineable(map);
+                        if (rock != null)
+                        {
+                            rock.HitPoints = 1;
+                        }
+                    }
+                    SaMark(map, arms);
+                    List<Pawn> crew = SaCrew(map);
+                    for (int i = 0; i < crew.Count; i++)
+                    {
+                        Teleport(crew[i], SaTop(-2 - i, -2, map));
+                    }
+                    MdWork(map, crew, WorkTypeDefOf.Mining);
+                    Info($"S6 phase 1: {arms.Count(t => MineSide.MarkAt(t, map, MineDir.FromAbove))}/2 arm tops marked, crew {crew.Count}");
+                    MuRun(200, 56000, () => arms.All(t => SaOpen(t, map)), "sa_s6_mid", SaSpotWatch);
+                    return true;
+                }
+
+                case "sa_s6_mid":
+                {
+                    saU = SaTop(0, 0, map);
+                    List<Pawn> crew = SaCrew(map);
+                    for (int i = 0; i < crew.Count; i++)
+                    {
+                        crew[i].jobs.EndCurrentJob(JobCondition.InterruptForced);
+                        Teleport(crew[i], SaTop(-2 - i, -2, map));
+                    }
+                    IntVec3 diag = SaTop(-1, -1, map);
+                    Info($"S6 phase 2: arms open {SaOpen(SaTop(-1, 0, map), map)}, {SaOpen(SaTop(0, -1, map), map)}; diagonal {diag} touches the middle {ReachabilityImmediate.CanReachImmediate(diag, saU, map, PathEndMode.Touch, crew.FirstOrDefault())}");
+                    SaMark(map, new[] { saU });
+                    MuRun(300, 56500, () => SaOpen(saU, map), "sa_s6_done", SaSpotWatch);
+                    return true;
+                }
+
+                case "sa_s6_done":
+                {
+                    List<IntVec3> tops = new[] { SaTop(-1, 0, map), SaTop(0, -1, map), SaTop(0, 0, map) }.ToList();
+                    int open = tops.Count(t => SaOpen(t, map));
+                    Result("S6 neighbouring tops mined below, the middle one last: no spot that cannot touch its top, no job loop, all open",
+                        open == 3 && saBadSpot == null && errors == saErr0,
+                        $"open {open}/3; bad spot {saBadSpot ?? "none"}; errors {errors - saErr0}");
+                    SaEnd(map, "S6", null);
                     return true;
                 }
             }
