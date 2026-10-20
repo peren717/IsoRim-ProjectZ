@@ -107,6 +107,8 @@ namespace ProjectZ
             // them (not the open cells beyond: those open when pawns can walk there)
             RevealEnd(u, map);
             RevealEnd(c, map);
+            // 9. fog through the hole, like vanilla mining into a cave (HoleFog)
+            HoleFog.Reveal(c, map, !map.generatorDef.ignoreAreaRevealedLetter);
             Opened++;
             LastOpenMs = sw.Elapsed.TotalMilliseconds;
             MaxOpenMs = System.Math.Max(MaxOpenMs, LastOpenMs);
@@ -132,6 +134,140 @@ namespace ProjectZ
                     }
                 }
             }
+        }
+    }
+
+    // Fog through an opened hole (user 2026-10-19: like vanilla mining into a cave). One rule for every opening
+    // (Shaft.Open: mine above, mine below, Remove roof under a bare top) and for older saves (ShaftMarks):
+    //   - the upper end U (the cell that became open air): vanilla's reveal of a mined cell (FogGrid.FloodUnfogAdjacent),
+    //     so a hole mined up into a cave shows the cave on that level; round a pit dug from above it changes nothing;
+    //   - down the column: where a pawn in U comes down is the fall rule (Column.Landing: the first floor below, a thick
+    //     roof stops it, Invalid when nothing holds); every cell it passes is unfogged, and the landing gets vanilla's
+    //     mined-cell reveal (its open area floods, rock stops it; a rock cell there only shows its face).
+    // Vanilla's flood stops at unfogged cells and the void rows between bands (at least one) are never fogged and hold
+    // no rock, so it keeps to its band (as MountainFog's floods).
+    public static class HoleFog
+    {
+        // counters (tests)
+        public static int Reveals, LastPassed;
+
+        private static readonly List<IntVec3> tmp = new List<IntVec3>();
+
+        private static bool Blocker(IntVec3 c, Map map)
+        {
+            Building e = c.GetEdifice(map);
+            return e != null && e.def.MakeFog;
+        }
+
+        // The landing of a fall into the hole over c, and the cells the fall passes (between U and the landing).
+        private static IntVec3 Fall(IntVec3 c, Map map, out IntVec3 u, List<IntVec3> passed)
+        {
+            passed.Clear();
+            u = FloorRoof.Above(c, map);
+            if (!u.IsValid || !u.InBounds(map))
+            {
+                return IntVec3.Invalid;
+            }
+            IntVec3 land = Column.Landing(u, map, false, true, out _, out _);
+            if (!land.IsValid || !land.InBounds(map) || land == u)
+            {
+                return IntVec3.Invalid;
+            }
+            IntVec3 g = Levels.Ground(u, map);
+            int lo = Levels.LevelOf(land, map);
+            for (int L = Levels.LevelOf(u, map) - 1; L > lo; L--)
+            {
+                IntVec3 x = Levels.Cell(g, L, map);
+                if (x.IsValid)
+                {
+                    passed.Add(x);
+                }
+            }
+            return land;
+        }
+
+        // The rule for the hole over shaft bottom c (c's ceiling open: U above it is open air).
+        public static void Reveal(IntVec3 c, Map map, bool letters)
+        {
+            if (map == null || !c.IsValid || !c.InBounds(map))
+            {
+                return;
+            }
+            IntVec3 land = Fall(c, map, out IntVec3 u, tmp);
+            if (!u.IsValid || !u.InBounds(map))
+            {
+                tmp.Clear();
+                return;
+            }
+            FogGrid fog = map.fogGrid;
+            List<IntVec3> passed = new List<IntVec3>(tmp);
+            tmp.Clear();
+            fog.FloodUnfogAdjacent(u, letters);
+            foreach (IntVec3 x in passed)
+            {
+                if (fog.IsFogged(x))
+                {
+                    fog.Unfog(x);
+                }
+            }
+            LastPassed = passed.Count;
+            if (land.IsValid)
+            {
+                if (!Blocker(land, map))
+                {
+                    fog.FloodUnfogAdjacent(land, letters);
+                }
+                else if (fog.IsFogged(land))
+                {
+                    fog.Unfog(land);
+                }
+            }
+            Reveals++;
+            ProjectZ.DebugLog($"hole fog over {c}: U {u}, landing {land}, {LastPassed} cell(s) passed");
+        }
+
+        // Something the rule reveals is still fogged (older saves): a passed cell, the landing, or open fog next to the
+        // landing or to U.
+        public static bool Pending(IntVec3 c, Map map)
+        {
+            IntVec3 land = Fall(c, map, out IntVec3 u, tmp);
+            try
+            {
+                if (!u.IsValid || !u.InBounds(map))
+                {
+                    return false;
+                }
+                FogGrid fog = map.fogGrid;
+                foreach (IntVec3 x in tmp)
+                {
+                    if (fog.IsFogged(x))
+                    {
+                        return true;
+                    }
+                }
+                if (OpenFogNext(u, map))
+                {
+                    return true;
+                }
+                return land.IsValid && (fog.IsFogged(land) || !Blocker(land, map) && OpenFogNext(land, map));
+            }
+            finally
+            {
+                tmp.Clear();
+            }
+        }
+
+        private static bool OpenFogNext(IntVec3 x, Map map)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                IntVec3 n = x + GenAdj.CardinalDirections[i];
+                if (n.InBounds(map) && map.fogGrid.IsFogged(n) && !Blocker(n, map))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -180,6 +316,33 @@ namespace ProjectZ
         {
             base.FinalizeInit();
             Cache();
+            fogChecked = false;
+        }
+
+        // Saves from before HoleFog: once per load, on the first frame in play (fog and regions ready), every open hole
+        // whose fall or landing area is still fogged gets the rule.
+        private bool fogChecked;
+
+        public override void MapComponentUpdate()
+        {
+            if (fogChecked || Current.ProgramState != ProgramState.Playing)
+            {
+                return;
+            }
+            fogChecked = true;
+            int fixedHoles = 0;
+            foreach (IntVec3 c in new List<IntVec3>(cells))
+            {
+                if (Shaft.Is(c, map) && HoleFog.Pending(c, map))
+                {
+                    HoleFog.Reveal(c, map, false);
+                    fixedHoles++;
+                }
+            }
+            if (fixedHoles > 0)
+            {
+                ProjectZ.DebugLog($"hole fog: {fixedHoles} open hole(s) from an older save revealed below");
+            }
         }
 
         public override void ExposeData()
