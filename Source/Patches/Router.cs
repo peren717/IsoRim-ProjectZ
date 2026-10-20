@@ -32,7 +32,7 @@ namespace ProjectZ.Patches
         private static readonly AccessTools.FieldRef<PawnPath, int> IndexRef = AccessTools.FieldRefAccess<PawnPath, int>("curNodeIndex");
 
         public const float DetourFactor = 1.2f;   // option C: a same-floor path this much over the stairs' lower bound is checked
-        public const int ExtraLegs = 4;           // legs computed beyond the final route's, then the route is taken as it is
+        public const int ExtraLegs = 8;           // legs computed beyond the final route's, then the route is taken as it is (the review's ~4 left 2 of 240 oracle pairs 6 ticks over the optimum)
         public const int MaxFailures = 3;         // legs that failed before "no route"
         public const int FogCost = 600;           // the game's PathGridJob.Cost_AvoidFog
         public const int BlockedCost = 175;       // the game's PathFinderJob.Cost_Blocked
@@ -690,6 +690,7 @@ namespace ProjectZ.Patches
         // ------------------------------------------------------------------------------------------------ legs
 
         public static int AdmissibilityViolations;
+        public static string LastLegFail;
         public static string LastViolation;
 
         // The real leg of an edge: true when found (cost and nodes set), false when there is none (banned).
@@ -743,7 +744,9 @@ namespace ProjectZ.Patches
             }
             else
             {
+                long lt0 = Stopwatch.GetTimestamp();
                 p = c.map.pathFinder.FindPathNow(e.from, e.target, c.tp, c.tuning, e.mode);
+                Dev.PZStats.routerLegMs += (Stopwatch.GetTimestamp() - lt0) * 1000.0 / Stopwatch.Frequency;
             }
             if (p == null || !p.Found || p.NodesReversed.Count == 0)
             {
@@ -752,11 +755,16 @@ namespace ProjectZ.Patches
                 c.failures++;
                 c.g.KeepLeg(c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
                 Dev.PZStats.routerLegFails++;
+                if (Dev.TestRunner.Active)
+                {
+                    LastLegFail = $"leg {e.from} L{Levels.LevelOf(e.from, c.map)} -> {e.target} L{Levels.LevelOf(e.target.Cell, c.map)} ({e.mode}) for {c.tp.pawn} at {c.tp.pawn?.Position}: path {(p == null ? "null" : "not found")}; floor reach {c.g.FloorReach(e.from, e.target, e.mode, c.reachTp)}, the pawn's own reach {c.tp.pawn?.CanReach(e.target, e.mode, Danger.Deadly)}";
+                }
                 return false;
             }
             if (ReferenceEquals(e.target.Thing, c.dest.Thing) && e.target.Cell == c.dest.Cell && e.mode == c.mode && !Immediate(c, p.NodesReversed[0]))
             {
                 // (a goal leg that does not end touching the target: the touch rules of a stairs being taken up, K2)
+                LastLegFail = $"goal leg {e.from} -> {e.target} ({e.mode}) ends at {p.NodesReversed[0]}, not touching";
                 p.Dispose();
                 e.banned = true;
                 c.failures++;
@@ -782,6 +790,7 @@ namespace ProjectZ.Patches
 
         // The stats of the last Find (tests).
         public static int LastLegs, LastIterations;
+        public static bool LastFinal;
         public static float LastCost;
         public static List<int> LastRoute = new List<int>();
 
@@ -861,8 +870,9 @@ namespace ProjectZ.Patches
         private static List<int> Search(Ctx c)
         {
             bool final = false;
+            LastFinal = false;
             LastIterations = 0;
-            for (int iter = 0; iter < 64; iter++)
+            for (int iter = 0; iter < 200; iter++)
             {
                 LastIterations++;
                 List<int> r = AStar(c);
@@ -892,7 +902,10 @@ namespace ProjectZ.Patches
                 if (c.legsComputed - realOnRoute >= ExtraLegs)
                 {
                     final = true;   // enough legs spent: this route is walked as it is, unless one of its legs fails
+                    LastFinal = true;
                 }
+                // Lazy evaluation: the first estimated leg of the route is run for real, then A* again (a leg dearer than
+                // its estimate may make another route the cheapest). Once final, the route's remaining legs are run.
                 bool failed = false;
                 for (int i = 0; i + 1 < r.Count && !failed; i++)
                 {
@@ -901,9 +914,14 @@ namespace ProjectZ.Patches
                     {
                         continue;
                     }
+                    float est = e.est;
                     if (!Refine(c, e))
                     {
                         failed = true;
+                    }
+                    else if (!final && e.cost > est + 0.5f)
+                    {
+                        break;   // dearer than its estimate: the cheapest route may be another one now
                     }
                 }
                 if (c.failures >= MaxFailures)

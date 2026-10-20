@@ -31,6 +31,9 @@ namespace ProjectZ.Dev
     //                                   no-designator fall-through, language shots (TestFloorUI)
     //                                   save: load a player save (-projectzsave=<name>), describe its stairs and colonists,
     //                                   tick it (-projectzsaveticks=N) until everything planned upstairs is built (TestSave)
+    //                                   router2: the two-level stair-end router (oracle on seeded layouts, bridge, turn-around,
+    //                                   wasted work, fixtures; TestRouter2), -projectzfloors=3 -projectzseed=7; routerperf: router
+    //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
     //                                   is built over the other one (TestDeadEnd; -projectzgreedyroute shows the old router)
     //                                   staircolour: stairs of wood, steel and granite next to walls of the same stuff, day and
@@ -603,6 +606,16 @@ namespace ProjectZ.Dev
                 StepSave(map);
                 return;
             }
+            if (stage.StartsWith("r2_"))
+            {
+                StepRouter2(map);
+                return;
+            }
+            if (stage.StartsWith("rp_"))
+            {
+                StepRouterPerf(map);
+                return;
+            }
             if (stage.StartsWith("k_"))
             {
                 StepDeadEnd(map);
@@ -888,6 +901,14 @@ namespace ProjectZ.Dev
                     else if (mode == "stairs" || mode == "floorui" || mode == "minimap")
                     {
                         stage = "s_setup";
+                    }
+                    else if (mode == "router2")
+                    {
+                        stage = "r2_setup";
+                    }
+                    else if (mode == "routerperf")
+                    {
+                        stage = "rp_setup";
                     }
                     else if (mode == "deadend")
                     {

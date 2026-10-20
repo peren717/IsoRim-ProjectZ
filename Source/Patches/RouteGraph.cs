@@ -711,7 +711,10 @@ namespace ProjectZ.Patches
             FloorReachCalls++;
             try
             {
-                return r2.CanReach(start, dest, mode, tp);
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+                bool ok = r2.CanReach(start, dest, mode, tp);
+                Dev.PZStats.floorReachMs += (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                return ok;
             }
             finally
             {
@@ -792,6 +795,8 @@ namespace ProjectZ.Patches
         {
             reach2?.ClearCache();
             memo.Clear();
+            // (the legs went through doors, fences and danger the game now judges again: a door forbidden, held open ...)
+            legs.Clear();
         }
 
         public void ClearReach2For(Pawn p)
@@ -800,6 +805,10 @@ namespace ProjectZ.Patches
             if (memo.Count > 0)
             {
                 memo.Clear();
+            }
+            if (legs.Count > 0)
+            {
+                legs.Clear();
             }
         }
 
@@ -1046,6 +1055,10 @@ namespace ProjectZ.Patches
                 return;
             }
             PawnPath path = StairRouter.Find(map, p.start, p.dest, p.mode, p.tp, p.tuning, p.vanilla);
+            if (p.vanilla != null && path != null && !ReferenceEquals(path, p.vanilla))
+            {
+                Dev.PZStats.sameFloorWins++;
+            }
             if (p.vanilla != null && !ReferenceEquals(path, p.vanilla))
             {
                 p.vanilla.Dispose();

@@ -206,6 +206,10 @@ namespace ProjectZ.Patches
             PawnPath p = StairRouter.Find(map, start, target, peMode, traverseParms, tuning, vanilla);
             if (p != null && !ReferenceEquals(p, vanilla))
             {
+                Dev.PZStats.sameFloorWins++;
+            }
+            if (p != null && !ReferenceEquals(p, vanilla))
+            {
                 vanilla.Dispose();
                 __result = p;
             }

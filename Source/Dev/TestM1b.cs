@@ -686,9 +686,12 @@ namespace ProjectZ.Dev
         public static int routerBudgetWaits;  // ticks the budget left requests for the next tick
         public static int sameFloorRequests;  // follower requests left to the game on one floor
         public static int sameFloorRouted;    // ... of them checked over the stairs (option C: the stairs' bound beaten by 20 %)
+        public static int sameFloorWins;      // ... where the stairs route was cheaper and taken
         public static int reachRuns;          // reachability searches on maps with floors
         public static int reachFastNo;        // ... answered no by the components alone
         public static int stairReach;         // ... that searched the stairs' ends
+        public static double routerLegMs;     // time in the real legs (the game's FindPathNow)
+        public static double floorReachMs;    // time in the floor-only reachability questions
 
         // per-Find times (ms), kept for the performance test
         public static readonly List<double> findTimes = new List<double>();
