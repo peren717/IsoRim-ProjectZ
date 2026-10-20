@@ -164,9 +164,10 @@ namespace ProjectZ.Dev
     //                                   holes loaded without and with the rule (U0-U1, shots); without, a fixed-seed tall-mountain map
     //                                   (F0 upper-level fog after generation and load, F1-F3 real digs into hidden caves); the same
     //                                   arguments as rocktop (TestHoleFog, TestHoleFogFix; -projectznoreachfog: without the rule)
-    //                                   reachfog: THE fog rule (ReachFog: every place the player's pawns can reach is revealed):
-    //                                   R1-R9 real flows on a fixed-seed tall-mountain map; with -projectzsave=<copy of a
-    //                                   player's save> the load-time pass (newly revealed cells, all reachable); the same
+    //                                   reachfog: THE fog rule (ReachFog: every place the player's pawns can reach is revealed,
+    //                                   and below every edge they can stand at, down the cascade):
+    //                                   R1-R7, E2-E4 real flows on a fixed-seed tall-mountain map; with -projectzsave=<copy of a
+    //                                   player's save> the load-time pass (newly revealed cells, all reached or seen); the same
     //                                   arguments as rocktop (TestReachFog)
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level

@@ -155,7 +155,7 @@ namespace ProjectZ
                 FloorHeat.Dirty();
                 SlabPeel.Dirty(map);
                 ShownLevels.FloorChanged(c, map, oldTerr == PZDefOf.PZ_OpenAir);
-                // (fog: the regions change with it, ReachFog)
+                ReachFogMap.ColumnChanged(c, map);   // (what is seen from the edges round it)
             }
         }
     }
@@ -229,6 +229,7 @@ namespace ProjectZ
             if (map != null && ProjectZ.Annex(map) != null)
             {
                 JumpGrid.ColumnChanged(c, map);
+                ReachFogMap.ColumnChanged(c, map);
             }
         }
     }
