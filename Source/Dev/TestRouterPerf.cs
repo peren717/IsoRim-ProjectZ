@@ -33,6 +33,7 @@ namespace ProjectZ.Dev
         private static int rpDepth;
         private static long rpStart;
         private static Pawn rpPawn;
+        private static readonly Dictionary<string, int> rpWhy = new Dictionary<string, int>();
 
         private static bool StepRouterPerf(Map map)
         {
@@ -175,7 +176,7 @@ namespace ProjectZ.Dev
                     List<Thing> list = c.GetThingList(map);
                     for (int i = list.Count - 1; i >= 0; i--)
                     {
-                        if (!(list[i] is Pawn))
+                        if (!(list[i] is Pawn) && list[i].def.destroyable)
                         {
                             list[i].Destroy();
                         }
@@ -250,6 +251,7 @@ namespace ProjectZ.Dev
                 }
                 // stairs chaining the storeys, and dead ends out over the tower's edge
                 rpStairs = rpDeadEnds = 0;
+                rpWhy.Clear();
                 for (int i = 0; i < rpTowers.Count; i++)
                 {
                     CellRect t = rpTowers[i];
@@ -260,7 +262,19 @@ namespace ProjectZ.Dev
                         {
                             IntVec3 c = Levels.Cell(new IntVec3(t.minX + Rand.Range(3, t.Width - 3), 0, t.minZ + Rand.Range(3, t.Height - 3)), L, map);
                             Rot4 rot = new Rot4(Rand.Range(0, 4));
-                            if (GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, c, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                            // (the stairwell: the floor over the footprint is opened first when nothing stands on it, as a player
+                            // would before building stairs under a storey that has another storey over it)
+                            RpOpenWell(map, c, rot);
+                            AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, c, rot, map, stuffDef: ThingDefOf.WoodLog);
+                            if (!ok.Accepted)
+                            {
+                                rpWhy[ok.Reason ?? "?"] = rpWhy.TryGetValue(ok.Reason ?? "?", out int nw) ? nw + 1 : 1;
+                                foreach (IntVec3 u in rpOpened)
+                                {
+                                    map.terrainGrid.SetTerrain(u, PZDefOf.PZ_UpperFloor);   // (put back: no stairs here)
+                                }
+                            }
+                            if (ok.Accepted)
                             {
                                 Place(PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, c, map, rot);
                                 got++;
@@ -276,7 +290,15 @@ namespace ProjectZ.Dev
                                 IntVec3 g = new IntVec3(west ? t.minX + 1 : t.maxX - 1, 0, t.minZ + Rand.Range(3, t.Height - 3));
                                 IntVec3 c = Levels.Cell(g, L, map);
                                 Rot4 rot = west ? Rot4.West : Rot4.East;
-                                if (GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, c, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                                RpOpenWell(map, c, rot);
+                                if (!GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, c, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                                {
+                                    foreach (IntVec3 u in rpOpened)
+                                    {
+                                        map.terrainGrid.SetTerrain(u, PZDefOf.PZ_UpperFloor);
+                                    }
+                                }
+                                else
                                 {
                                     Place(PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, c, map, rot);
                                     rpDeadEnds++;
@@ -308,11 +330,51 @@ namespace ProjectZ.Dev
                 Draft(p, true);
             }
             RpPatch();
-            Info($"routerperf: {rpTowers.Count} towers (storeys {string.Join(",", rpHeights)}), stairs {rpStairs} + dead ends {rpDeadEnds}, pairs {rpPairs.Count}; built in {build.ElapsedMilliseconds} ms; regions {map.regionGrid.AllRegions.Count()}");
+            Info($"routerperf: {rpTowers.Count} towers (storeys {string.Join(",", rpHeights)}), stairs {rpStairs} + dead ends {rpDeadEnds}, pairs {rpPairs.Count}; stairs refused: {string.Join("; ", rpWhy.OrderByDescending(kv => kv.Value).Take(4).Select(kv => kv.Value + "x " + kv.Key))}; built in {build.ElapsedMilliseconds} ms; regions {map.regionGrid.AllRegions.Count()}");
             rpRound = 0;
             rpTimes.Clear();
             rpRounds.Clear();
             stage = "rp_round";
+        }
+
+        private static readonly List<IntVec3> rpOpened = new List<IntVec3>();
+
+        private static void RpOpenWell(Map map, IntVec3 c, Rot4 rot)
+        {
+            rpOpened.Clear();
+            int L = Levels.LevelOf(c, map);
+            foreach (IntVec3 f in StairShape.Footprint(c, rot))
+            {
+                if (!f.InBounds(map) || Levels.LevelOf(f, map) != L)
+                {
+                    return;
+                }
+            }
+            foreach (IntVec3 f in StairShape.Footprint(c, rot))
+            {
+                IntVec3 up = Levels.Cell(Levels.Ground(f, map), L + 1, map);
+                if (up.IsValid && ProjectZ.HasFloor(up, map) && up.GetEdifice(map) == null && up.GetThingList(map).Count == 0)
+                {
+                    map.terrainGrid.SetTerrain(up, PZDefOf.PZ_OpenAir);
+                    rpOpened.Add(up);
+                }
+            }
+        }
+
+        // (router2 only, read by name so this file builds into the old router too)
+        private static string RpBreakdown()
+        {
+            string s = "";
+            foreach (string n in new[] { "findMsTotal", "routerLegMs", "floorReachMs", "routerLegsChecked", "routerDeferred", "routerBudgetWaits", "routerWaitTicksMax", "reachRuns", "reachFastNo", "stairReach" })
+            {
+                System.Reflection.FieldInfo fi = typeof(PZStats).GetField(n);
+                if (fi != null)
+                {
+                    object v = fi.GetValue(null);
+                    s += $"{n} {(v is double d ? d.ToString("0.0") : v)}, ";
+                }
+            }
+            return s.Length == 0 ? "(no router2 counters)" : "totals so far: " + s.TrimEnd(' ', ',');
         }
 
         private static IntVec3 RpCell(Map map)
@@ -341,7 +403,7 @@ namespace ProjectZ.Dev
                 double mean = all.Count > 0 ? all.Average() : 0;
                 double p99 = all.Count > 0 ? all[Math.Min(all.Count - 1, (int)(all.Count * 0.99))] : 0;
                 double max = all.Count > 0 ? all[all.Count - 1] : 0;
-                Info($"PERF P1 per request (FindPathNow between floors, {all.Count} calls over 3 rounds): mean {mean:0.000} ms, p99 {p99:0.000} ms, max {max:0.000} ms; rounds: {string.Join(" | ", rpRounds)}");
+                Info($"PERF P1 per request (FindPathNow between floors, {all.Count} calls over 3 rounds): mean {mean:0.000} ms, p99 {p99:0.000} ms, max {max:0.000} ms; rounds: {string.Join(" | ", rpRounds)}; {RpBreakdown()}");
                 Result("P1 per-request timings measured", all.Count > 0, $"mean {mean:0.000} ms, p99 {p99:0.000} ms, max {max:0.000} ms");
                 stage = "rp_fight";
                 return;
@@ -430,7 +492,7 @@ namespace ProjectZ.Dev
             int hostilesUp = map.mapPawns.AllPawnsSpawned.Count(p => p.HostileTo(Faction.OfPlayer) && Levels.LevelOf(p.Position, map) >= 1);
             int hostiles = map.mapPawns.AllPawnsSpawned.Count(p => p.HostileTo(Faction.OfPlayer) && !p.Downed);
             double share = rpTickMs > 0 ? rpPathMs / rpTickMs : 0;
-            Info($"PERF P2 fight 2500 ticks: ticks {rpTickMs:0} ms ({rpTickMs / 2500:0.000} ms/tick), path+reach calls {rpPathMs:0} ms = {share:P1} of the tick time; router searches {PZStats.finds - rpFindsAt}, slowest {PZStats.findMsMax:0.00} ms; hostiles standing {hostiles}, upstairs {hostilesUp}");
+            Info($"PERF P2 fight 2500 ticks: ticks {rpTickMs:0} ms ({rpTickMs / 2500:0.000} ms/tick), path+reach calls {rpPathMs:0} ms = {share:P1} of the tick time; router searches {PZStats.finds - rpFindsAt}, slowest {PZStats.findMsMax:0.00} ms; hostiles standing {hostiles}, upstairs {hostilesUp}; {RpBreakdown()}");
             Result("P2 fight timings measured", rpTickMs > 0, $"path+reach share {share:P1}, {rpTickMs / 2500:0.000} ms/tick");
             Finish();
         }
