@@ -318,6 +318,10 @@ namespace ProjectZ.Dev
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.ExitMap)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(FdExitPrefix)));
             }
+            if (mode == "checks4")
+            {
+                K4Patch(h);
+            }
             if (mode == "range")
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GuardPrefix)));
@@ -843,6 +847,11 @@ namespace ProjectZ.Dev
                 StepMtn(map);
                 return;
             }
+            if (stage.StartsWith("k4_"))
+            {
+                StepChecks4(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -920,6 +929,10 @@ namespace ProjectZ.Dev
                     else if (mode == "finders")
                     {
                         stage = "fd_setup";
+                    }
+                    else if (mode == "checks4")
+                    {
+                        stage = "k4_setup";
                     }
                     else if (mode == "qol1")
                     {
