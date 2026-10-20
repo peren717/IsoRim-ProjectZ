@@ -852,6 +852,11 @@ namespace ProjectZ.Dev
                 StepChecks4(map);
                 return;
             }
+            if (stage.StartsWith("k4b_"))
+            {
+                StepChecks4b(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -933,6 +938,10 @@ namespace ProjectZ.Dev
                     else if (mode == "checks4")
                     {
                         stage = "k4_setup";
+                    }
+                    else if (mode == "checks4b")
+                    {
+                        stage = "k4b_setup";
                     }
                     else if (mode == "qol1")
                     {
