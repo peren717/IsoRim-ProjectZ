@@ -189,6 +189,7 @@ namespace ProjectZ.Dev
             NoRoofCollapse(map);
             Find.Storyteller.storytellerComps.Clear();   // no incidents during the test (test only)
             Find.PlaySettings.autoRebuild = false;
+            NoAmbushes(map);
             foreach (Pawn a in map.mapPawns.AllPawnsSpawned.Where(p => !p.IsColonist).ToList())
             {
                 a.Destroy();
@@ -216,6 +217,37 @@ namespace ProjectZ.Dev
             StairRouter.AdmissibilityViolations = 0;
             Info($"router2: area {r2Area}, walker {r2P}, second {r2Q}, levels {Levels.Min(map)}..{Levels.Max(map)}");
             stage = "r2_o_next";
+        }
+
+        // The map's sleeping threats go (test only): an ancient complex's room triggers and their actions (fleshbeasts or
+        // mechanoids that come out when a walker passes), so no fixture meets them.
+        private static void NoAmbushes(Map map)
+        {
+            List<Thing> gone = map.listerThings.AllThings.Where(t => t is RectTrigger || t is SignalAction).ToList();
+            foreach (Thing t in gone)
+            {
+                t.Destroy();
+            }
+            // the pawns of hostile lords (out already, or still inside their caskets) and every pawn held in a casket
+            int pawns = 0;
+            foreach (Lord l in map.lordManager.lords.Where(l => l.faction != null && l.faction.HostileTo(Faction.OfPlayer)).ToList())
+            {
+                foreach (Pawn p in l.ownedPawns.ToList())
+                {
+                    if (!p.Destroyed)
+                    {
+                        p.Destroy();
+                        pawns++;
+                    }
+                }
+            }
+            foreach (Thing t in map.listerThings.AllThings.Where(t => t is Building_Casket).ToList())
+            {
+                ThingOwner held = ((Building_Casket)t).GetDirectlyHeldThings();
+                pawns += held.Count(x => x is Pawn);
+                held.ClearAndDestroyContents();
+            }
+            Info($"fixtures: {gone.Count} room triggers and signal actions removed ({string.Join(", ", gone.Select(t => t.def.defName).Distinct())}), {pawns} sleeping or waiting hostile pawns removed");
         }
 
         // Every colonist but the fixture's pawns stands far off, drafted (no work), fed.

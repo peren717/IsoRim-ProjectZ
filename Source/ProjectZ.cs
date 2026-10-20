@@ -329,6 +329,7 @@ namespace ProjectZ
             if (comp.HasAnnex)
             {
                 BandRadial.AnyAnnex = true;   // (BandRadial.MapOf: a map with floors exists in this session)
+                Patches.Dist3D.Seen(comp);    // (its fast path: rows below every ground height seen)
             }
             return comp.HasAnnex ? comp : null;
         }
