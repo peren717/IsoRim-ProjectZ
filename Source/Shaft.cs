@@ -137,19 +137,26 @@ namespace ProjectZ
         }
     }
 
-    // Fog through an opened hole (user 2026-10-19: like vanilla mining into a cave). One rule for every opening
-    // (Shaft.Open: mine above, mine below, Remove roof under a bare top) and for older saves (ShaftMarks):
-    //   - the upper end U (the cell that became open air): vanilla's reveal of a mined cell (FogGrid.FloodUnfogAdjacent),
-    //     so a hole mined up into a cave shows the cave on that level; round a pit dug from above it changes nothing;
+    // Fog through an opened hole (user 2026-10-19: what a pawn can get to by falling through it is revealed, like vanilla
+    // mining into a cave). One rule for every opening (Shaft.Open: mine above, mine below, Remove roof under a bare top) and
+    // for older saves (ShaftMarks, once per load):
     //   - down the column: where a pawn in U comes down is the fall rule (Column.Landing: the first floor below, a thick
     //     roof stops it, Invalid when nothing holds); every cell it passes is unfogged, and the landing gets vanilla's
-    //     mined-cell reveal (its open area floods, rock stops it; a rock cell there only shows its face).
+    //     mined-cell reveal (FogGrid.FloodUnfogAdjacent: its open area floods, rock stops it; a rock cell there only shows
+    //     its face);
+    //   - the upper end U (the cell that became open air): under a roof (a covered shaft, inside the mountain) vanilla's
+    //     mined-cell reveal too, so a hole mined up into a cave shows the cave; a hole to the sky shows only U and the rock
+    //     round it (Shaft.Open's own reveal): the plateau round it opens where pawns walk (MountainFog), never through a
+    //     hole nobody can climb out of (user 2026-10-19: Remove roof from a tunnel flooded the whole plateau).
     // Vanilla's flood stops at unfogged cells and the void rows between bands (at least one) are never fogged and hold
     // no rock, so it keeps to its band (as MountainFog's floods).
     public static class HoleFog
     {
         // counters (tests)
         public static int Reveals, LastPassed;
+
+        // test only (-projectznoholefog): the rule does nothing, to show the old fog
+        public static bool Off;
 
         private static readonly List<IntVec3> tmp = new List<IntVec3>();
 
@@ -158,6 +165,9 @@ namespace ProjectZ
             Building e = c.GetEdifice(map);
             return e != null && e.def.MakeFog;
         }
+
+        // U lies inside the mountain (roofed): its open neighbours are a cave, not a plateau under the sky.
+        private static bool Covered(IntVec3 u, Map map) => map.roofGrid.Roofed(u);
 
         // The landing of a fall into the hole over c, and the cells the fall passes (between U and the landing).
         private static IntVec3 Fall(IntVec3 c, Map map, out IntVec3 u, List<IntVec3> passed)
@@ -189,7 +199,7 @@ namespace ProjectZ
         // The rule for the hole over shaft bottom c (c's ceiling open: U above it is open air).
         public static void Reveal(IntVec3 c, Map map, bool letters)
         {
-            if (map == null || !c.IsValid || !c.InBounds(map))
+            if (Off || map == null || !c.IsValid || !c.InBounds(map))
             {
                 return;
             }
@@ -202,7 +212,10 @@ namespace ProjectZ
             FogGrid fog = map.fogGrid;
             List<IntVec3> passed = new List<IntVec3>(tmp);
             tmp.Clear();
-            fog.FloodUnfogAdjacent(u, letters);
+            if (Covered(u, map))
+            {
+                fog.FloodUnfogAdjacent(u, letters);
+            }
             foreach (IntVec3 x in passed)
             {
                 if (fog.IsFogged(x))
@@ -227,7 +240,7 @@ namespace ProjectZ
         }
 
         // Something the rule reveals is still fogged (older saves): a passed cell, the landing, or open fog next to the
-        // landing or to U.
+        // landing or to a covered U.
         public static bool Pending(IntVec3 c, Map map)
         {
             IntVec3 land = Fall(c, map, out IntVec3 u, tmp);
@@ -245,7 +258,7 @@ namespace ProjectZ
                         return true;
                     }
                 }
-                if (OpenFogNext(u, map))
+                if (Covered(u, map) && OpenFogNext(u, map))
                 {
                     return true;
                 }
