@@ -219,7 +219,7 @@ namespace ProjectZ.Patches
         }
     }
 
-    // A stair step takes its own time instead of a cell's walking cost (J5).
+    // A link step takes its own time instead of a cell's walking cost (J5): VLink.stepTicks.
     [HarmonyPatch(typeof(Pawn_PathFollower), "SetupMoveIntoNextCell")]
     [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class SetupMoveIntoNextCell_Patch
@@ -229,12 +229,12 @@ namespace ProjectZ.Patches
         public static void Postfix(Pawn_PathFollower __instance)
         {
             Pawn pawn = PawnRef(__instance);
-            if (pawn == null || Links.Kind(pawn) == StepKind.None)
+            if (pawn == null || Links.Kind(pawn, out VLink link) == StepKind.None)
             {
                 return;
             }
-            __instance.nextCellCostTotal = Climb.StepTicks;
-            __instance.nextCellCostLeft = Climb.StepTicks;
+            __instance.nextCellCostTotal = link.stepTicks;
+            __instance.nextCellCostLeft = link.stepTicks;
         }
     }
 

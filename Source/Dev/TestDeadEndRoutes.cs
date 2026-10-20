@@ -143,7 +143,7 @@ namespace ProjectZ.Dev
                     cFilth = CSpawnFilth(cUb, map);
                     StairGrid g = StairGrid.For(map);
                     IntVec3 fromG = cWest, destG = ProjectZ.GroundCellOf(cUb, map);
-                    List<StairLink> ups = g.links.Where(l => l.floor == 0 && g.Passable(l, TraverseParms.For(cPawn))).OrderBy(l => COctile(fromG, ProjectZ.GroundCellOf(l.bottom, map)) + COctile(ProjectZ.GroundCellOf(l.bottom, map), destG)).ToList();
+                    List<VLink> ups = g.links.Where(l => l.floor == 0 && g.Passable(l, TraverseParms.For(cPawn))).OrderBy(l => COctile(fromG, ProjectZ.GroundCellOf(l.bottom, map)) + COctile(ProjectZ.GroundCellOf(l.bottom, map), destG)).ToList();
                     int goodRank = ups.FindIndex(l => l.stairs.Position == cGood) + 1;
                     int decoysFirst = ups.Take(3).Count(l => cDecoys.Contains(l.stairs.Position));
                     Result("routes: set up so the three decoy stairs are the router's three best candidates and the good stairs come later", decoysFirst == 3 && goodRank > 3,

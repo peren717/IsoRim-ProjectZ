@@ -10,12 +10,53 @@ namespace ProjectZ
     // ramp, floor k + 1 stays open (the stairwell). A pawn walks up the ramp as on any standable building and steps from
     // H to E (and back) as one path step (Patches/PathPatches.cs); reachability links the regions of H and E
     // (Patches/ReachPatches.cs). Nothing is saved: the stairs register again when the map loads.
-    public struct StairLink
+    //
+    // A vertical link (raider vertical moves, isorim-pz-siege-ladders-design.md: the stair link made generic): one step
+    // of a path between floors that is not a walk to a neighbouring cell. Stairs, ladders and lifts share it; the router,
+    // reachability, the touch rule, the reveal walk and the path follower read only this.
+    //   Stairs: bottom = the ramp's high end H (floor k), top = the exit E (floor k + 1), low/mid = the ramp's low end L0
+    //     and middle L1, span 1, step Climb.StepTicks.
+    //   Ladder / lift (SiegeLadder.cs): bottom = low = mid = the foot (no ramp), top = the cell beside the open column,
+    //     span floors up, step LadderTicksPerFloor x span.
+    // topBlocker: the top is a wall or rock to clear after the climb (later stages; stage 1 never registers one).
+    public enum LinkKind
     {
-        public IntVec3 bottom;   // H, floor k
-        public IntVec3 top;      // E, floor k + 1
+        Stairs,
+        Ladder,
+        Lift
+    }
+
+    public struct VLink
+    {
+        public LinkKind kind;
+        public IntVec3 low;      // L0 (ladders: the foot)
+        public IntVec3 mid;      // L1 (ladders: the foot)
+        public IntVec3 bottom;   // H, floor k (ladders: the foot)
+        public IntVec3 top;      // E, floor k + span
         public int floor;        // k
-        public Building_Stairs stairs;
+        public int span;         // floors between bottom and top
+        public int stepTicks;    // the whole step's time (= its path cost)
+        public bool topBlocker;
+        public Building thing;
+
+        public Building_Stairs stairs => thing as Building_Stairs;
+
+        public bool HasRamp => kind == LinkKind.Stairs;
+
+        public bool IsLadder => kind != LinkKind.Stairs;
+
+        public const int LadderTicksPerFloor = 180;   // 3 s per floor (design)
+
+        public static VLink Stairs(Building_Stairs s, IntVec3 bottom, IntVec3 top, Map map)
+        {
+            IntVec3 f = s.Rotation.FacingCell;
+            return new VLink { kind = LinkKind.Stairs, low = s.Position - f, mid = s.Position, bottom = bottom, top = top, floor = ProjectZ.FloorOf(bottom, map), span = 1, stepTicks = Climb.StepTicks, thing = s };
+        }
+
+        public static VLink Ladder(LinkKind kind, Building b, IntVec3 foot, IntVec3 top, int span, bool topBlocker, Map map)
+        {
+            return new VLink { kind = kind, low = foot, mid = foot, bottom = foot, top = top, floor = ProjectZ.FloorOf(foot, map), span = span, stepTicks = LadderTicksPerFloor * span, topBlocker = topBlocker, thing = b };
+        }
     }
 
     // Where the parts of a ramp are, for a stairs thing or a placement (centre + rotation).
@@ -76,7 +117,7 @@ namespace ProjectZ
 
     public class StairGrid : MapComponent
     {
-        public readonly List<StairLink> links = new List<StairLink>();
+        public readonly List<VLink> links = new List<VLink>();
 
         public StairGrid(Map map) : base(map)
         {
@@ -110,14 +151,20 @@ namespace ProjectZ
 
         public void Register(Building_Stairs s, IntVec3 bottom, IntVec3 top)
         {
-            Deregister(s, false);
-            links.Add(new StairLink { bottom = bottom, top = top, floor = ProjectZ.FloorOf(bottom, map), stairs = s });
+            Register(VLink.Stairs(s, bottom, top, map));
+        }
+
+        // Any vertical link (stairs, a ladder, a lift): one per thing.
+        public void Register(VLink l)
+        {
+            Deregister(l.thing, false);
+            links.Add(l);
             Changed();
         }
 
-        public void Deregister(Building_Stairs s, bool notify = true)
+        public void Deregister(Building s, bool notify = true)
         {
-            int removed = links.RemoveAll(l => l.stairs == s);
+            int removed = links.RemoveAll(l => l.thing == s);
             if (removed > 0 && notify)
             {
                 Changed();
@@ -133,42 +180,62 @@ namespace ProjectZ
             ProjectZ.DebugLog($"stairs on {map}: {links.Count} link(s)");
         }
 
-        // True when a step from 'from' to 'to' is a stair step (either way).
-        public bool IsStep(IntVec3 from, IntVec3 to)
+        // True when a step from 'from' to 'to' is a link step (either way).
+        public bool IsStep(IntVec3 from, IntVec3 to) => StepLink(from, to) >= 0;
+
+        // The index of the link whose step goes from 'from' to 'to' (either way), or -1.
+        public int StepLink(IntVec3 from, IntVec3 to)
         {
             for (int i = 0; i < links.Count; i++)
             {
-                StairLink l = links[i];
+                VLink l = links[i];
                 if (l.bottom == from && l.top == to || l.top == from && l.bottom == to)
                 {
-                    return true;
+                    return i;
                 }
             }
-            return false;
+            return -1;
         }
 
-        // A link is usable when the stairs stand and the ramp and both ends can be stood on (RouteGraph.Usable: the same).
-        public bool Usable(StairLink l)
+        // The link of a thing, or -1.
+        public int IndexOf(Thing t)
         {
-            if (l.stairs == null || !l.stairs.Spawned || !l.top.InBounds(map) || !l.top.Walkable(map) || !l.bottom.Walkable(map))
+            for (int i = 0; i < links.Count; i++)
+            {
+                if (ReferenceEquals(links[i].thing, t))
+                {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        // A link is usable when its thing stands and the ramp (stairs) and both ends can be stood on (RouteGraph.Usable:
+        // the same).
+        public bool Usable(VLink l) => UsableIn(l, map);
+
+        public static bool UsableIn(VLink l, Map map)
+        {
+            if (l.thing == null || !l.thing.Spawned || !l.top.InBounds(map) || !l.bottom.InBounds(map) || !l.top.Walkable(map) || !l.bottom.Walkable(map))
             {
                 return false;
             }
-            IntVec3 low = l.stairs.Position - l.stairs.Rotation.FacingCell;
-            return low.InBounds(map) && low.Walkable(map) && l.stairs.Position.Walkable(map);
+            return !l.HasRamp || l.low.InBounds(map) && l.low.Walkable(map) && l.mid.Walkable(map);
         }
 
         // The link test for a traveller (RouteGraph.Passable: the same): usable, and its cells' regions let it in as the
         // game's region search would (a door it can't or may not open, a fence, danger: Region.Allows).
-        public bool Passable(StairLink l, TraverseParms tp)
+        public bool Passable(VLink l, TraverseParms tp) => PassableIn(l, tp, map);
+
+        public static bool PassableIn(VLink l, TraverseParms tp, Map map)
         {
-            if (!Usable(l))
+            if (!UsableIn(l, map))
             {
                 return false;
             }
             Region t = map.regionGrid.GetValidRegionAt_NoRebuild(l.top);
             Region b = map.regionGrid.GetValidRegionAt_NoRebuild(l.bottom);
-            Region lo = map.regionGrid.GetValidRegionAt_NoRebuild(l.stairs.Position - l.stairs.Rotation.FacingCell);
+            Region lo = l.low == l.bottom ? b : map.regionGrid.GetValidRegionAt_NoRebuild(l.low);
             return t != null && b != null && lo != null && t.Allows(tp, isDestination: false) && b.Allows(tp, isDestination: false) && lo.Allows(tp, isDestination: false);
         }
     }

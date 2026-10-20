@@ -157,19 +157,25 @@ namespace ProjectZ
         }
     }
 
-    // One step of a path that is not a walk to a neighbouring cell: a stair step (H <-> E).
+    // One step of a path that is not a walk to a neighbouring cell: a link step (stairs H <-> E, ladder foot <-> top).
     public enum StepKind
     {
         None,
         StairUp,
-        StairDown
+        StairDown,
+        LadderUp,
+        LadderDown
     }
 
     // The single place that says what a pawn's current step is, and how it is drawn (rise and horizontal position).
     public static class Links
     {
-        public static StepKind Kind(Pawn p)
+        public static StepKind Kind(Pawn p) => Kind(p, out _);
+
+        // The pawn's current link step and its link (default when none).
+        public static StepKind Kind(Pawn p, out VLink link)
         {
+            link = default;
             Pawn_PathFollower pather = p.pather;
             if (pather == null || !pather.Moving || !p.Spawned)
             {
@@ -189,11 +195,32 @@ namespace ProjectZ
                 return StepKind.None;
             }
             StairGrid g = StairGrid.For(map);
-            if (g != null && g.IsStep(pos, next))
+            int i = g == null ? -1 : g.StepLink(pos, next);
+            if (i < 0)
             {
-                return ProjectZ.FloorOf(next, map) > ProjectZ.FloorOf(pos, map) ? StepKind.StairUp : StepKind.StairDown;
+                return StepKind.None;
             }
-            return StepKind.None;
+            link = g.links[i];
+            bool up = next == link.top;
+            if (link.IsLadder)
+            {
+                return up ? StepKind.LadderUp : StepKind.LadderDown;
+            }
+            return up ? StepKind.StairUp : StepKind.StairDown;
+        }
+
+        // A ladder climb is drawn as: over the foot's column up to the top's height, then across onto the top in the last
+        // part of the step (down: across first, then down the column).
+        public const float LadderAcross = 0.15f;
+
+        // How far up the column a pawn on a ladder step is drawn, in floors over the foot (0 .. span).
+        public static float LadderHeight(StepKind k, VLink l, float pct)
+        {
+            if (k == StepKind.LadderUp)
+            {
+                return l.span * Mathf.Clamp01(pct / (1f - LadderAcross));
+            }
+            return l.span * (1f - Mathf.Clamp01((pct - LadderAcross) / (1f - LadderAcross)));
         }
 
         // How high a ramp cell lifts a pawn standing on it (cells over its floor): the middle of its third.
@@ -217,6 +244,13 @@ namespace ProjectZ
             }
             Map map = p.Map;
             float storey = IsoRimBridge.StoreyHeight;
+            StepKind k = Kind(p, out VLink link);
+            if (k == StepKind.LadderUp || k == StepKind.LadderDown)
+            {
+                // up the foot's column (over the floor it stands on: the foot going up, the top coming down)
+                float h = LadderHeight(k, link, p.pather.MovePercentage);
+                return (k == StepKind.LadderUp ? h : h - link.span) * storey;
+            }
             Building_Stairs s = p.Position.GetEdifice(map) as Building_Stairs;
             if (s == null && p.pather != null && p.pather.Moving && p.pather.nextCell.IsValid && p.pather.nextCell.InBounds(map))
             {
@@ -252,7 +286,8 @@ namespace ProjectZ
         public static bool StepTween(Pawn p, out Vector3 at)
         {
             at = Vector3.zero;
-            if (Kind(p) == StepKind.None)
+            StepKind k = Kind(p);
+            if (k == StepKind.None)
             {
                 return false;
             }
@@ -263,7 +298,16 @@ namespace ProjectZ
             {
                 to = pos;
             }
-            at = Vector3.Lerp(pos.ToVector3Shifted(), to.ToVector3Shifted(), Mathf.Clamp01(p.pather.MovePercentage));
+            float pct = Mathf.Clamp01(p.pather.MovePercentage);
+            if (k == StepKind.LadderUp)
+            {
+                pct = Mathf.Clamp01((pct - (1f - LadderAcross)) / LadderAcross);   // across onto the top at the end
+            }
+            else if (k == StepKind.LadderDown)
+            {
+                pct = Mathf.Clamp01(pct / LadderAcross);   // across over the column first
+            }
+            at = Vector3.Lerp(pos.ToVector3Shifted(), to.ToVector3Shifted(), pct);
             return true;
         }
     }
@@ -277,7 +321,7 @@ namespace ProjectZ
         public static int Direction(Pawn p)
         {
             StepKind k = Links.Kind(p);
-            return k == StepKind.StairUp ? 1 : k == StepKind.StairDown ? -1 : 0;
+            return k == StepKind.StairUp || k == StepKind.LadderUp ? 1 : k == StepKind.StairDown || k == StepKind.LadderDown ? -1 : 0;
         }
     }
 }

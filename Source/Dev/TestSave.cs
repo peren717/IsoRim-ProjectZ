@@ -134,7 +134,7 @@ namespace ProjectZ.Dev
             foreach (Building_Stairs s in map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).OfType<Building_Stairs>())
             {
                 IntVec3 e = s.TopCell;
-                StairLink? l = g?.links.FirstOrDefault(x => x.stairs == s);
+                VLink? l = g?.links.FirstOrDefault(x => x.stairs == s);
                 Region re = e.IsValid ? map.regionGrid.GetValidRegionAt(e) : null;
                 Region rh = map.regionGrid.GetValidRegionAt(s.HighCell);
                 TraverseParms tp = TraverseParms.For(TraverseMode.ByPawn);

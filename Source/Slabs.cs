@@ -388,7 +388,7 @@ namespace ProjectZ
             StairGrid g = StairGrid.For(map);
             if (g != null)
             {
-                foreach (StairLink l in g.links)
+                foreach (VLink l in g.links)
                 {
                     IntVec3 top = l.top;
                     if (top.InBounds(map) && ProjectZ.HasFloor(top, map) && top.Walkable(map) && dist[map.cellIndices.CellToIndex(top)] < 0)

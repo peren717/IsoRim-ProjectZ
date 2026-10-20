@@ -230,7 +230,7 @@ namespace ProjectZ.Patches
         }
 
         public readonly List<Node> nodes = new List<Node>();
-        public readonly List<StairLink> links = new List<StairLink>();
+        public readonly List<VLink> links = new List<VLink>();
         private int nodesFor = -1;
         // either end of a step -> the other end (H <-> E), for the touch rule (StairTouch.PairCell)
         private readonly Dictionary<IntVec3, IntVec3> pair = new Dictionary<IntVec3, IntVec3>();
@@ -255,18 +255,20 @@ namespace ProjectZ.Patches
             }
             for (int i = 0; i < g.links.Count; i++)
             {
-                StairLink l = g.links[i];
+                VLink l = g.links[i];
                 links.Add(l);
-                IntVec3 f = l.stairs.Rotation.FacingCell;
-                IntVec3 low = l.stairs.Position - f;
-                AddNode(i, Low, low);
+                // (a ladder has no ramp: its Low and High nodes are both the foot)
+                AddNode(i, Low, l.low);
                 AddNode(i, High, l.bottom);
                 AddNode(i, Top, l.top);
                 pair[l.bottom] = l.top;
                 pair[l.top] = l.bottom;
-                rampOf[low] = i;
-                rampOf[l.stairs.Position] = i;
-                rampOf[l.bottom] = i;
+                if (l.HasRamp)
+                {
+                    rampOf[l.low] = i;
+                    rampOf[l.mid] = i;
+                    rampOf[l.bottom] = i;
+                }
             }
         }
 
@@ -284,7 +286,7 @@ namespace ProjectZ.Patches
             }
         }
 
-        // The other end of a stair step at c, or Invalid.
+        // The other end of a link step at c, or Invalid.
         public IntVec3 PairCell(IntVec3 c)
         {
             EnsureNodes();
@@ -298,15 +300,15 @@ namespace ProjectZ.Patches
             return rampOf.TryGetValue(c, out int i) ? i : -1;
         }
 
-        public IntVec3 MidCell(int link) => links[link].stairs.Position;
+        public IntVec3 MidCell(int link) => links[link].mid;
 
-        // The link of a stairs thing, or -1.
-        public int LinkOf(Building_Stairs s)
+        // The link of a stairs (or ladder) thing, or -1.
+        public int LinkOf(Thing s)
         {
             EnsureNodes();
             for (int i = 0; i < links.Count; i++)
             {
-                if (ReferenceEquals(links[i].stairs, s))
+                if (ReferenceEquals(links[i].thing, s))
                 {
                     return i;
                 }
@@ -328,33 +330,12 @@ namespace ProjectZ.Patches
             return -1;
         }
 
-        // A link can be walked: the stairs stand, and the ramp and both ends can be stood on.
-        public bool Usable(int link)
-        {
-            StairLink l = links[link];
-            if (l.stairs == null || !l.stairs.Spawned || !l.top.InBounds(map) || !l.top.Walkable(map) || !l.bottom.Walkable(map))
-            {
-                return false;
-            }
-            IntVec3 low = nodes[link * 3].cell;
-            return low.InBounds(map) && low.Walkable(map) && l.stairs.Position.Walkable(map);
-        }
+        // A link can be walked: its thing stands, and the ramp and both ends can be stood on (StairGrid.UsableIn).
+        public bool Usable(int link) => StairGrid.UsableIn(links[link], map);
 
         // THE link test for a traveller: usable, and the regions of its cells let it in as the game's region search would
         // (Region.Allows: a door it may not open, a fence, danger).
-        public bool Passable(int link, TraverseParms tp)
-        {
-            if (!Usable(link))
-            {
-                return false;
-            }
-            StairLink l = links[link];
-            RegionGrid rg = map.regionGrid;
-            Region t = rg.GetValidRegionAt_NoRebuild(l.top);
-            Region b = rg.GetValidRegionAt_NoRebuild(l.bottom);
-            Region lo = rg.GetValidRegionAt_NoRebuild(nodes[link * 3].cell);
-            return t != null && b != null && lo != null && t.Allows(tp, isDestination: false) && b.Allows(tp, isDestination: false) && lo.Allows(tp, isDestination: false);
-        }
+        public bool Passable(int link, TraverseParms tp) => StairGrid.PassableIn(links[link], tp, map);
 
         // ---------------------------------------------------------------------------------------------- node parts
 

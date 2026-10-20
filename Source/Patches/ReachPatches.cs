@@ -34,7 +34,7 @@ namespace ProjectZ.Patches
 
         // The regions a usable stairs link joins (bottom b = H's, top t = E's; false when unusable or one region), read by
         // the reveal walk (ReachFog), so both see the same stairs.
-        internal static bool LinkRegions(StairGrid g, StairLink l, RegionGrid rg, out Region b, out Region t)
+        internal static bool LinkRegions(StairGrid g, VLink l, RegionGrid rg, out Region b, out Region t)
         {
             b = t = null;
             if (!Dev.TestRunner.NoExitFix && !g.Usable(l))
