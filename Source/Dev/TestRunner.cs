@@ -75,6 +75,13 @@ namespace ProjectZ.Dev
     //                                   run with -projectzfloors=3 -projectzseed=N (TestLos3D); in a tall-mountain world
     //                                   (-projectztallmountains -projectzfloors=4 -projectzmapsize=250) only its mountain
     //                                   checks (natural rock tops, ridges, a dug tunnel) on a mountainous tile
+    //                                   finalsay: ProjectZ has the final say between floors (FinalSay): a test-only hostile mod
+    //                                   (Priority.First prefixes that skip the original, early postfixes) lying on sight, hit,
+    //                                   range, interception, reach and paths; results between floors stay ProjectZ's, on one
+    //                                   floor the hostile value shows; real orders, AI fire, a walk up stairs; CanHitCell timed
+    //                                   lobbed: vanilla mortars between floors (all three gates), then a test-only lobbed-shot rule
+    //                                   (Api.RegisterLobbedShot) on the recurve bow; both run with -projectzfloors=3 -projectzseed=N
+    //                                   (TestFinalSay)
     //                                   skydrop: IsoRim's 3D drop pods over upper floors (DropThingsNear onto a floor-2 slab
     //                                   and onto the ground, filmed falling with floor 2 viewed and hidden); -projectzfloors=2 (TestSkyDrop)
     //                                   shuttles: shuttles and transport pods on a floor-2 slab (landing checks, a permit shuttle,
@@ -1002,7 +1009,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "g_setup";
                     }
-                    else if (mode == "los3d")
+                    else if (mode == "los3d" || mode == "finalsay" || mode == "lobbed")
                     {
                         stage = "m_setup";
                     }

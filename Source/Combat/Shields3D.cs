@@ -84,7 +84,29 @@ namespace ProjectZ.Combat
             return true;
         }
 
-        public static bool Prefix(CompProjectileInterceptor __instance, Projectile projectile, ref Vector3 lastExactPos, ref Vector3 newExactPos, ref bool __result)
+        public static bool Prefix(CompProjectileInterceptor __instance, Projectile projectile, ref Vector3 lastExactPos, ref Vector3 newExactPos, ref bool __result, out byte __state)
+        {
+            __state = FinalSay.Pass;
+            return Check(__instance, projectile, ref lastExactPos, ref newExactPos, ref __result, ref __state);
+        }
+
+        // Final say between floors (FinalSay): a projectile this check let pass stays passed. When another mod's prefix
+        // skipped ours, checked here (a pass stands; an entry into the dome is left to what ran).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(CompProjectileInterceptor __instance, Projectile projectile, Vector3 lastExactPos, Vector3 newExactPos, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                FinalSay.PrefixSkipped++;
+                bool mine = false;
+                byte s = FinalSay.Pass;
+                Check(__instance, projectile, ref lastExactPos, ref newExactPos, ref mine, ref s);
+                __state = s;
+            }
+            FinalSay.Bool(__state, ref __result);
+        }
+
+        private static bool Check(CompProjectileInterceptor __instance, Projectile projectile, ref Vector3 lastExactPos, ref Vector3 newExactPos, ref bool __result, ref byte __state)
         {
             Map map = __instance.parent?.Map;
             AnnexMapComponent an = VoidRule.Off ? null : ProjectZ.Annex(map);
@@ -103,7 +125,7 @@ namespace ProjectZ.Combat
             Checked++;
             CompProperties_ProjectileInterceptor props = __instance.Props;
             float r = props.radius;
-            bool overhead = projectile.def.projectile.flyOverhead;
+            bool overhead = Lobbed.Of(projectile);   // a shell, or a shot declared lobbed
             Vector3 s = new Vector3(sc.x + 0.5f, ks * Range3D.Storey, sc.z + 0.5f - Levels.Shift(map, ks));
             int k0 = BandOf(lastExactPos, an);
             Vector3 p0 = V(lastExactPos, k0, HeightAt(projectile, lastExactPos, k0), an);
@@ -113,6 +135,7 @@ namespace ProjectZ.Combat
                 s.y = p0.y = p1.y = 0f;
             }
             __result = false;
+            __state = FinalSay.No;
             if ((p1 - s).magnitude > r + projectile.def.projectile.SpeedTilesPerTick + 0.1f)
             {
                 return false;
@@ -132,6 +155,7 @@ namespace ProjectZ.Combat
             Vector3 d3 = new Vector3(dir.x, 0f, dir.y);
             lastExactPos = c + d3 * (r + 0.5f);
             newExactPos = c + d3 * Mathf.Max(0f, r - 0.3f);
+            __state = FinalSay.Pass;   // the game decides, with the positions moved
             return true;
         }
     }

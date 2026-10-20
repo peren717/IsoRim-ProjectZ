@@ -359,7 +359,7 @@ namespace ProjectZ.Dev
                 KeepFed(map);
                 return;
             }
-            if (mode == "los3d")
+            if (mode == "los3d" || mode == "finalsay" || mode == "lobbed")
             {
                 LeanHook(map);
                 return;

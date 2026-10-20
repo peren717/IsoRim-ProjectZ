@@ -169,15 +169,28 @@ namespace ProjectZ
                 new[] { typeof(IntVec3), typeof(IntVec3), typeof(Map), typeof(CellRect), typeof(CellRect), typeof(System.Func<IntVec3, bool>), typeof(bool) });
         }
 
-        public static bool Prefix(IntVec3 start, IntVec3 end, Map map, ref bool __result)
+        public static bool Prefix(IntVec3 start, IntVec3 end, Map map, ref bool __result, out byte __state)
         {
             if (VoidRule.Off || ProjectZ.SameBand(start, end, map))
             {
+                __state = FinalSay.Pass;
                 return true;
             }
             Refused++;
+            __state = FinalSay.No;
             __result = false;
             return false;
+        }
+
+        // Final say between bands (FinalSay).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(IntVec3 start, IntVec3 end, Map map, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = VoidRule.Off || ProjectZ.SameBand(start, end, map) ? FinalSay.Pass : FinalSay.No;
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 

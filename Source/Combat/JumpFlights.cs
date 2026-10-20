@@ -247,22 +247,44 @@ namespace ProjectZ.Combat
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Pawn pawn, IntVec3 root, LocalTargetInfo targ, float range, ref bool __result)
+        private static byte Decide(Pawn pawn, IntVec3 root, LocalTargetInfo targ, float range)
         {
             Map map = pawn?.Map;
             if (!targ.IsValid || !JumpRules.Cross(root, targ.Cell, map))
             {
+                return FinalSay.Pass;
+            }
+            return FinalSay.Of(JumpRules.CanJump(root, targ.Cell, range, map));
+        }
+
+        public static bool Prefix(Pawn pawn, IntVec3 root, LocalTargetInfo targ, float range, ref bool __result, out byte __state)
+        {
+            __state = Decide(pawn, root, targ, range);
+            if (__state == FinalSay.Pass)
+            {
                 return true;
             }
-            __result = JumpRules.CanJump(root, targ.Cell, range, map);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        // Final say between floors (FinalSay).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Pawn pawn, IntVec3 root, LocalTargetInfo targ, float range, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(pawn, root, targ, range);
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 
-    // No landing in the void rows between floors.
+    // No landing in the void rows between floors (last: no other mod's postfix lets a jump land there).
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.ValidJumpTarget))]
     public static class Jump_ValidTarget_Patch
     {
+        [HarmonyPriority(Priority.Last)]
         public static void Postfix(Map map, IntVec3 cell, ref bool __result)
         {
             if (__result && ProjectZ.Annex(map) != null && ProjectZ.FloorOf(cell, map) < 0)
@@ -279,20 +301,41 @@ namespace ProjectZ.Combat
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Verb __instance, IntVec3 root, LocalTargetInfo targ, ref ShootLine resultingLine, ref bool __result)
+        private static byte Decide(Verb verb, IntVec3 root, LocalTargetInfo targ)
         {
-            if (!JumpRules.IsJumpVerb(__instance) || !targ.IsValid)
+            if (!JumpRules.IsJumpVerb(verb) || !targ.IsValid || !JumpRules.Cross(root, targ.Cell, verb.caster?.Map))
             {
-                return true;
+                return FinalSay.Pass;
             }
-            Map map = __instance.caster?.Map;
-            if (!JumpRules.Cross(root, targ.Cell, map))
+            return FinalSay.Of(verb.CanHitTargetFrom(root, targ));
+        }
+
+        public static bool Prefix(Verb __instance, IntVec3 root, LocalTargetInfo targ, ref ShootLine resultingLine, ref bool __result, out byte __state)
+        {
+            __state = Decide(__instance, root, targ);
+            if (__state == FinalSay.Pass)
             {
                 return true;
             }
             resultingLine = new ShootLine(root, targ.Cell);
-            __result = __instance.CanHitTargetFrom(root, targ);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        // Final say between floors (FinalSay); decided here when another mod's prefix skipped ours.
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Verb __instance, IntVec3 root, LocalTargetInfo targ, ref ShootLine resultingLine, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(__instance, root, targ);
+            }
+            if (!FinalSay.Decided(__state))
+            {
+                return;
+            }
+            FinalSay.Bool(__state, ref __result);
+            FinalSay.Value(true, new ShootLine(root, targ.Cell), ref resultingLine);
         }
     }
 

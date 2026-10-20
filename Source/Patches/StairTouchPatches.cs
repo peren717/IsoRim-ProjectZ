@@ -94,6 +94,7 @@ namespace ProjectZ.Patches
     {
         private static readonly List<IntVec3> cells = new List<IntVec3>();
 
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(LocalTargetInfo dest, TraverseParms traverseParams, Map map, List<Region> regions)
         {
             if (ProjectZ.Annex(map) == null || !dest.IsValid)
@@ -129,6 +130,7 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(TouchPathEndModeUtility), nameof(TouchPathEndModeUtility.IsAdjacentOrInsideAndAllowedToTouch))]
     public static class IsAdjacentOrInsideAndAllowedToTouch_Patch
     {
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(IntVec3 root, LocalTargetInfo target, ref bool __result)
         {
             if (!__result && target.HasThing && StairTouch.Is(target.Thing) && StairTouch.IsUpperToucher(root, target.Thing))
@@ -144,6 +146,7 @@ namespace ProjectZ.Patches
     {
         private static readonly List<IntVec3> cells = new List<IntVec3>();
 
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(Thing thing, Map map, List<Region> outRegions)
         {
             if (!Stairwell.IsStairThing(thing) || ProjectZ.Annex(map) == null || !thing.Spawned)
@@ -230,6 +233,7 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(RCellFinder), nameof(RCellFinder.TryFindGoodAdjacentSpotToTouch))]
     public static class TryFindGoodAdjacentSpotToTouch_Patch
     {
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(Pawn toucher, Thing touchee, ref IntVec3 result, ref bool __result)
         {
             if (!__result && toucher != null && touchee != null && touchee.Spawned && ProjectZ.Annex(touchee.Map) != null && !StairTouch.Is(touchee))

@@ -80,28 +80,54 @@ namespace ProjectZ.Combat
     }
 
     // The one line-of-sight check behind every shot: AI target picking, CanHitTarget, TryFindShootLineFromTo (targeting,
-    // warm-up, cast spots, the shot report). Between floors Los3D (with the game's corner walks for full-fill targets);
-    // on one floor the game's own code.
+    // warm-up, cast spots, the shot report). Between floors Los3D (with the game's corner walks for full-fill targets),
+    // none for a shot declared lobbed (Lobbed); on one floor the game's own code. Final say between floors (FinalSay).
     [HarmonyPatch(typeof(Verb), "CanHitCellFromCellIgnoringRange")]
     public static class Verb_CanHitCell_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Verb __instance, IntVec3 __0, IntVec3 __1, bool __2, ref bool __result)
+        public static byte Decide(Verb verb, IntVec3 from, IntVec3 to, bool corners)
         {
-            Map map = __instance.caster?.Map;
-            if (map == null || !Heights.CrossFloor(__0, __1, map))
+            Map map = verb.caster?.Map;
+            if (map == null || !Heights.CrossFloor(from, to, map))
+            {
+                return FinalSay.Pass;
+            }
+            VerbProperties vp = verb.verbProps;
+            if (vp.mustCastOnOpenGround && (!to.Standable(map) || map.thingGrid.CellContains(to, ThingCategory.Pawn)))
+            {
+                return FinalSay.No;
+            }
+            // declared lobbed: no line needed; declared direct: a line needed; nothing declared: the verb's own rule
+            bool? lobbed = Lobbed.Declared(verb, from, to);
+            if (lobbed == true || lobbed == null && !vp.requireLineOfSight)
+            {
+                return FinalSay.Yes;
+            }
+            return FinalSay.Of(Los3D.CanSee(from, to, map, corners));
+        }
+
+        public static bool Prefix(Verb __instance, IntVec3 __0, IntVec3 __1, bool __2, ref bool __result, out byte __state)
+        {
+            __state = Decide(__instance, __0, __1, __2);
+            if (__state == FinalSay.Pass)
             {
                 return true;
             }
-            VerbProperties vp = __instance.verbProps;
-            if (vp.mustCastOnOpenGround && (!__1.Standable(map) || map.thingGrid.CellContains(__1, ThingCategory.Pawn)))
-            {
-                __result = false;
-                return false;
-            }
-            __result = !vp.requireLineOfSight || Los3D.CanSee(__0, __1, map, __2);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Verb __instance, IntVec3 __0, IntVec3 __1, bool __2, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                FinalSay.PrefixSkipped++;
+                __state = Decide(__instance, __0, __1, __2);
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 
@@ -126,6 +152,7 @@ namespace ProjectZ.Combat
             }
         }
 
+        [HarmonyPriority(Priority.Last)]
         public static void Postfix(IntVec3 shooterLoc, Map map, List<IntVec3> listToFill)
         {
             if (Off || map == null || listToFill.Count == 0 || ProjectZ.Annex(map) == null)
@@ -154,22 +181,42 @@ namespace ProjectZ.Combat
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Verb __instance, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect, ref bool __result)
+        private static byte Decide(Verb verb, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect)
         {
-            Map map = __instance.caster?.Map;
+            Map map = verb.caster?.Map;
             if (map == null || !targ.IsValid || !Heights.CrossFloor(root, targ.Cell, map))
+            {
+                return FinalSay.Pass;
+            }
+            float min = verb.verbProps.EffectiveMinRange(targ, verb.caster);
+            return FinalSay.Of(Range3D.OutOfRange(root, occupiedRect, targ.Cell, verb.EffectiveRange, min, map));
+        }
+
+        public static bool Prefix(Verb __instance, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect, ref bool __result, out byte __state)
+        {
+            __state = Decide(__instance, root, targ, occupiedRect);
+            if (__state == FinalSay.Pass)
             {
                 return true;
             }
-            float min = __instance.verbProps.EffectiveMinRange(targ, __instance.caster);
-            __result = Range3D.OutOfRange(root, occupiedRect, targ.Cell, __instance.EffectiveRange, min, map);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Verb __instance, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(__instance, root, targ, occupiedRect);
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 
     // The hit report between floors: distance over the ground, the height accuracy bonus when shooting down, cover by
     // height, blind smoke on the cells the line is in. Verb_LaunchProjectile.TryCastShot uses this report, so the tooltip
-    // and the real shot agree.
+    // and the real shot agree. Last of all postfixes: between floors these fields are ProjectZ's (FinalSay).
     [HarmonyPatch(typeof(ShotReport), nameof(ShotReport.HitReportFor))]
     public static class ShotReport_Patch
     {
@@ -183,6 +230,7 @@ namespace ProjectZ.Combat
 
         public static bool Prepare() => CombatGate.Enabled;
 
+        [HarmonyPriority(Priority.Last)]
         public static void Postfix(Thing caster, Verb verb, LocalTargetInfo target, ref ShotReport __result)
         {
             Map map = caster?.Map;
@@ -275,21 +323,56 @@ namespace ProjectZ.Combat
     }
 
     // Seeing a target on another floor (target finder validators): Los3D with the game's leaning and its validator
-    // (blind smoke for turrets).
+    // (blind smoke for turrets). A seer whose shot at the target is declared lobbed needs no line (Lobbed.Sees).
+    // Final say between floors (FinalSay).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.CanSee))]
     public static class AttackTargetFinder_CanSee_Patch
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Thing seer, Thing target, Func<IntVec3, bool> validator, ref bool __result)
+        private static byte Decide(Thing seer, Thing target, Func<IntVec3, bool> validator)
         {
             Map map = seer?.Map;
             if (map == null || target == null || target.Map != map || !Heights.CrossFloor(seer.Position, target.Position, map))
             {
+                return FinalSay.Pass;
+            }
+            return FinalSay.Of(Sight.Sees(seer, target, (seer as IAttackTargetSearcher)?.CurrentEffectiveVerb, validator));
+        }
+
+        public static bool Prefix(Thing seer, Thing target, Func<IntVec3, bool> validator, ref bool __result, out byte __state)
+        {
+            __state = Decide(seer, target, validator);
+            if (__state == FinalSay.Pass)
+            {
                 return true;
             }
-            __result = Heights.CanSeeLeaning(seer, target, validator);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Thing seer, Thing target, Func<IntVec3, bool> validator, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(seer, target, validator);
+            }
+            FinalSay.Bool(__state, ref __result);
+        }
+    }
+
+    // Seeing a thing on another floor to shoot it: a shot declared lobbed (Lobbed) needs no line of sight; else the
+    // game's leaning sight with Los3D (Heights.CanSeeLeaning).
+    public static class Sight
+    {
+        public static bool Sees(Thing seer, Thing target, Verb verb, Func<IntVec3, bool> validator)
+        {
+            if (verb != null && Lobbed.Any && Lobbed.IsLobbed(verb, seer.Position, target.Position))
+            {
+                return true;
+            }
+            return Heights.CanSeeLeaning(seer, target, validator);
         }
     }
 
@@ -313,6 +396,7 @@ namespace ProjectZ.Combat
 
         public static bool Prepare() => CombatGate.Enabled;
 
+        [HarmonyPriority(Priority.Last)]
         public static void Postfix(IAttackTargetSearcher searcher, TargetScanFlags flags, Predicate<Thing> validator, float minDist, float maxDist,
             bool canBashDoors, bool canTakeTargetsCloserThanEffectiveMinRange, bool canBashFences, bool onlyRanged, ref IAttackTarget __result)
         {
@@ -391,7 +475,7 @@ namespace ProjectZ.Combat
                     // from here counts when it can walk under it (to the target's column on its own floor), where the
                     // cast position search (CastSpots) finds it a spot within range. Only when the game found nothing.
                     if (__result == null && sp != null && (flags & TargetScanFlags.NeedReachableIfCantHitFromMyPos) != 0
-                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Heights.CanSeeLeaning(s, th, gas))
+                        && ((flags & TargetScanFlags.NeedLOSToPawns) == 0 && (flags & TargetScanFlags.NeedLOSToNonPawns) == 0 || Sight.Sees(s, th, verb, gas))
                         && CanWalkUnder(sp, th, ks, map))
                     {
                         float sn = Score(t, searcher, verb, s, th, d, map);
@@ -469,7 +553,7 @@ namespace ProjectZ.Combat
                 {
                     return false;
                 }
-                if (!Heights.CanSeeLeaning(s, th, gas) && (th is Pawn ? (flags & TargetScanFlags.NeedLOSToPawns) != 0 : (flags & TargetScanFlags.NeedLOSToNonPawns) != 0))
+                if (!Sight.Sees(s, th, verb, gas) && (th is Pawn ? (flags & TargetScanFlags.NeedLOSToPawns) != 0 : (flags & TargetScanFlags.NeedLOSToNonPawns) != 0))
                 {
                     return false;
                 }
@@ -525,29 +609,53 @@ namespace ProjectZ.Combat
     {
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(CastPositionRequest newReq, out IntVec3 dest, ref bool __result)
+        // The spot ProjectZ finds between floors; Invalid: none (the game's search runs).
+        private static IntVec3 Decide(CastPositionRequest newReq)
         {
-            dest = IntVec3.Invalid;
             Pawn caster = newReq.caster;
             Thing target = newReq.target;
             if (caster == null || target == null || newReq.verb == null || !caster.Spawned || target.Map != caster.Map
                 || !Heights.CrossFloor(caster.Position, target.Position, caster.Map))
             {
-                return true;
+                return IntVec3.Invalid;
             }
             if (newReq.verb.CanHitTargetFrom(caster.Position, target) && (newReq.validator == null || newReq.validator(caster.Position)))
             {
-                dest = caster.Position;
-                __result = true;
-                return false;
+                return caster.Position;
             }
-            if (CastSpots.OwnFloor(newReq, out dest))
+            return CastSpots.OwnFloor(newReq, out IntVec3 dest) ? dest : IntVec3.Invalid;
+        }
+
+        // __state: ran = the prefix ran; spot = the spot it found (Invalid: none).
+        public static bool Prefix(CastPositionRequest newReq, out IntVec3 dest, ref bool __result, out (bool ran, IntVec3 spot) __state)
+        {
+            dest = Decide(newReq);
+            __state = (true, dest);
+            if (!dest.IsValid)
             {
-                __result = true;
-                return false;
+                return true;
             }
-            dest = IntVec3.Invalid;
-            return true;
+            __result = true;
+            return false;
+        }
+
+        // Final say between floors (FinalSay): the spot found here stands (found here when another mod's prefix skipped ours).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(CastPositionRequest newReq, ref IntVec3 dest, ref bool __result, (bool ran, IntVec3 spot) __state)
+        {
+            if (!__state.ran)
+            {
+                FinalSay.PrefixSkipped++;
+                __state = (true, Decide(newReq));
+            }
+            if (!__state.spot.IsValid)
+            {
+                return;
+            }
+            bool r = __result;
+            FinalSay.Value(true, true, ref r);
+            __result = r;
+            FinalSay.Value(true, __state.spot, ref dest);
         }
     }
 
@@ -709,7 +817,24 @@ namespace ProjectZ.Combat
                 return;   // only clamped onto its own floor
             }
             Flights.cross.AddOrUpdate(__instance, new Flights.Cross { from = ko, to = land });
-            if (!__instance.def.projectile.flyOverhead)
+            // Lobbed (from the sky, no flight) or direct (a flight): as declared (Api.SetLobbed, else the casting verb's
+            // rule, Lobbed), else as its def flies (flyOverhead).
+            if (!Lobbed.Marked(__instance, out bool lobbed))
+            {
+                lobbed = __instance.def.projectile.flyOverhead;
+                Verb v = Lobbed.casting;
+                if (Lobbed.Any && v != null)
+                {
+                    IntVec3 to = __instance.intendedTarget.IsValid ? __instance.intendedTarget.Cell : dc;
+                    bool? declared = Heights.CrossFloor(spawn, to, map) ? Lobbed.Declared(v, spawn, to) : null;
+                    if (declared.HasValue)
+                    {
+                        lobbed = declared.Value;
+                        Lobbed.Mark(__instance, lobbed);
+                    }
+                }
+            }
+            if (!lobbed)
             {
                 bool aimed = land == kd && (__instance.usedTarget.HasThing || __instance.intendedTarget.HasThing);
                 // An aimed shot along a clear line of sight (Los3D from the shoot line's source, the spawn cell) flies at
@@ -742,15 +867,70 @@ namespace ProjectZ.Combat
 
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static bool Prefix(Projectile __instance, IntVec3 c, ref bool __result, Vector3 ___origin, Vector3 ___destination, Thing ___launcher, bool ___preventFriendlyFire)
+        // A direct shot between floors: its flight decides. A lobbed one between floors (declared, Lobbed; a def flying
+        // overhead never gets here with a hit) is never intercepted on the way.
+        private static byte Decide(Projectile p, IntVec3 c, Vector3 origin, Vector3 destination, Thing launcher, bool preventFriendlyFire)
         {
-            Flights.Flight f = Flights.Of(__instance);
+            Flights.Flight f = Flights.Of(p);
             if (f == null)
+            {
+                return Lobbed.Marked(p, out bool lobbed) && lobbed && Flights.cross.TryGetValue(p, out _) ? FinalSay.No : FinalSay.Pass;
+            }
+            return FinalSay.Of(Intercept(p, f, c, origin, destination, launcher, preventFriendlyFire));
+        }
+
+        public static bool Prefix(Projectile __instance, IntVec3 c, ref bool __result, Vector3 ___origin, Vector3 ___destination, Thing ___launcher, bool ___preventFriendlyFire, out byte __state)
+        {
+            __state = Decide(__instance, c, ___origin, ___destination, ___launcher, ___preventFriendlyFire);
+            if (__state == FinalSay.Pass)
             {
                 return true;
             }
-            __result = Intercept(__instance, f, c, ___origin, ___destination, ___launcher, ___preventFriendlyFire);
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        // Final say between floors (FinalSay). When another mod's prefix skipped ours (and the game's check), decided here
+        // (the flight's interception impacts here then), unless that mod already ended the projectile.
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Projectile __instance, IntVec3 c, ref bool __result, Vector3 ___origin, Vector3 ___destination, Thing ___launcher, bool ___preventFriendlyFire, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                if (!__instance.Spawned || __instance.Destroyed)
+                {
+                    return;
+                }
+                FinalSay.PrefixSkipped++;
+                __state = Decide(__instance, c, ___origin, ___destination, ___launcher, ___preventFriendlyFire);
+            }
+            FinalSay.Bool(__state, ref __result);
+        }
+
+        private static readonly AccessTools.FieldRef<Projectile, ProjectileHitFlags> desiredFlags = AccessTools.FieldRefAccess<Projectile, ProjectileHitFlags>("desiredHitFlags");
+
+        // The game's Projectile.CanHit; for a projectile def flying overhead that was declared direct (Lobbed) with the
+        // hit flags it was launched with (the game gives a shell flying overhead none).
+        private static bool CanHit(Projectile p, Thing thing)
+        {
+            if (!p.def.projectile.flyOverhead || p.def.projectile.alwaysFreeIntercept)
+            {
+                return canHit(p, thing);
+            }
+            if (!thing.Spawned || thing == p.Launcher || thing.Map != p.Map || CoverUtility.ThingCovered(thing, p.Map))
+            {
+                return false;
+            }
+            ProjectileHitFlags flags = desiredFlags(p);
+            if (flags == ProjectileHitFlags.None)
+            {
+                return false;
+            }
+            if (thing == p.intendedTarget.Thing)
+            {
+                return (flags & ProjectileHitFlags.IntendedTarget) != 0 || thing.def.Fillage == FillCategory.Full;
+            }
+            return thing is Pawn ? (flags & ProjectileHitFlags.NonTargetPawns) != 0 : (flags & ProjectileHitFlags.NonTargetWorld) != 0;
         }
 
         private static bool Intercept(Projectile p, Flights.Flight f, IntVec3 c, Vector3 origin, Vector3 destination, Thing launcher, bool preventFriendlyFire)
@@ -805,7 +985,7 @@ namespace ProjectZ.Combat
             for (int i = 0; i < things.Count; i++)
             {
                 Thing thing = things[i];
-                if (!canHit(p, thing))
+                if (!CanHit(p, thing))
                 {
                     continue;
                 }

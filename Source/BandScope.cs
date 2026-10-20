@@ -315,33 +315,52 @@ namespace ProjectZ
     {
         public const float RangeSquared = 620.01f;
 
-        public static bool Prefix(Pawn_MechanitorTracker __instance, LocalTargetInfo target, ref bool __result)
+        private static byte Decide(Pawn_MechanitorTracker tracker, LocalTargetInfo target)
         {
-            Pawn p = __instance.Pawn;
+            Pawn p = tracker.Pawn;
             Map map = p?.MapHeld;
             if (VoidRule.Off || map == null || ProjectZ.Annex(map) == null || !target.IsValid)
             {
-                return true;
+                return FinalSay.Pass;
             }
             IntVec3 a = p.PositionHeld;
             IntVec3 b = target.Cell;
             if (!b.InBounds(map))
             {
-                __result = false;
-                return false;
+                return FinalSay.No;
             }
             if (ProjectZ.SameBand(a, b, map))
             {
-                return true;
+                return FinalSay.Pass;
             }
             if (!Heights.CrossFloor(a, b, map))
             {
-                __result = false;   // a void row
-                return false;
+                return FinalSay.No;   // a void row
             }
             float d = Range3D.Distance(a, b, map);
-            __result = d * d < RangeSquared;
+            return FinalSay.Of(d * d < RangeSquared);
+        }
+
+        public static bool Prefix(Pawn_MechanitorTracker __instance, LocalTargetInfo target, ref bool __result, out byte __state)
+        {
+            __state = Decide(__instance, target);
+            if (__state == FinalSay.Pass)
+            {
+                return true;
+            }
+            __result = __state == FinalSay.Yes;
             return false;
+        }
+
+        // Final say between floors (FinalSay).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Pawn_MechanitorTracker __instance, LocalTargetInfo target, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(__instance, target);
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 }

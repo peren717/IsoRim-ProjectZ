@@ -332,7 +332,7 @@ namespace ProjectZ.Dev
                     Wait(2, "m_check");
                     return true;
             }
-            return false;
+            return StepFinalSay(map);
         }
 
         // ------------------------------------------------------------------ setup
@@ -588,6 +588,16 @@ namespace ProjectZ.Dev
         {
             lChecks.Clear();
             void Add(string n, Action<Map> a) => lChecks.Add(new LCheck { name = n, run = a });
+            if (mode == "finalsay")
+            {
+                BuildFinalSayChecks(Add);
+                return;
+            }
+            if (mode == "lobbed")
+            {
+                BuildLobbedChecks(Add);
+                return;
+            }
             if (Mountains.On(lMap))
             {
                 BuildMtnChecks(Add);
@@ -1627,6 +1637,14 @@ namespace ProjectZ.Dev
         {
             IsoRimBridge.SetOption("freeYaw", mOldYaw);
             Find.CameraDriver.config.sizeRange.min = mOldMin;
+            if (mode == "finalsay" || mode == "lobbed")
+            {
+                FEnd();
+                Info($"final say: results put back {FinalSay.Reasserted}, our prefix skipped (decided in the postfix instead) {FinalSay.PrefixSkipped}; combat stats: cross-floor shots {PZCombatStats.crossFloorShots}, intercepts {PZCombatStats.intercepts}, slab stops {PZCombatStats.slabStops}");
+                WatchCheck(map, mode + " end");
+                Finish();
+                return;
+            }
             int aimed = lImps.Count(i => i.cross && i.aimed);
             int aimedClear = lImps.Count(i => i.cross && i.aimed && i.clear);
             int clearSlab = lImps.Count(i => i.cross && i.aimed && i.clear && i.slab);

@@ -121,6 +121,7 @@ namespace ProjectZ.Patches
     {
         private static readonly AccessTools.FieldRef<JobGiver_AIFightEnemy, float> keepRadius = AccessTools.FieldRefAccess<JobGiver_AIFightEnemy, float>("targetKeepRadius");
 
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(JobGiver_AIFightEnemy __instance, Pawn pawn, ref bool __result)
         {
             Thing target = pawn.mindState?.enemyTarget;
@@ -142,33 +143,55 @@ namespace ProjectZ.Patches
 
     // A shell falling from the sky (flyOverhead) lands on the top of its column (Column.Top): the highest floor
     // built there (the floor's roof below cannot drop, it is the floor itself); one falling onto open air upstairs
-    // drops to what is below it.
+    // drops to what is below it. The same for a shot declared lobbed (Combat.Lobbed), not for one declared direct (a
+    // flyOverhead def shot directly). A lobbed shot whose def does not fly overhead meets a roof on its landing cell as
+    // the game's shells do (a thick roof stops it, a thin one falls in).
     [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
     public static class Projectile_ImpactOnTop_Patch
     {
-        public static void Prefix(Projectile __instance)
+        public static bool Prefix(Projectile __instance)
         {
-            if (!__instance.def.projectile.flyOverhead || !__instance.Spawned)
+            if (!__instance.Spawned || !Combat.Lobbed.Of(__instance))
             {
-                return;
+                return true;
             }
             Map map = __instance.Map;
             IntVec3 pos = __instance.Position;
             if (!ProjectZ.HasAnnex(map))
             {
-                return;
+                return true;
             }
             IntVec3 top = Column.Top(pos, map);
-            if (!top.IsValid || top == pos)
+            if (top.IsValid && top != pos)
             {
-                return;
+                __instance.Position = top;
+                if (__instance.usedTarget.HasThing && __instance.usedTarget.Thing.Position != top)
+                {
+                    __instance.usedTarget = new LocalTargetInfo(top);
+                }
+                ProjectZ.DebugLog($"{__instance} fell on {pos} under a floor: lands on {top}");
             }
-            __instance.Position = top;
-            if (__instance.usedTarget.HasThing && __instance.usedTarget.Thing.Position != top)
+            if (__instance.def.projectile.flyOverhead)
             {
-                __instance.usedTarget = new LocalTargetInfo(top);
+                return true;   // the game's roof rule for shells
             }
-            ProjectZ.DebugLog($"{__instance} fell on {pos} under a floor: lands on {top}");
+            IntVec3 at = __instance.Position;
+            RoofDef roof = map.roofGrid.RoofAt(at);
+            if (roof == null || roof == PZDefOf.PZ_StairwellRoof)
+            {
+                return true;
+            }
+            if (roof.isThickRoof)
+            {
+                __instance.Destroy();
+                return false;
+            }
+            Building e = at.GetEdifice(map);
+            if (e == null || e.def.Fillage != FillCategory.Full)
+            {
+                RoofCollapserImmediate.DropRoofInCells(at, map);
+            }
+            return true;
         }
     }
 }

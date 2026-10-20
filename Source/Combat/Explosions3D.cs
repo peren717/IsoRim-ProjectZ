@@ -164,6 +164,7 @@ namespace ProjectZ.Combat
     [HarmonyPatch(typeof(DamageWorker), nameof(DamageWorker.ExplosionCellsToHit), new[] { typeof(IntVec3), typeof(Map), typeof(float), typeof(IntVec3?), typeof(IntVec3?), typeof(FloatRange?) })]
     public static class DamageWorker_ExplosionCellsToHit_Patch
     {
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(IntVec3 center, Map map, float radius, FloatRange? affectedAngle, ref IEnumerable<IntVec3> __result)
         {
             AnnexMapComponent an = ProjectZ.Annex(map);

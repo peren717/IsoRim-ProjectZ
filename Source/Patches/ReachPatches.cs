@@ -301,11 +301,72 @@ namespace ProjectZ.Patches
         internal static readonly AccessTools.FieldRef<Reachability, ReachabilityCache> CacheRef = AccessTools.FieldRefAccess<Reachability, ReachabilityCache>("cache");
     }
 
+    // Final say between floors (FinalSay) for the two reachability hooks: a check whose start and destination regions are
+    // on different floors keeps ProjectZ's answer.
+    internal static class ReachFinal
+    {
+        public static bool CrossFloor(Reachability r)
+        {
+            Map map = ReachRefs.MapRef(r);
+            List<Region> starts = ReachRefs.StartRef(r);
+            List<Region> dests = ReachRefs.DestRef(r);
+            if (starts.Count == 0 || dests.Count == 0)
+            {
+                return false;
+            }
+            int ks = FloorOf(starts[0], map);
+            for (int i = 0; i < dests.Count; i++)
+            {
+                if (FloorOf(dests[i], map) != ks)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static int FloorOf(Region r, Map map) => ProjectZ.FloorOf(new IntVec3(r.extentsClose.minX, 0, r.extentsClose.minZ), map);
+    }
+
     // The cache read on maps with floors: the directed entries only.
     [HarmonyPatch(typeof(Reachability), "GetCachedResult")]
     public static class GetCachedResult_Patch
     {
-        public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result)
+        // __state: 0 the prefix did not run, 1 not ours (no floors, one floor), 2 + the answer between floors.
+        public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result, out byte __state)
+        {
+            __state = FinalSay.Pass;
+            if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
+            {
+                return true;
+            }
+            bool cross = ReachFinal.CrossFloor(__instance);
+            bool run = Run(__instance, traverseParams, ref __result);
+            if (cross)
+            {
+                __state = (byte)(2 + (int)__result);
+            }
+            return run;
+        }
+
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
+            {
+                // another mod's prefix skipped ours: read the cache here
+                FinalSay.PrefixSkipped++;
+                BoolUnknown mine = BoolUnknown.Unknown;
+                Run(__instance, traverseParams, ref mine);
+                __state = (byte)(2 + (int)mine);
+            }
+            if (__state >= 2)
+            {
+                FinalSay.Value(true, (BoolUnknown)(__state - 2), ref __result);
+            }
+        }
+
+        private static bool Run(Reachability __instance, TraverseParms traverseParams, ref BoolUnknown __result)
         {
             if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
             {
@@ -347,7 +408,38 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(Reachability), "CheckRegionBasedReachability")]
     public static class CheckRegionBasedReachability_Patch
     {
-        public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref bool __result)
+        public static bool Prefix(Reachability __instance, TraverseParms traverseParams, ref bool __result, out byte __state)
+        {
+            __state = FinalSay.Pass;
+            if (ProjectZ.Annex(ReachRefs.MapRef(__instance)) == null)
+            {
+                return true;
+            }
+            bool cross = ReachFinal.CrossFloor(__instance);
+            bool run = Run(__instance, traverseParams, ref __result);
+            if (cross && !run)
+            {
+                __state = FinalSay.Of(__result);
+            }
+            return run;
+        }
+
+        // Final say between floors (FinalSay); searched here when another mod's prefix skipped ours (the game's search
+        // was skipped too: the open queue still holds the start regions).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(Reachability __instance, TraverseParms traverseParams, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun && ProjectZ.Annex(ReachRefs.MapRef(__instance)) != null && ReachFinal.CrossFloor(__instance))
+            {
+                FinalSay.PrefixSkipped++;
+                bool mine = false;
+                Run(__instance, traverseParams, ref mine);
+                __state = FinalSay.Of(mine);
+            }
+            FinalSay.Bool(__state, ref __result);
+        }
+
+        private static bool Run(Reachability __instance, TraverseParms traverseParams, ref bool __result)
         {
             Map map = ReachRefs.MapRef(__instance);
             if (ProjectZ.Annex(map) == null)

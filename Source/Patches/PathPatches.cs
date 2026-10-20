@@ -939,6 +939,7 @@ namespace ProjectZ.Patches
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> PawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> ModeRef = AccessTools.FieldRefAccess<Pawn_PathFollower, PathEndMode>("peMode");
 
+        [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
         public static void Postfix(Pawn_PathFollower __instance, ref PathRequest __result)
         {
             if (__result == null)
@@ -979,20 +980,48 @@ namespace ProjectZ.Patches
         private static readonly AccessTools.FieldRef<PathFinder, Map> MapRef = AccessTools.FieldRefAccess<PathFinder, Map>("map");
 
         [HarmonyPriority(Priority.High)]
-        public static bool Prefix(PathFinder __instance, IntVec3 start, LocalTargetInfo target, TraverseParms traverseParms, PathFinderCostTuning? tuning, PathEndMode peMode, ref PawnPath __result)
+        // The path joined over the stairs; null: the game's search.
+        private static PawnPath Decide(PathFinder finder, IntVec3 start, LocalTargetInfo target, TraverseParms traverseParms, PathFinderCostTuning? tuning, PathEndMode peMode)
         {
             if (StairRouter.busy || !target.IsValid)
             {
-                return true;
+                return null;
             }
-            Map map = MapRef(__instance);
+            Map map = MapRef(finder);
             if (map == null || !StairRouter.Needed(map, start, target, peMode, traverseParms))
+            {
+                return null;
+            }
+            Dev.PZStats.findNow++;
+            return StairRouter.Find(map, start, target, peMode, traverseParms, tuning) ?? PawnPath.NotFound;
+        }
+
+        // __state: ran = the prefix ran; path = the path it joined (null: the game's search).
+        public static bool Prefix(PathFinder __instance, IntVec3 start, LocalTargetInfo target, TraverseParms traverseParms, PathFinderCostTuning? tuning, PathEndMode peMode, ref PawnPath __result, out (bool ran, PawnPath path) __state)
+        {
+            PawnPath p = Decide(__instance, start, target, traverseParms, tuning, peMode);
+            __state = (true, p);
+            if (p == null)
             {
                 return true;
             }
-            __result = StairRouter.Find(map, start, target, peMode, traverseParms, tuning) ?? PawnPath.NotFound;
-            Dev.PZStats.findNow++;
+            __result = p;
             return false;
+        }
+
+        // Final say between floors (FinalSay): the joined path stands (joined here when another mod's prefix skipped ours).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(PathFinder __instance, IntVec3 start, LocalTargetInfo target, TraverseParms traverseParms, PathFinderCostTuning? tuning, PathEndMode peMode, ref PawnPath __result, (bool ran, PawnPath path) __state)
+        {
+            if (!__state.ran)
+            {
+                FinalSay.PrefixSkipped++;
+                __state = (true, Decide(__instance, start, target, traverseParms, tuning, peMode));
+            }
+            if (__state.path != null)
+            {
+                FinalSay.Value(true, __state.path, ref __result);
+            }
         }
     }
 

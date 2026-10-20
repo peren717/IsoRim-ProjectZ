@@ -202,14 +202,31 @@ namespace ProjectZ.Patches
     [HarmonyPatch(typeof(CompAffectedByFacilities), "IsPotentiallyValidFacilityForMe_Static", new[] { typeof(ThingDef), typeof(IntVec3), typeof(Rot4), typeof(ThingDef), typeof(IntVec3), typeof(Rot4), typeof(Map) })]
     public static class FacilitySight_Patch
     {
-        public static bool Prefix(IntVec3 facilityPos, IntVec3 myPos, Map map, ref bool __result)
+        private static byte Decide(IntVec3 facilityPos, IntVec3 myPos, Map map)
         {
-            if (Facilities3D.Off || map == null || !Heights.CrossFloor(facilityPos, myPos, map))
+            return Facilities3D.Off || map == null || !Heights.CrossFloor(facilityPos, myPos, map) ? FinalSay.Pass : FinalSay.Yes;
+        }
+
+        public static bool Prefix(IntVec3 facilityPos, IntVec3 myPos, Map map, ref bool __result, out byte __state)
+        {
+            __state = Decide(facilityPos, myPos, map);
+            if (__state == FinalSay.Pass)
             {
                 return true;
             }
             __result = true;
             return false;
+        }
+
+        // Final say between floors (FinalSay).
+        [HarmonyPriority(Priority.Last)]
+        public static void Postfix(IntVec3 facilityPos, IntVec3 myPos, Map map, ref bool __result, byte __state)
+        {
+            if (__state == FinalSay.NotRun)
+            {
+                __state = Decide(facilityPos, myPos, map);
+            }
+            FinalSay.Bool(__state, ref __result);
         }
     }
 }
