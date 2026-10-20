@@ -240,6 +240,8 @@ namespace ProjectZ.Patches
             new Row("breacher: reached", typeof(JobGiver_AIBreaching), "TryGiveJob", null, Kind.DistSq, 1),
             // melee target: region pick vs flood pick
             new Row("melee target choice", typeof(AttackTargetFinder), nameof(AttackTargetFinder.BestAttackTarget), null, Kind.SubLen, 2),
+            // raiders with nothing in sight: walk to the nearest hostile (sappers' and assaulters' last resort)
+            new Row("goto nearest hostile", typeof(JobGiver_AIGotoNearestHostile), "TryGiveJob", null, Kind.DistSq, 1),
             // predators: prey score
             new Row("prey score", typeof(FoodUtility), nameof(FoodUtility.GetPreyScoreFor), null, Kind.SubLen, 1),
             // path follower: moving-target tolerance, stale path, rope stretch
