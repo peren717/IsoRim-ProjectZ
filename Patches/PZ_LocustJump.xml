@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Locusts jump to a fight on another floor (Source/JumpAcross.cs, Defs/AbilityDefs/PZ_Abilities.xml). -->
+
+  <!-- The jump on the Locust pawn kind (Odyssey; nothing when it isn't loaded). -->
+  <Operation Class="PatchOperationConditional">
+    <xpath>Defs/PawnKindDef[defName="Locust"]/abilities</xpath>
+    <match Class="PatchOperationAdd">
+      <xpath>Defs/PawnKindDef[defName="Locust"]/abilities</xpath>
+      <value>
+        <li>PZ_LocustJump</li>
+      </value>
+    </match>
+    <nomatch Class="PatchOperationConditional">
+      <xpath>Defs/PawnKindDef[defName="Locust"]</xpath>
+      <match Class="PatchOperationAdd">
+        <xpath>Defs/PawnKindDef[defName="Locust"]</xpath>
+        <value>
+          <abilities>
+            <li>PZ_LocustJump</li>
+          </abilities>
+        </value>
+      </match>
+    </nomatch>
+  </Operation>
+
+  <!-- The jump AI: right where the fight finds no enemy it can walk to (after the assault's own fight, before its
+       building trashing, the sapper and ProjectZ's ladder climb), after the manhunter's own search, and after the hive
+       defence. It acts only for pawns with a jump ability marked ProjectZ.JumpAcrossFloors, on maps with floors. -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="AssaultColony" or defName="HuntDownColonists"]/thinkNode/subNodes/li[@Class="JobGiver_AIFightEnemies"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIJumpAcross" />
+    </value>
+  </Operation>
+
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/ThinkTreeDef[defName="MentalStateNonCritical"]//li[@Class="JobGiver_Manhunter"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIJumpAcross" />
+    </value>
+  </Operation>
+
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="DefendAndExpandHive"]/thinkNode/subNodes/li[@Class="JobGiver_HiveDefense"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIJumpAcross">
+        <targetAcquireRadius>30</targetAcquireRadius>
+      </li>
+    </value>
+  </Operation>
+
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="DefendHiveAggressively"]/thinkNode/subNodes/li[@Class="JobGiver_HiveDefense"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIJumpAcross" />
+    </value>
+  </Operation>
+
+</Patch>

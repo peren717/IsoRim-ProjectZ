@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_LocustJump.label>跳跃</PZ_LocustJump.label>
+  <PZ_LocustJump.description>跳上或跳下另一层去战斗。</PZ_LocustJump.description>
+  <PZ_LocustJump.verbProperties.label>跳跃</PZ_LocustJump.verbProperties.label>
+</LanguageData>

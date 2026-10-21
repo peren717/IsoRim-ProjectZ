@@ -218,6 +218,9 @@ namespace ProjectZ.Dev
     //                                   roofs, refusals, filth, slab removal, N1/N2 fingerprints, costs); -projectzfloors=3
     //                                   -projectzmapsize=101 -projectzsave=pz_radial3 / -projectzfloors=1 -projectzsave=pz_radial1
     //                                   (-projectznogravity: no hook acts; -projectzgravityref=<tag>: compare fingerprints) (TestGravity)
+    //                                   locustjump: locusts jump to a fight on another floor (JumpAcross: up, cooldown,
+    //                                   roofed, stairs, same floor, down, manhunter, buttons; TestLocustJump), -projectzfloors=3
+    //                                   -projectzseed=7; -projectzfloors=1: the map without floors (-projectznojumpacross: off)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
@@ -306,6 +309,7 @@ namespace ProjectZ.Dev
             ReachFog.Off = GenCommandLine.CommandLineArgPassed("projectznoreachfog");
             Patches.Dist3D.Off = GenCommandLine.CommandLineArgPassed("projectznodist3d");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
+            JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
                 MintBreak = mb;
@@ -848,6 +852,11 @@ namespace ProjectZ.Dev
                 StepJumpDiag(map);
                 return;
             }
+            if (stage.StartsWith("lj_"))
+            {
+                StepLocustJump(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -1021,9 +1030,12 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    GenCheck(map, "after generation");
-                    FogLidCheck("after generation");
-                    FinderStats(map);
+                    if (!(mode == "locustjump" && FloorsOverride == 1))   // (locustjump without floors: no annex to check)
+                    {
+                        GenCheck(map, "after generation");
+                        FogLidCheck("after generation");
+                        FinderStats(map);
+                    }
                     if (mode == "m1b")
                     {
                         stage = "b_setup";
@@ -1200,6 +1212,10 @@ namespace ProjectZ.Dev
                     else if (mode == "jumpdiag")
                     {
                         stage = "jd_setup";
+                    }
+                    else if (mode == "locustjump")
+                    {
+                        stage = "lj_setup";
                     }
                     else if (mode == "explode")
                     {

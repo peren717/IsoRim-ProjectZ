@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- The locust's jump (Source/JumpAcross.cs; given to the Locust pawn kind by Patches/PZ_LocustJump.xml). A plain jump
+       on the game's jump verb (as Biotech's longjump), so every cross-floor jump rule applies (Combat/JumpFlights.cs).
+       Never used by the game's own ability AI (aiCanUse off): only JobGiver_AIJumpAcross casts it, toward a fight on
+       another floor, keyed to the ProjectZ.JumpAcrossFloors marker. Range as the longjump's; cooldown the locust's
+       flight cooldown (FlightCooldown 5 s). -->
+  <AbilityDef>
+    <defName>PZ_LocustJump</defName>
+    <label>jump</label>
+    <description>Leap up or down to a fight on another floor.</description>
+    <cooldownTicksRange>300</cooldownTicksRange>
+    <hostile>false</hostile>
+    <casterMustBeCapableOfViolence>false</casterMustBeCapableOfViolence>
+    <aiCanUse>false</aiCanUse>
+    <showOnCharacterCard>false</showOnCharacterCard>
+    <jobDef>CastJump</jobDef>
+    <verbProperties>
+      <verbClass>Verb_CastAbilityJump</verbClass>
+      <label>jump</label>
+      <violent>false</violent>
+      <forceNormalTimeSpeed>false</forceNormalTimeSpeed>
+      <warmupTime>0.5</warmupTime>
+      <range>19.9</range>
+      <requireLineOfSight>true</requireLineOfSight>
+      <targetParams>
+        <canTargetLocations>true</canTargetLocations>
+        <canTargetPawns>false</canTargetPawns>
+        <canTargetBuildings>false</canTargetBuildings>
+      </targetParams>
+    </verbProperties>
+    <modExtensions>
+      <li Class="ProjectZ.JumpAcrossFloors" />
+    </modExtensions>
+  </AbilityDef>
+
+</Defs>
