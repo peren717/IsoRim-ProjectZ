@@ -110,7 +110,7 @@ namespace ProjectZ.Dev
                     // Upper floor: blueprints over the whole roofed house, and one over unroofed ground that must be refused.
                     int placed = 0, refused = 0;
                     List<string> why = new List<string>();
-                    Result("stairwell stays open, the exit is made with the stairs", StairShape.Footprint(st.Position, st.Rotation).Cells.All(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && SlabDefs.Is(top.GetTerrain(map)),
+                    Result("stairwell stays open, the exit is made with the stairs", StairShape.Ramp(st.Position, st.Rotation).All(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && SlabDefs.Is(top.GetTerrain(map)),
                         $"well roofs {string.Join(",", StairShape.Footprint(st.Position, st.Rotation).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}, exit {top} {top.GetTerrain(map).defName}");
                     foreach (IntVec3 u in Upstairs(map))
                     {

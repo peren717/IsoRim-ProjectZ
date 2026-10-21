@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Ship stairs (multi-level gravships P5, Source/ShipStairs.cs): the same 1x3 ramp as PZ_Stairs (same class, so path,
-       reach, rise and the stairwell work unchanged), stuffless gravtech, only on a gravship: the whole ramp on the ship's
+  <!-- Ship stairs (multi-level gravships P5, Source/ShipStairs.cs): the same 1x4 footprint (ramp and solid end) as PZ_Stairs (same class, so path,
+       reach, rise and the stairwell work unchanged), stuffless gravtech, only on a gravship: the whole footprint on the ship's
        deck (ground substructure or a ship upper deck) and its exit on or over it (a ship upper deck is laid there with them)
        (ProjectZ.PlaceWorker_ShipStairs). The deck over the ramp is marked for removal, as ordinary stairs do with a floor.
        They are part of the ship and fly with it. IsoRim draws the stairs model with a ship texture
@@ -10,12 +10,12 @@
   <ThingDef ParentName="BuildingBase" MayRequire="Ludeon.RimWorld.Odyssey">
     <defName>PZ_ShipStairs</defName>
     <label>ship stairs</label>
-    <description>Gravship stairs up to the floor above. The whole ramp must stand on the gravship's deck, and the cell past the top must be over it: a ship upper deck is laid there with the stairs if there is none. The deck over the ramp is removed to leave a stairwell. Like a wall, ship stairs hold up roofs and floors nearby. They fly with the ship.</description>
+    <description>Gravship stairs up to the floor above. The whole stairs (a 3-cell ramp and a solid end) must stand on the gravship's deck; over the solid end, a ship upper deck is laid with the stairs if there is none. The deck over the ramp is removed to leave a stairwell. Like a wall, ship stairs hold up roofs and floors nearby. They fly with the ship.</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/ShipStairs</texPath>
       <graphicClass>Graphic_Single</graphicClass>
-      <drawSize>(1,3)</drawSize>
+      <drawSize>(1,4)</drawSize>
     </graphicData>
     <uiIconPath>ProjectZ/ShipStairs_MenuIcon</uiIconPath>
     <altitudeLayer>Building</altitudeLayer>
@@ -26,7 +26,7 @@
     <holdsRoof>true</holdsRoof>
     <blockWind>false</blockWind>
     <rotatable>true</rotatable>
-    <size>(1,3)</size>
+    <size>(1,4)</size>
     <statBases>
       <MaxHitPoints>300</MaxHitPoints>
       <WorkToBuild>1600</WorkToBuild>

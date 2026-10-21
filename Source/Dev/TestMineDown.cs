@@ -27,9 +27,10 @@ namespace ProjectZ.Dev
     //   D3 vanilla Mine on three rocks at a face reachable on the ground: mined there (own level), never from above
     //   D3b a rock marked with Mine below and vanilla Mine, mined on its own level by vanilla's job: the top still opens
     //      (2c4b728: the mark opens its boundary whatever mined the rock)
-    //   D5 stairs: vanilla placement refuses them on unmined rock in the fog and on seen rock; the footprint marked with
+    //   D5 stairs: vanilla placement refuses them on unmined rock in the fog and on seen rock (naming the cells); the footprint (4 cells) marked with
     //      Mine below from the plateau is mined from above (cells open, revealed); the stairs placed in the pit (ground
-    //      view, stairs tool with the x-ray) are built from the rim with nobody going down; the exit top stays; a colonist
+    //      view, stairs tool with the x-ray) are built from the rim with nobody going down; the exit over the opened solid end
+    //      gets their landing (1x4 stairs, 2026-10-20: it used to stay the natural top); a colonist
     //      walks down into the pit and back up; deconstructed from above
     //   D6 falls: a drop of one floor (J1) does no harm but staggers; of two floors (J2) hurts (no voluntary jumps since
     //      2026-10-19: the pawn stands on a floor laid over the open air past the edge, and the floor is taken up under it)
@@ -599,12 +600,12 @@ namespace ProjectZ.Dev
                 case "md_d5_dug":
                 {
                     bool dug = MdFoot.All(c => !MuRockOrOre(c, map) && L1(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && !map.fogGrid.IsFogged(c));
-                    Result("D5 the stairs' footprint marked with Mine below from the plateau is mined from above: the cells open and revealed",
-                        dug && MineUp.MinedFromAbove - mdMinedA == 3, $"{string.Join(", ", MdFoot.Select(c => $"{c} {(MuRockOrOre(c, map) ? "rock" : "open")} {(map.fogGrid.IsFogged(c) ? "fog" : "seen")} roof {MuRoof(c, map)}"))}; mined from above {MineUp.MinedFromAbove - mdMinedA}");
+                    Result("D5 the stairs' footprint (4 cells, the solid end too: nobody is below to dig it) marked with Mine below from the plateau is mined from above: the cells open and revealed",
+                        dug && MineUp.MinedFromAbove - mdMinedA == 4, $"{string.Join(", ", MdFoot.Select(c => $"{c} {(MuRockOrOre(c, map) ? "rock" : "open")} {(map.fogGrid.IsFogged(c) ? "fog" : "seen")} roof {MuRoof(c, map)}"))}; mined from above {MineUp.MinedFromAbove - mdMinedA}");
                     // vanilla placement: no stairs on unmined (now seen) rock: the wall east of the pit
                     IntVec3 wall = MdStairs + IntVec3.East;
                     AcceptanceReport rock = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, wall, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
-                    Result("D5 stairs on unmined rock (seen): refused as vanilla ('Space already occupied')", !rock.Accepted && rock.Reason == "SpaceAlreadyOccupied".Translate() && !map.fogGrid.IsFogged(wall),
+                    Result("D5 stairs on unmined rock (seen): refused (dig first), the message names the cells with rock", !rock.Accepted && rock.Reason.Contains("PZ_StairsPart3".Translate()) && rock.Reason.Contains("PZ_StairsPart0".Translate()) && !map.fogGrid.IsFogged(wall),
                         $"{wall} {wall.GetEdifice(map)?.def.defName ?? "-"}, fogged {map.fogGrid.IsFogged(wall)}: '{(rock.Accepted ? "ok" : rock.Reason)}'");
                     AcceptanceReport place = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, MdStairs, Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
                     Result("D5 stairs in the opened pit (ground view): placement accepted", place.Accepted, $"{MdStairs}: '{(place.Accepted ? "ok" : place.Reason)}'");
@@ -670,7 +671,7 @@ namespace ProjectZ.Dev
                     IntVec3 e = L1(MdExitGround, map);
                     Result("D5 builders on the plateau built the stairs in the pit from the rim", st != null, $"built {st != null}; roofs {string.Join(" ", MdFoot.Select(c => MuRoof(c, map)))}");
                     Result("D5 no builder went down to the ground before the stairs stood", !mdFlag, mdNote ?? "none");
-                    Result("D5 the exit is the plateau top (nothing laid), the stairs lead there", st != null && st.TopCell == e && TmTop(e, map),
+                    Result("D5 the exit over the opened solid end gets the stairs' landing (a floor laid with them), the stairs lead there", st != null && st.TopCell == e && SlabDefs.Is(e.GetTerrain(map)),
                         $"exit {st?.TopCell} ({e.GetTerrain(map).defName})");
                     if (st == null)
                     {
@@ -728,9 +729,22 @@ namespace ProjectZ.Dev
                     mdFlag = false;
                     MuRun(200, 43300, () => MuStairs(map, MdStairs) == null, "md_d5_gone", () =>
                     {
-                        if (MdCrew(map).Any(p => ProjectZ.FloorOf(p.Position, map) == 0))
+                        // (1x4 stairs: the landing over the solid end roofs part of the pit, so vanilla's auto-roof marks the
+                        // rest; roofing it is no part of this check)
+                        foreach (IntVec3 c in MuRect(new[] { mdG0 }, map, 5))
                         {
-                            mdFlag = true;
+                            if (c.InBounds(map) && map.areaManager.BuildRoof[c])
+                            {
+                                map.areaManager.BuildRoof[c] = false;
+                            }
+                        }
+                        foreach (Pawn p in MdCrew(map))
+                        {
+                            if (!mdFlag && ProjectZ.FloorOf(p.Position, map) == 0)
+                            {
+                                mdFlag = true;
+                                mdNote = $"{p} at {p.Position} ({p.CurJobDef?.defName}), stairs {(MuStairs(map, MdStairs) == null ? "gone" : "standing")}";
+                            }
                         }
                     });
                     return true;
@@ -739,7 +753,7 @@ namespace ProjectZ.Dev
                 case "md_d5_gone":
                 {
                     bool gone = MuStairs(map, MdStairs) == null;
-                    Result("D5 the stairs deconstructed from the plateau (nobody went down)", gone && !mdFlag, $"gone {gone}, went down {mdFlag}");
+                    Result("D5 the stairs deconstructed from the plateau (nobody went down)", gone && !mdFlag, $"gone {gone}, went down {mdFlag} ({mdNote ?? "-"})");
                     MdEnd(map, "D5", "md_d6");
                     return true;
                 }

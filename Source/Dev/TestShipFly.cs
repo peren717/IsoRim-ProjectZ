@@ -221,7 +221,7 @@ namespace ProjectZ.Dev
             {
                 map.terrainGrid.SetTerrain(SFF(-1, dz, 1, map), wood);
             }
-            foreach (int dz in new[] { 4, 5, 6 })
+            foreach (int dz in new[] { 4, 5, 6, 7 })   // (7: under stairs B's solid end, 1x4 stairs)
             {
                 map.terrainGrid.SetTerrain(SFF(-2, dz, 1, map), wood);
             }

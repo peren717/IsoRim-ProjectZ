@@ -308,7 +308,7 @@ namespace ProjectZ.Dev
                 map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
             }
             yStairsS = new IntVec3(yHouse.minX + 2, 0, yHouse.minZ + 3);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(yStairsS, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(yStairsS, Rot4.North));
             foreach (IntVec3 g in yHouse)
             {
                 if (!well.Contains(g))

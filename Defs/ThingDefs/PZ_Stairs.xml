@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- Stairs (decision D4, stairs design §1): a 1x3 ramp, turned by its rotation (it goes up toward the way it faces).
-       The floor above stays open over it (the stairwell); the cell past its top on the floor above is the exit (the landing),
+  <!-- Stairs (decision D4, stairs design §1; 1x4 since 2026-10-20): a 1x3 ramp and a solid end past its top, turned by
+       its rotation (it goes up toward the way it faces). The solid end is not walkable and holds nothing else (StairShape).
+       The floor above stays open over the ramp (the stairwell); the cell over the solid end on the floor above is the exit (the landing),
        laid with the stairs where it is open air and taken away with them. Stairs hold roofs and floors up like a wall
        (removal design §7), so they can stand anywhere. Everyone can use them (D9). IsoRim draws its model
        (IsoRim/Defs/PZ_Models.xml); the sprite is the plain fallback. -->
   <ThingDef ParentName="BuildingBase">
     <defName>PZ_Stairs</defName>
     <label>stairs</label>
-    <description>Stairs up to the floor above. The floor above stays open over them; the cell past the top is the landing on the floor above, built with the stairs. Like a wall, stairs hold up roofs and floors nearby.</description>
+    <description>Stairs up to the floor above: a 3-cell ramp and a solid end. The floor above stays open over the ramp; the landing on the floor above, over the solid end, is built with the stairs. Like a wall, stairs hold up roofs and floors nearby.</description>
     <thingClass>ProjectZ.Building_Stairs</thingClass>
     <graphicData>
       <texPath>ProjectZ/Stairs</texPath>
       <graphicClass>Graphic_Single</graphicClass>
-      <drawSize>(1,3)</drawSize>
+      <drawSize>(1,4)</drawSize>
     </graphicData>
     <uiIconPath>ProjectZ/Stairs_MenuIcon</uiIconPath>
     <altitudeLayer>Building</altitudeLayer>
@@ -25,7 +26,7 @@
     <holdsRoof>true</holdsRoof>
     <blockWind>false</blockWind>
     <rotatable>true</rotatable>
-    <size>(1,3)</size>
+    <size>(1,4)</size>
     <statBases>
       <MaxHitPoints>200</MaxHitPoints>
       <WorkToBuild>1600</WorkToBuild>

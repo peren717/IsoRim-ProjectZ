@@ -567,7 +567,7 @@ namespace ProjectZ.Dev
                 map.areaManager.Home[c] = true;
             }
             zStairsS = Z(2, 3);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(zStairsS, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(zStairsS, Rot4.North));
             foreach (IntVec3 g in zHouse.ContractedBy(1))
             {
                 if (!well.Contains(g))

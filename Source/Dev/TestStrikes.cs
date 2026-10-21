@@ -191,7 +191,7 @@ namespace ProjectZ.Dev
                         Place(c == door ? ThingDefOf.Door : ThingDefOf.Wall, ThingDefOf.BlocksGranite, c, map);
                     }
                     IntVec3 stairs = new IntVec3(12, 0, 23);
-                    HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(stairs, Rot4.North).Cells);
+                    HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(stairs, Rot4.North));
                     foreach (IntVec3 g in sxHouse)
                     {
                         map.roofGrid.SetRoof(g, RoofDefOf.RoofConstructed);

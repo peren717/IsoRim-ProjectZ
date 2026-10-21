@@ -36,7 +36,8 @@ namespace ProjectZ.Dev
 
         private static IntVec3 G(int dx, int dz) => new IntVec3(sHouseA.minX + dx, 0, sHouseA.minZ + dz);
 
-        private static List<IntVec3> WellUp(Map map, IntVec3 center, Rot4 rot) => StairShape.Footprint(center, rot).Cells.Select(c => StairShape.Above(c, map)).ToList();
+        // The stairwell: the cells over the ramp (1x4 stairs: over the solid end is the exit).
+        private static List<IntVec3> WellUp(Map map, IntVec3 center, Rot4 rot) => StairShape.Ramp(center, rot).Select(c => StairShape.Above(c, map)).ToList();
 
         private static int WoodTotal(Map map) => map.listerThings.ThingsOfDef(ThingDefOf.WoodLog).Sum(t => t.stackCount)
             + map.mapPawns.AllPawnsSpawned.Sum(p => p.carryTracker?.CarriedThing?.def == ThingDefOf.WoodLog ? p.carryTracker.CarriedThing.stackCount : 0);
@@ -151,11 +152,12 @@ namespace ProjectZ.Dev
                 }
                 case "w_refuse":
                 {
-                    // W1: under the bed upstairs (its cells x = minX + 2, z = minZ + 4, 5)
+                    // W1: under the bed upstairs (its cells x = minX + 2, z = minZ + 4, 5; the stairs at z 2..4, their solid end at 5
+                    // inside the house wall at 6: 1x4 stairs)
                     SetRot(wStairs, Rot4.North);
-                    AcceptanceReport bed = RefusalAt(wStairs, ScreenOf(G(2, 4), 0), out IntVec3 bc);
-                    Result("stairs under a bed upstairs: refused, 'no building or stairs exit over the stairs'", !bed.Accepted && bed.Reason == "PZ_WellNotOpen".Translate() && bc == G(2, 4),
-                        $"{bc}: '{bed.Reason}'; stairwell {string.Join(", ", WellUp(map, G(2, 4), Rot4.North).Select(c => c.GetTerrain(map).defName + "/" + (c.GetFirstBuilding(map)?.def.defName ?? "-")))}");
+                    AcceptanceReport bed = RefusalAt(wStairs, ScreenOf(G(2, 3), 0), out IntVec3 bc);
+                    Result("stairs under a bed upstairs: refused, 'no building or stairs exit over the stairs'", !bed.Accepted && bed.Reason == "PZ_WellNotOpen".Translate() && bc == G(2, 3),
+                        $"{bc}: '{bed.Reason}'; stairwell {string.Join(", ", WellUp(map, G(2, 3), Rot4.North).Select(c => c.GetTerrain(map).defName + "/" + (c.GetFirstBuilding(map)?.def.defName ?? "-")))}");
                     Messages.Message(bed.Reason, MessageTypeDefOf.RejectInput, false);
                     // W2: stairs W under the floor, up to the north, x = minX + 5
                     wCenter = G(5, 2);
@@ -176,7 +178,8 @@ namespace ProjectZ.Dev
                     // W1b: a stairwell over the stairs exits (W's, a blueprint; the old stairs', built): turned west at (minX + 6, minZ + 4)
                     SetRot(wStairs, Rot4.West);
                     AcceptanceReport ex = RefusalAt(wStairs, ScreenOf(G(6, 4), 0), out IntVec3 ec);
-                    Result("a stairwell over other stairs' exits: refused the same way", !ex.Accepted && ex.Reason == "PZ_WellNotOpen".Translate(), $"{ec}: '{ex.Reason}'");
+                    // (1x4 stairs: a ramp under W's exit would stand on W's solid end: the game's own refusal comes first)
+                    Result("a stairwell over other stairs' exits: refused", !ex.Accepted && (ex.Reason == "PZ_WellNotOpen".Translate() || ex.Reason == "SpaceAlreadyOccupied".Translate()), $"{ec}: '{ex.Reason}'");
                     SetRot(wStairs, Rot4.North);
                     Find.DesignatorManager.Deselect();
                     // waiting: inspect line and the construction check's reason
@@ -258,10 +261,10 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     List<IntVec3> well = WellUp(map, wCenter, Rot4.North);
                     int wood = WoodTotal(map) - wWoodBefore;
-                    bool roofs = StairShape.Footprint(wCenter, Rot4.North).Cells.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
+                    bool roofs = StairShape.Ramp(wCenter, Rot4.North).All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
                     Result("colonists take the floor up: open air over the stairs, stairwell roof below, no materials back (user 2026-10-18), no frame before",
                         well.All(c => c.GetTerrain(map) == PZDefOf.PZ_OpenAir) && roofs && wood <= 0 && !wFrameEarly,
-                        $"after {ticksTotal} ticks; terrain {string.Join(",", well.Select(c => c.GetTerrain(map).defName))}; roofs below {string.Join(",", StairShape.Footprint(wCenter, Rot4.North).Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}; wood +{wood}; frame early {wFrameEarly}");
+                        $"after {ticksTotal} ticks; terrain {string.Join(",", well.Select(c => c.GetTerrain(map).defName))}; roofs below {string.Join(",", StairShape.Ramp(wCenter, Rot4.North).Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}; wood +{wood}; frame early {wFrameEarly}");
                     // (compat G2, user 2026-10-18: what stands on a floor taken up falls; -projectznogravity: it steps off)
                     Result(Gravity.Off ? "nobody and nothing left on open air; the drafted colonist stepped to a floor next to it" : "nobody and nothing left on open air; the drafted colonist fell into the stairwell, the steel came down or was hauled",
                         !OnOpenAir(map) && wSitter.Position.Standable(map) && ProjectZ.FloorOf(wSitter.Position, map) == (Gravity.Off ? 1 : 0) && map.listerThings.ThingsOfDef(ThingDefOf.Steel).Any(t => t.stackCount >= 20 && (Gravity.Off ? ProjectZ.FloorOf(t.Position, map) == 1 : !Gravity.Air(t.Position, map))),
@@ -284,7 +287,7 @@ namespace ProjectZ.Dev
                     Building_Stairs st = wCenter.GetFirstThing<Building_Stairs>(map);
                     StairGrid g = StairGrid.For(map);
                     Result("then the stairs get built: link registered, stairwell roofs kept, marks cleared",
-                        st != null && g != null && g.links.Any(l => l.stairs == st && l.top == wExit) && StairShape.Footprint(wCenter, Rot4.North).Cells.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && map.GetComponent<StairwellMarks>().cells.Count == 0,
+                        st != null && g != null && g.links.Any(l => l.stairs == st && l.top == wExit) && StairShape.Ramp(wCenter, Rot4.North).All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && map.GetComponent<StairwellMarks>().cells.Count == 0,
                         $"{st} after {ticksTotal} ticks; links {g?.Count}; marks {map.GetComponent<StairwellMarks>().cells.Count}");
                     // a colonist walks up W: from next to its low end to its exit
                     wClimber = Colonists(map).First(p => !p.Downed);

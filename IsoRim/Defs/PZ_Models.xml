@@ -2,15 +2,16 @@
 <Defs>
 
   <!-- IsoRim's model of the stairs (loaded only with IsoRim, LoadFolders.xml): a stepped ramp up to one storey at the
-       locked wall height (1.65 + 0.02). Big plain shapes with box-projected UVs; treads, sides and back plain "stuff" so
+       locked wall height (1.65 + 0.02) and, since 2026-10-20, a plain block on the solid 4th cell under the exit
+       (placeholder; built for 1x4). Big plain shapes with box-projected UVs; treads, sides and back plain "stuff" so
        the stairs read like walls of the same stuff, risers "stuff_dark", the hidden bottom "stuff_deep". No plate over the
        exit cell: the landing is drawn as the floor laid there (bare slab, carpet, wood), like any floor cell. Written by
-       tools/projectz/stairs_obj.js (landing=0). -->
+       tools/projectz/stairs_obj.js (landing=0, solid=1). -->
   <IsoRim.ModelDef>
     <defName>R3D_PZ_Stairs</defName>
     <thingDef>PZ_Stairs</thingDef>
     <model>Models/pz_stairs.obj</model>
-    <builtFor>(1, 3)</builtFor>
+    <builtFor>(1, 4)</builtFor>
     <groundShadow>false</groundShadow>
   </IsoRim.ModelDef>
 
@@ -21,7 +22,7 @@
     <defName>R3D_PZ_ShipStairs</defName>
     <thingDef>PZ_ShipStairs</thingDef>
     <model>Models/pz_ship_stairs.obj</model>
-    <builtFor>(1, 3)</builtFor>
+    <builtFor>(1, 4)</builtFor>
     <groundShadow>false</groundShadow>
   </IsoRim.ModelDef>
 

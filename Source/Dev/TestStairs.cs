@@ -850,7 +850,7 @@ namespace ProjectZ.Dev
             stairPos = new IntVec3(sHouseA.maxX - 1, 0, sHouseA.minZ + 2);
             AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, stairPos, StairRot, map, stuffDef: ThingDefOf.Steel);
             Result("stairs placeable (exit over a roofed cell)", ok.Accepted, ok.Reason);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(stairPos, StairRot).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(stairPos, StairRot));
             foreach (IntVec3 g in sHouseA)
             {
                 if (!well.Contains(g) && !(mode == "floorui" && g.x <= sHouseA.maxX - 4))
@@ -867,8 +867,8 @@ namespace ProjectZ.Dev
             }
             Place(PZDefOf.PZ_Stairs, ThingDefOf.Steel, stairPos, map, StairRot);
             Building_Stairs st = StairsA(map);
-            Result("stairs: stairwell roof invisible-roofed, link registered", st != null && StairGrid.For(map)?.Count == 1 && well.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof),
-                $"{st} at {stairPos}, high end {st?.HighCell}, exit {st?.TopCell}; well roofs {string.Join(",", well.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}");
+            Result("stairs: stairwell roof invisible-roofed, link registered", st != null && StairGrid.For(map)?.Count == 1 && StairShape.Ramp(stairPos, StairRot).All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof),
+                $"{st} at {stairPos}, high end {st?.HighCell}, exit {st?.TopCell}; ramp roofs {string.Join(",", StairShape.Ramp(stairPos, StairRot).Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}");
             foreach (Pawn p in cols)
             {
                 p.workSettings?.EnableAndInitializeIfNotAlreadyInitialized();

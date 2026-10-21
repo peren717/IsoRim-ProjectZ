@@ -308,7 +308,7 @@ namespace ProjectZ.Dev
             {
                 map.terrainGrid.SetTerrain(SPF(-1, dz, 1, map), wood);
             }
-            foreach (int dz in new[] { 4, 5, 6 })
+            foreach (int dz in new[] { 4, 5, 6, 7 })   // (7: under stairs B's solid end, 1x4 stairs)
             {
                 map.terrainGrid.SetTerrain(SPF(-2, dz, 1, map), wood);
             }
@@ -468,6 +468,13 @@ namespace ProjectZ.Dev
             Result("T2 colonists built both ship stairs", st.Count == 2, $"{st.Count} after {ticksTotal} ticks; sites left {map.listerThings.AllThings.Count(t => (t is Blueprint || t is Frame) && ShipStairs.Is(t.def.entityDefToBuild))}");
             if (st.Count < 2)
             {
+                foreach (Thing t in map.listerThings.AllThings.Where(t => (t is Blueprint || t is Frame) && ShipStairs.Is(t.def.entityDefToBuild)).ToList())
+                {
+                    Pawn c0 = Colonists(map).FirstOrDefault();
+                    JobFailReason.Clear();
+                    bool can = c0 != null && GenConstruct.CanConstruct(t, c0, false, true);
+                    Info($"T2 site left: {t} at {t.Position} {t.Rotation} f{ProjectZ.FloorOf(t.Position, map)}, waiting {StairwellFloor.Waiting(t)}, can construct {can} ({JobFailReason.Reason}), reach {c0?.CanReach(t, PathEndMode.Touch, Danger.Deadly)}, on its cells: {string.Join("; ", t.OccupiedRect().Cells.Select(x => x + " " + string.Join(",", x.GetThingList(map).Select(y => y.def.defName))))}");
+                }
                 Finish();
                 return;
             }
@@ -970,10 +977,10 @@ namespace ProjectZ.Dev
             Result("F4 ship stairs 2 laid their landing deck on floor 3", SpLandingOk(s2, map, out string d) && ProjectZ.FloorOf(s2.TopCell, map) == 2, d);
             StairGrid g = StairGrid.For(map);
             int usable = g == null ? 0 : g.links.Count(l => (l.stairs == s1 || l.stairs == s2) && g.Usable(l));
-            int open = st.Sum(s => s.OccupiedRect().Cells.Count(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.terrainGrid.FoundationAt(StairShape.Above(c, map)) == null));
-            int wellRoof = st.Sum(s => s.OccupiedRect().Cells.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof));
+            int open = st.Sum(s => StairShape.Ramp(s.Position, s.Rotation).Count(c => StairShape.Above(c, map).GetTerrain(map) == PZDefOf.PZ_OpenAir && map.terrainGrid.FoundationAt(StairShape.Above(c, map)) == null));
+            int wellRoof = st.Sum(s => StairShape.Ramp(s.Position, s.Rotation).Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof));
             // (stairs 1 stand under the ground room's roof: their stairwell roof; stairs 2 on floor 2 have open sky over them, no roof)
-            Result("F4 both links usable, both stairwells open, the stairwell roof over stairs 1 (stairs 2 stand outdoors)", usable == 2 && open == 6 && wellRoof == 3 && s2.OccupiedRect().Cells.All(c => map.roofGrid.RoofAt(c) == null), $"{usable} usable, open {open}/6, stairwell roofs {wellRoof}/3");
+            Result("F4 both links usable, both stairwells open, the stairwell roof over stairs 1 (stairs 2 stand outdoors)", usable == 2 && open == 6 && wellRoof == 3 && StairShape.Ramp(s2.Position, s2.Rotation).All(c => map.roofGrid.RoofAt(c) == null), $"{usable} usable, open {open}/6, stairwell roofs {wellRoof}/3");
             Building_GravEngine e = GlEngine(map);
             Result("F4 the stairs and decks are part of the ship", e.OnValidSubstructure(s1) && e.OnValidSubstructure(s2) && e.ValidSubstructure.Contains(s2.TopCell) && spF2Decks.All(c => e.ValidSubstructure.Contains(c)),
                 $"set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");

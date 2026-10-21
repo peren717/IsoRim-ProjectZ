@@ -402,7 +402,7 @@ namespace ProjectZ.Dev
             }
             Find.DesignatorManager.Deselect();
             Result("L2 stairs designated", rs.Accepted, rs.Accepted ? lvStairs.ToString() : rs.Reason);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(lvStairs, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(lvStairs, Rot4.North));
             IntVec3 exit = Levels.Ground(StairShape.Exit(lvStairs, Rot4.North, map), map);
             lvSlab.Clear();
             Designator_Build d = new Designator_Build(PZDefOf.PZ_UpperFloor);

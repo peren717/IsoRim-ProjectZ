@@ -72,7 +72,7 @@ namespace ProjectZ
             {
                 return false;
             }
-            foreach (IntVec3 c in t.OccupiedRect())
+            foreach (IntVec3 c in StairShape.Ramp(t.Position, t.Rotation))
             {
                 if (ProjectZ.HasFloor(StairShape.Above(c, t.Map), t.Map))
                 {
@@ -89,7 +89,7 @@ namespace ProjectZ
         {
             Map map = site.Map;
             StairwellMarks marks = map.GetComponent<StairwellMarks>();
-            foreach (IntVec3 c in site.OccupiedRect())
+            foreach (IntVec3 c in StairShape.Ramp(site.Position, site.Rotation))
             {
                 IntVec3 up = StairShape.Above(c, map);
                 if (MustClear(up, map) && map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation) == null)

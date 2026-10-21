@@ -32,7 +32,8 @@ namespace ProjectZ.Patches
 
         public static int FloorOf(Thing t) => ProjectZ.FloorOf(t.Position, t.Map);
 
-        // The rim: walkable cells on the floor above that touch the stairwell (8 ways).
+        // The rim: walkable cells on the floor above that touch the stairwell (8 ways: round the ramp, the exit side
+        // included).
         public static void UpperCells(Thing t, List<IntVec3> into)
         {
             into.Clear();
@@ -42,7 +43,7 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            foreach (IntVec3 c in t.OccupiedRect().ExpandedBy(1))
+            foreach (IntVec3 c in StairShape.RampRect(t.Position, t.Rotation).ExpandedBy(1))
             {
                 if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) != k)
                 {

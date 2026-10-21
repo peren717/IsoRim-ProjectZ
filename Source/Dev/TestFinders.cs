@@ -328,8 +328,8 @@ namespace ProjectZ.Dev
             fdP2 = fdP1;
             fdStairs1 = FdA(20, 7);
             fdStairs2 = FdA(10, 12);
-            HashSet<IntVec3> well1 = new HashSet<IntVec3>(StairShape.Footprint(fdStairs1, Rot4.North).Cells);
-            HashSet<IntVec3> well2 = new HashSet<IntVec3>(StairShape.Footprint(fdStairs2, Rot4.North).Cells);
+            HashSet<IntVec3> well1 = new HashSet<IntVec3>(StairShape.Ramp(fdStairs1, Rot4.North));
+            HashSet<IntVec3> well2 = new HashSet<IntVec3>(StairShape.Ramp(fdStairs2, Rot4.North));
             foreach (IntVec3 g in fdP1)
             {
                 bool column = (g.x - fdP1.minX) % 6 == 3 && (g.z - fdP1.minZ) % 6 == 3 && !well1.Contains(g) && !well2.Contains(g);

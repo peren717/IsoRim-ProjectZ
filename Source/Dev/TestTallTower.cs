@@ -273,7 +273,7 @@ namespace ProjectZ.Dev
                 map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
             }
             hStairs1 = H(2, -4);   // ground -> floor 2, exit (2, -2) on floor 2
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(hStairs1, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(hStairs1, Rot4.North));
             foreach (IntVec3 g in hHouse)
             {
                 if (!well.Contains(g))
@@ -282,8 +282,11 @@ namespace ProjectZ.Dev
                 }
             }
             Place(PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, hStairs1, map, Rot4.North);
-            hStairs2 = OnF(H(1, -3), 1, map);   // floor 2 -> floor 3 on A's slab, landing (1, -1) on floor 3 at the tower's door
+            // floor 2 -> floor 3 on A's slab, landing (0, -1) on floor 3 beside the tower's door, a floor-3 cell (1, -1) in front
+            // of the door (1x4 stairs, 2026-10-20: their solid end must not stand on floor 2's cell in front of the door)
+            hStairs2 = OnF(H(0, -3), 1, map);
             Place(PZDefOf.PZ_Stairs, ThingDefOf.WoodLog, hStairs2, map, Rot4.North);
+            map.terrainGrid.SetTerrain(OnF(H(1, -1), 2, map), PZDefOf.PZ_UpperFloor);
             // R: a one-storey 3 x 3 wall block. F: a 3 x 3 room, its floor-2 slab, one wall on it over the room's middle.
             hRef = new CellRect(hO.x, hO.z - 16, 3, 3);
             foreach (IntVec3 c in hRef)

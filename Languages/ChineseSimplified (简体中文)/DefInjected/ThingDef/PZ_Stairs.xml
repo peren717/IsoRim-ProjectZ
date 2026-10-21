@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
   <PZ_Stairs.label>楼梯</PZ_Stairs.label>
-  <PZ_Stairs.description>通往上一层的楼梯。上方会留空，顶端前方一格是上层的落脚处，和楼梯一起建好。楼梯像墙一样能撑住附近的屋顶和楼板。</PZ_Stairs.description>
+  <PZ_Stairs.description>通往上一层的楼梯：三格坡道加一格实心末端。坡道上方会留空，实心末端正上方是上层的落脚处，和楼梯一起建好。楼梯像墙一样能撑住附近的屋顶和楼板。</PZ_Stairs.description>
 </LanguageData>

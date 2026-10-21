@@ -72,4 +72,10 @@
   <PZ_LadderAfterRaid>Disappears a day after the raid</PZ_LadderAfterRaid>
   <PZ_LadderFallsApart>Disappears in {0}</PZ_LadderFallsApart>
   <PZ_LadderNoDrop>Needs open air below its open side</PZ_LadderNoDrop>
+  <PZ_StairsSolid>Part of the stairs</PZ_StairsSolid>
+  <PZ_StairsMineFirst>Mine the rock first ({0})</PZ_StairsMineFirst>
+  <PZ_StairsPart0>bottom step</PZ_StairsPart0>
+  <PZ_StairsPart1>middle step</PZ_StairsPart1>
+  <PZ_StairsPart2>top step</PZ_StairsPart2>
+  <PZ_StairsPart3>end block</PZ_StairsPart3>
 </LanguageData>

@@ -503,7 +503,7 @@ namespace ProjectZ.Dev
                 map.areaManager.Home[c] = true;
             }
             oStairs = O(2, 3);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(oStairs, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(oStairs, Rot4.North));
             foreach (IntVec3 g in oHouse.ContractedBy(1))
             {
                 if (!well.Contains(g))

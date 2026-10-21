@@ -228,7 +228,7 @@ namespace ProjectZ.Dev
             jHouse = new CellRect(jO.x, jO.z, 11, 8);
             IntVec3 door = J(5, 0);
             IntVec3 stairs = J(2, 3);   // up to the north: footprint J(2, 2..4), landing over J(2, 5)
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(stairs, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(stairs, Rot4.North));
             foreach (IntVec3 g in jHouse.EdgeCells)
             {
                 Place(g == door ? ThingDefOf.Door : ThingDefOf.Wall, ThingDefOf.WoodLog, g, map);

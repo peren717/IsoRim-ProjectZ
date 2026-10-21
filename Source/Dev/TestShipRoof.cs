@@ -337,7 +337,7 @@ namespace ProjectZ.Dev
                 $"roofed {srRoofArea.Count(c => map.roofGrid.Roofed(c))} of {srRoofArea.Count} after {ticksTotal} ticks; opening roofs {string.Join(", ", srHole.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none"))}");
             SrDump(map, "R4");
             Building_Stairs a = SrStairs(map).FirstOrDefault(s => s.Position == SP(1, 2));
-            Result("R4 stairs A still have the stairwell roof over the ramp and their landing", a != null && a.OccupiedRect().Cells.All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && ShipDeck.At(a.TopCell, map),
+            Result("R4 stairs A still have the stairwell roof over the ramp and their landing", a != null && StairShape.Ramp(a.Position, a.Rotation).All(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof) && ShipDeck.At(a.TopCell, map),
                 a == null ? "no stairs A" : string.Join(", ", a.OccupiedRect().Cells.Select(c => map.roofGrid.RoofAt(c)?.defName ?? "none")));
             Room room = SPF(2, 2, 1, map).GetRoom(map);
             Result("R4 the floor-2 room is closed (no open roof)", room != null && room.OpenRoofCount == 0, $"room cells {room?.CellCount}, open roof {room?.OpenRoofCount}");

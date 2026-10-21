@@ -141,7 +141,7 @@ namespace ProjectZ.Dev
             ThingDef blocks = DefDatabase<ThingDef>.GetNamed("BlocksGranite");
             CellRect house = new CellRect(whO.x, whO.z, 11, 8);
             IntVec3 sp = W(9, 3);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(sp, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(sp, Rot4.North));
             foreach (IntVec3 c in house)
             {
                 map.terrainGrid.SetTerrain(c, plank);

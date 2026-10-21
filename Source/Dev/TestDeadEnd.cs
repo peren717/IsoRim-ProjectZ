@@ -156,7 +156,7 @@ namespace ProjectZ.Dev
             // exit on the room's upper floor.
             kDeadPos = new IntVec3(ox + 2, 0, oz + 1);
             kGoodPos = new IntVec3(ox + 6, 0, oz + 3);
-            HashSet<IntVec3> wells = new HashSet<IntVec3>(StairShape.Footprint(kDeadPos, KDeadRot).Cells.Concat(StairShape.Footprint(kGoodPos, KGoodRot).Cells));
+            HashSet<IntVec3> wells = new HashSet<IntVec3>(StairShape.Ramp(kDeadPos, KDeadRot).Concat(StairShape.Ramp(kGoodPos, KGoodRot)));
             foreach (IntVec3 g in kHouse.ContractedBy(1))
             {
                 if (!wells.Contains(g))

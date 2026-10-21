@@ -38,7 +38,12 @@ namespace ProjectZ.Dev
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
     //                                   ladders: siege ladders, stage 1 (the generic vertical link, climbing, falls, the place-ladder
     //                                   job, claim, countdown, deconstruct, hauling, the last way down, shots, save mid-climb;
-    //                                   TestLadders), -projectzfloors=5 -projectzseed=7
+    //                                   TestLadders; with the column kept open, the climber first at the end, no melee over 2+
+    //                                   floors: TestLadders2), -projectzfloors=5 -projectzseed=7
+    //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
+    //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
+    //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
+    //                                   write it; -projectzsave=pz_oldstairs to load it; TestOldStairs), -projectzfloors=3 -projectzseed=7
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
     //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
     //                                   failsoft: the patch state after -projectzfailpatch=<names> made those patches fail
@@ -372,7 +377,7 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange" || mode == "mtn")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
             {
                 PatchMouse(h);
             }
@@ -641,6 +646,16 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("ld_"))
             {
                 StepLadders(map);
+                return;
+            }
+            if (stage.StartsWith("os_"))
+            {
+                StepOldStairs(map);
+                return;
+            }
+            if (stage.StartsWith("s4_"))
+            {
+                StepStairs4(map);
                 return;
             }
             if (stage.StartsWith("d3_"))
@@ -1004,6 +1019,14 @@ namespace ProjectZ.Dev
                     else if (mode == "ladders")
                     {
                         stage = "ld_setup";
+                    }
+                    else if (mode == "oldstairs")
+                    {
+                        stage = "os_setup";
+                    }
+                    else if (mode == "stairs4")
+                    {
+                        stage = "s4_setup";
                     }
                     else if (mode == "dist3d")
                     {

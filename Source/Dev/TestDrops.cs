@@ -427,7 +427,7 @@ namespace ProjectZ.Dev
             // Platform P (40 x 30) on floor 2 over a roofed ground area held by columns every 6 cells; stairs up at its south.
             aPlat = new CellRect(aO.x, aO.z, 40, 30);
             aStairsP = A(20, 2);
-            HashSet<IntVec3> wellP = new HashSet<IntVec3>(StairShape.Footprint(aStairsP, Rot4.North).Cells);
+            HashSet<IntVec3> wellP = new HashSet<IntVec3>(StairShape.Ramp(aStairsP, Rot4.North));
             foreach (IntVec3 g in aPlat)
             {
                 map.roofGrid.SetRoof(g, RoofDefOf.RoofConstructed);
@@ -458,7 +458,7 @@ namespace ProjectZ.Dev
                 map.areaManager.Home[c] = true;
             }
             aStairsH = A(44, 3);
-            HashSet<IntVec3> wellH = new HashSet<IntVec3>(StairShape.Footprint(aStairsH, Rot4.North).Cells);
+            HashSet<IntVec3> wellH = new HashSet<IntVec3>(StairShape.Ramp(aStairsH, Rot4.North));
             foreach (IntVec3 g in aHouse)
             {
                 if (!wellH.Contains(g))

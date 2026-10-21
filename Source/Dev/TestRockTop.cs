@@ -487,9 +487,11 @@ namespace ProjectZ.Dev
                             {
                                 continue;
                             }
-                            if (StairShape.Footprint(p, rot).Cells.Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
+                            // (1x4 stairs: the solid end under the exit is the lip's rock itself, mined first by vanilla Mine on the ground)
+                            AcceptanceReport okP = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog);
+                            if (StairShape.Ramp(p, rot).Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
                                 || any == null || !map.reachability.CanReach(any.Position, p, PathEndMode.Touch, TraverseParms.For(TraverseMode.PassDoors))
-                                || !GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                                || okP.Reason != "PZ_StairsMineFirst".Translate("PZ_StairsPart3".Translate()).ToString())
                             {
                                 continue;
                             }
@@ -515,6 +517,20 @@ namespace ProjectZ.Dev
                     }
                     RtSiteStart(map, CellRect.CenteredOn(ProjectZ.GroundCellOf(rtExit, map), 16));
                     rtExitTerrain = rtExit.GetTerrain(map);
+                    rtExitRoof = map.roofGrid.RoofAt(FloorRoof.Below(rtExit, map));
+                    // the lip's rock under the exit first (the solid end's cell): vanilla Mine on the ground, the lip top stays
+                    map.designationManager.AddDesignation(new Designation(StairShape.Solid(rtStairs, rtRot), DesignationDefOf.Mine));
+                    RtWork(map, WorkTypeDefOf.Mining);
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    TickUntil(20000, () => StairShape.Solid(rtStairs, rtRot).GetFirstMineable(map) == null, "rt_t5_place", 60);
+                    return true;
+                }
+                case "rt_t5_place":
+                {
+                    tickWatch = null;
+                    IntVec3 solid = StairShape.Solid(rtStairs, rtRot);
+                    Result("T5 the lip's rock under the exit (the stairs' solid end) mined on the ground; the lip top stays", solid.GetFirstMineable(map) == null && TmTop(rtExit, map),
+                        $"solid end {solid}: {solid.GetFirstMineable(map)?.def.defName ?? "open"}, roof {map.roofGrid.RoofAt(solid)?.defName ?? "none"}; exit {rtExit} {rtExit.GetTerrain(map).defName}");
                     rtExitRoof = map.roofGrid.RoofAt(FloorRoof.Below(rtExit, map));
                     for (int i = 0; i < 4; i++)
                     {

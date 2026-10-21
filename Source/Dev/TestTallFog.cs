@@ -607,9 +607,14 @@ namespace ProjectZ.Dev
                             {
                                 continue;
                             }
-                            if (StairShape.Footprint(p, rot).Cells.Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
+                            // (1x4 stairs: the solid end under the exit may be the rim's rock, mined first by vanilla Mine on the ground)
+                            IntVec3 solid = StairShape.Solid(p, rot);
+                            bool solidRock = solid.InBounds(map) && !map.fogGrid.IsFogged(solid) && solid.GetFirstMineable(map) is Mineable sm && sm.def.building.isNaturalRock;
+                            AcceptanceReport okP = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog);
+                            if (StairShape.Ramp(p, rot).Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
+                                || !solidRock && (!solid.InBounds(map) || map.fogGrid.IsFogged(solid) || solid.GetEdifice(map) != null || !solid.Standable(map))
                                 || any == null || !map.reachability.CanReach(any.Position, p, PathEndMode.Touch, TraverseParms.For(TraverseMode.PassDoors))
-                                || !GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                                || !(okP.Accepted || solidRock && okP.Reason == "PZ_StairsMineFirst".Translate("PZ_StairsPart3".Translate()).ToString()))
                             {
                                 continue;
                             }
@@ -631,6 +636,24 @@ namespace ProjectZ.Dev
                         pendingLoad = "pz_tallfog";
                         return true;
                     }
+                    // the solid end's rock first (vanilla Mine on the ground), before the fog watch starts
+                    IntVec3 fgSolid = StairShape.Solid(fgStairs, fgRot);
+                    if (fgSolid.GetFirstMineable(map) != null)
+                    {
+                        map.designationManager.AddDesignation(new Designation(fgSolid, DesignationDefOf.Mine));
+                        FgWork(map, Colonists(map), WorkTypeDefOf.Mining);
+                        Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                        Info($"G2 the solid end {fgSolid} is rock: mined first");
+                        TickUntil(20000, () => fgSolid.GetFirstMineable(map) == null, "fg_g2_place", 30);
+                        return true;
+                    }
+                    stage = "fg_g2_place";
+                    return true;
+                }
+                case "fg_g2_place":
+                {
+                    tickWatch = null;
+                    fgE = FgExpected(map, fgExit, out _);
                     FgStart(map, fgE);
                     for (int i = 0; i < 4; i++)
                     {

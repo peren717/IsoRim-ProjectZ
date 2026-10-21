@@ -1,13 +1,15 @@
 using System.Collections.Generic;
+using System.Linq;
 using HarmonyLib;
 using RimWorld;
 using Verse;
 
 namespace ProjectZ
 {
-    // Stairs (design isorim-pz-stairs-jump-design.md §1): a 1x3 ramp on floor k, turned by its rotation. Low end L0,
-    // middle L1, high end H = centre + rot.FacingCell. The exit E is the cell past the high end on floor k + 1. Over the
-    // ramp, floor k + 1 stays open (the stairwell). A pawn walks up the ramp as on any standable building and steps from
+    // Stairs (design isorim-pz-stairs-jump-design.md §1; 1x4 since 2026-10-20): a 1x3 ramp on floor k, turned by its
+    // rotation, and a solid end past it (StairShape). Low end L0, middle L1, high end H = centre + rot.FacingCell. The exit
+    // E is the cell past the high end on floor k + 1, right above the solid end. Over the ramp, floor k + 1 stays open
+    // (the stairwell). A pawn walks up the ramp as on any standable building and steps from
     // H to E (and back) as one path step (Patches/PathPatches.cs); reachability links the regions of H and E
     // (Patches/ReachPatches.cs). Nothing is saved: the stairs register again when the map loads.
     //
@@ -59,10 +61,64 @@ namespace ProjectZ
         }
     }
 
-    // Where the parts of a ramp are, for a stairs thing or a placement (centre + rotation).
+    // Where the parts of a stairs thing are, for a stairs thing or a placement (centre + rotation). The footprint is 1x4
+    // (user 2026-10-20): the 3 ramp cells (low end L0 = centre - facing, middle L1 = centre, high end H = centre + facing)
+    // and the solid end S = centre + 2 x facing, right under the exit E. S is part of the stairs: not walkable
+    // (StairSolid_PathCost_Patch), nothing else is placed on it (CanPlaceBlueprintAt_StairSolid_Patch). The game's
+    // OccupiedRect for a 1x4 thing shifts with the rotation in world terms, but along the facing it always runs from
+    // centre - facing to centre + 2 x facing (GenAdj.AdjustForRotation), so these four cells are the footprint for every
+    // rotation. The stairwell (the floor above kept open) is over the ramp only; over S is the exit.
     public static class StairShape
     {
-        public static CellRect Footprint(IntVec3 center, Rot4 rot) => GenAdj.OccupiedRect(center, rot, new IntVec2(1, 3));
+        public static readonly IntVec2 Size = new IntVec2(1, 4);
+
+        public static CellRect Footprint(IntVec3 center, Rot4 rot) => GenAdj.OccupiedRect(center, rot, Size);
+
+        // The 3 ramp cells (L0, L1, H): the stairwell's floor.
+        public static IEnumerable<IntVec3> Ramp(IntVec3 center, Rot4 rot)
+        {
+            IntVec3 f = rot.FacingCell;
+            yield return center - f;
+            yield return center;
+            yield return center + f;
+        }
+
+        public static CellRect RampRect(IntVec3 center, Rot4 rot) => CellRect.FromLimits(center - rot.FacingCell, center + rot.FacingCell);
+
+        // The solid end past the high end, under the exit.
+        public static IntVec3 Solid(IntVec3 center, Rot4 rot) => center + rot.FacingCell * 2;
+
+        // c is one of the ramp cells of stairs at centre + rotation.
+        public static bool IsRamp(IntVec3 c, IntVec3 center, Rot4 rot)
+        {
+            IntVec3 d = c - center;
+            IntVec3 f = rot.FacingCell;
+            if (d.x * f.z - d.z * f.x != 0 || d.y != 0)
+            {
+                return false;
+            }
+            int i = d.x * f.x + d.z * f.z;
+            return i >= -1 && i <= 1;
+        }
+
+        // The solid end of a stairs thing (built, blueprint or frame) at c, or null.
+        public static Thing SolidAt(IntVec3 c, Map map)
+        {
+            if (map == null || !c.IsValid || !c.InBounds(map))
+            {
+                return null;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Thing t = list[i];
+                if (Stairwell.IsStairThing(t) && Solid(t.Position, t.Rotation) == c)
+                {
+                    return t;
+                }
+            }
+            return null;
+        }
 
         public static IntVec3 High(IntVec3 center, Rot4 rot) => center + rot.FacingCell;
 
@@ -85,7 +141,7 @@ namespace ProjectZ
             return k < 0 ? IntVec3.Invalid : ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), k + 1, map);
         }
 
-        // How far up the ramp a footprint cell is: 0 (low end) .. 2 (high end).
+        // How far up the ramp a footprint cell is: 0 (low end) .. 2 (high end); 3 is the solid end.
         public static int Index(IntVec3 c, IntVec3 center, Rot4 rot)
         {
             IntVec3 d = c - center;
@@ -291,7 +347,7 @@ namespace ProjectZ
             if (!respawningAfterLoad)
             {
                 // Built at once (god mode) under a floor: the stairwell opens now (StairwellFloor).
-                foreach (IntVec3 c in this.OccupiedRect())
+                foreach (IntVec3 c in StairShape.Ramp(Position, Rotation))
                 {
                     IntVec3 up = StairShape.Above(c, map);
                     if (StairwellFloor.MustClear(up, map))
@@ -303,6 +359,23 @@ namespace ProjectZ
                         else
                         {
                             Slab.Remove(up, map, doLeavings: true);
+                        }
+                    }
+                }
+            }
+            if (!respawningAfterLoad)
+            {
+                // nothing lies on the solid end (built at once, god mode: as the game moves items off an impassable building)
+                IntVec3 solid = StairShape.Solid(Position, Rotation);
+                CellRect rect = this.OccupiedRect();
+                foreach (Thing t in map.thingGrid.ThingsListAtFast(solid).ToList())
+                {
+                    if (t.def.category == ThingCategory.Item)
+                    {
+                        t.DeSpawn();
+                        if (!GenPlace.TryPlaceThing(t, solid, map, ThingPlaceMode.Near, null, x => !rect.Contains(x)))
+                        {
+                            t.Destroy();
                         }
                     }
                 }
@@ -388,7 +461,27 @@ namespace ProjectZ
             return t != null && (StairDefs.Is(t.def) || StairDefs.Is(t.def.entityDefToBuild));
         }
 
+        // c is a ramp cell of a stairs thing (the floor of a stairwell: the floor above it stays open). The solid end is
+        // not: the exit is over it (StairCellAt asks for any cell of the footprint).
         public static bool StairThingAt(IntVec3 c, Map map)
+        {
+            if (!c.IsValid || !c.InBounds(map))
+            {
+                return false;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (IsStairThing(list[i]) && StairShape.IsRamp(c, list[i].Position, list[i].Rotation))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Any cell of a stairs thing's footprint (ramp or solid end).
+        public static bool StairCellAt(IntVec3 c, Map map)
         {
             if (!c.IsValid || !c.InBounds(map))
             {
@@ -485,7 +578,7 @@ namespace ProjectZ
             if (__state != null)
             {
                 Stairwell.Refresh(__state, __instance.OccupiedRect());
-                StairwellFloor.Unmark(__state, __instance.OccupiedRect());
+                StairwellFloor.Unmark(__state, StairShape.RampRect(__instance.Position, __instance.Rotation));
                 if (ShipStairs.Is(__instance.def) || ShipStairs.Is(__instance.def.entityDefToBuild))
                 {
                     // (their opening is no ship column cell now: a deck over it falls)
@@ -529,6 +622,9 @@ namespace ProjectZ
                 {
                     return "PZ_NoFloorAbove".Translate();
                 }
+            }
+            foreach (IntVec3 c in StairShape.Ramp(loc, rot))
+            {
                 IntVec3 up = StairShape.Above(c, map);
                 if (!up.IsValid)
                 {
@@ -583,7 +679,7 @@ namespace ProjectZ
             return AcceptanceReport.WasAccepted;
         }
 
-        // No stairs where the stairwell (the footprint, whose roof becomes the stairwell's) or the cell under the landing
+        // No stairs where the stairwell (the ramp, whose roof becomes the stairwell's) or the cell under the landing
         // has a thick roof (SlabSupport.ThickRoof), and none on a gravship or with its landing over one
         // (SlabSupport.Gravship). The cell under the landing is a "use" (F4, SlabSupport.LandingBlocked): a natural rock
         // floor there is landed on as it is. Only roofs the stairs would replace count: the landing's own roof is never
@@ -591,7 +687,8 @@ namespace ProjectZ
         // both ask. Under a natural ceiling in a tall mountain the refusal says how to open it (mine it, or remove roof).
         public static AcceptanceReport ThickRoofCheck(IntVec3 loc, Rot4 rot, Map map)
         {
-            foreach (IntVec3 c in StairShape.Footprint(loc, rot))
+            // (the solid end's roof is the landing's: LandingBlocked below)
+            foreach (IntVec3 c in StairShape.Ramp(loc, rot))
             {
                 string blocked = SlabSupport.StairsColumnBlocked(c, map);
                 if (blocked == "PZ_ThickRoof" && Mountains.On(map) && Floors.UnbuiltNatural(FloorRoof.Above(c, map), map))
@@ -665,5 +762,92 @@ namespace ProjectZ
 
         // Laying a floor while working on the ground: it goes on the floor above.
         public static string ViewFloorAbove() => "PZ_ViewFloorAbove".Translate(FloorView.KeyName(PZKeyDefOf.PZ_FloorUp));
+    }
+
+    // An item on the solid end of a stairs site blocks its construction (the builders haul it off first, as for an
+    // impassable building; the stairs are standable on their ramp, so the game would leave it under the solid end).
+    [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.BlocksConstruction))]
+    public static class BlocksConstruction_StairSolid_Patch
+    {
+        public static void Postfix(Thing constructible, Thing t, ref bool __result)
+        {
+            if (!__result && t != null && constructible != null && t.def.category == ThingCategory.Item && t.Spawned && StairwellFloor.IsSite(constructible)
+                && t.Position == StairShape.Solid(constructible.Position, constructible.Rotation))
+            {
+                __result = true;
+            }
+        }
+    }
+
+    // The solid end of built stairs is not walkable (StairShape): the stairs are a standable building on their ramp only.
+    // Every path grid asks its cell cost here (also the fence-blocked one); flying pawns too: it is a solid block.
+    [HarmonyPatch(typeof(Verse.AI.PathGrid), nameof(Verse.AI.PathGrid.CalculatedCostAt))]
+    public static class StairSolid_PathCost_Patch
+    {
+        public static void Postfix(Verse.AI.PathGrid __instance, IntVec3 c, ref int __result)
+        {
+            if (__result >= 10000)
+            {
+                return;
+            }
+            Map map = __instance.map;
+            if (map == null || !c.InBounds(map) || !(c.GetEdifice(map) is Building_Stairs s))
+            {
+                return;
+            }
+            if (StairShape.Solid(s.Position, s.Rotation) == c)
+            {
+                __result = 10000;
+            }
+        }
+    }
+
+    // Placement over the stairs' cells (every placement goes through CanPlaceBlueprintAt_NewTemp):
+    //   - nothing else goes on the solid end of stairs (built, blueprint or frame); floors under it are terrain, as under
+    //     any building;
+    //   - stairs refused by the game for rock in their footprint (its "space already occupied": mine it first, no
+    //     exceptions) say which of their cells has rock.
+    [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanPlaceBlueprintAt_NewTemp))]
+    public static class CanPlaceBlueprintAt_StairSolid_Patch
+    {
+        public static void Postfix(BuildableDef entDef, IntVec3 center, Rot4 rot, Map map, Thing thingToIgnore, ref AcceptanceReport __result)
+        {
+            if (entDef == null || map == null || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            if (__result.Accepted)
+            {
+                if (entDef is ThingDef && !StairDefs.Is(entDef))
+                {
+                    foreach (IntVec3 c in GenAdj.OccupiedRect(center, rot, entDef.Size))
+                    {
+                        Thing s = StairShape.SolidAt(c, map);
+                        if (s != null && s != thingToIgnore)
+                        {
+                            __result = "PZ_StairsSolid".Translate();
+                            return;
+                        }
+                    }
+                }
+                return;
+            }
+            if (!StairDefs.Is(entDef) || __result.Reason != "SpaceAlreadyOccupied".Translate())
+            {
+                return;
+            }
+            List<string> parts = new List<string>();
+            foreach (IntVec3 c in StairShape.Footprint(center, rot))
+            {
+                if (c.InBounds(map) && c.GetFirstMineable(map) != null)
+                {
+                    parts.Add(("PZ_StairsPart" + StairShape.Index(c, center, rot)).Translate());
+                }
+            }
+            if (parts.Count > 0)
+            {
+                __result = "PZ_StairsMineFirst".Translate(string.Join(", ", parts));
+            }
+        }
     }
 }

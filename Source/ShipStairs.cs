@@ -8,7 +8,7 @@ using Verse;
 namespace ProjectZ
 {
     // Multi-level gravships, phase P5 (isorim-pz-multilevel-gravship.md v2.1 G, user answers v2.5): the ship stairs
-    // PZ_ShipStairs. The same 1x3 ramp and class as the ordinary stairs (Building_Stairs: links, path, reach, rise, jumps
+    // PZ_ShipStairs. The same 1x4 footprint (ramp + solid end) and class as the ordinary stairs (Building_Stairs: links, path, reach, rise, jumps
     // and the stairwell work unchanged; the rules that know stairs by def ask StairDefs). Stuffless gravtech, only on a
     // gravship:
     //   - Placement (PlaceWorker_ShipStairs): the whole ramp on the ship's deck (ground substructure or a ship upper deck),
@@ -47,6 +47,10 @@ namespace ProjectZ
                 {
                     return "PZ_ShipStairsOnDeck".Translate();
                 }
+            }
+            // (the stairwell over the ramp; the solid end is under the exit, checked with it below)
+            foreach (IntVec3 c in StairShape.Ramp(loc, rot))
+            {
                 if (SlabSupport.ThickRoof(c, map))
                 {
                     return "PZ_ThickRoof".Translate();
@@ -179,7 +183,7 @@ namespace ProjectZ
             {
                 return;
             }
-            foreach (IntVec3 c in t.OccupiedRect())
+            foreach (IntVec3 c in StairShape.Ramp(t.Position, t.Rotation))
             {
                 IntVec3 well = StairShape.Above(c, map);
                 if (well.IsValid && map.terrainGrid.FoundationAt(well) == null)

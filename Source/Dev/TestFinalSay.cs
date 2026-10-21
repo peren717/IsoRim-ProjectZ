@@ -468,7 +468,7 @@ namespace ProjectZ.Dev
         {
             // slab x 28..36, z 33..39 on floor 2, held by ground walls under its north row; stairs up at its middle
             IntVec3 stairs = LG(32, 34);
-            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(stairs, Rot4.North).Cells);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(stairs, Rot4.North));
             foreach (int x in new[] { 28, 32, 36 })
             {
                 LWall(LG(x, 39));

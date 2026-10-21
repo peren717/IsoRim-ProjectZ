@@ -108,6 +108,34 @@ namespace ProjectZ.Dev
                         stage = "tm_f_drops";
                         return true;
                     }
+                    // the solid end's rock first: vanilla Mine on the ground (the top over it stays)
+                    IntVec3 tfSolid = StairShape.Solid(tfStairs, tfRot);
+                    if (TfSolidRock(tfSolid, map))
+                    {
+                        map.designationManager.AddDesignation(new Designation(tfSolid, DesignationDefOf.Mine));
+                        foreach (Pawn p in Colonists(map))
+                        {
+                            p.workSettings?.EnableAndInitializeIfNotAlreadyInitialized();
+                            foreach (WorkTypeDef w in DefDatabase<WorkTypeDef>.AllDefs)
+                            {
+                                if (!p.WorkTypeIsDisabled(w))
+                                {
+                                    p.workSettings.SetPriority(w, w == WorkTypeDefOf.Mining ? 1 : 0);
+                                }
+                            }
+                        }
+                        Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                        TickUntil(20000, () => tfSolid.GetFirstMineable(map) == null, "tm_f_place", 60);
+                        return true;
+                    }
+                    stage = "tm_f_place";
+                    return true;
+                }
+                case "tm_f_place":
+                {
+                    tickWatch = null;
+                    IntVec3 tfSolid = StairShape.Solid(tfStairs, tfRot);
+                    Result("F1 the stairs' solid end dug on the ground first (1x4 stairs: no rock under the exit)", tfSolid.GetFirstMineable(map) == null, $"solid end {tfSolid}: {tfSolid.GetFirstMineable(map)?.def.defName ?? "open"}");
                     for (int i = 0; i < 4; i++)
                     {
                         Thing w = ThingMaker.MakeThing(ThingDefOf.WoodLog);
@@ -371,6 +399,9 @@ namespace ProjectZ.Dev
 
         private static bool TfStairsBuilt(Map map) => map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).Any(t => t.Position == tfStairs);
 
+        // The stairs' solid end on seen natural rock (mined first with vanilla Mine on the ground).
+        private static bool TfSolidRock(IntVec3 c, Map map) => c.InBounds(map) && !map.fogGrid.IsFogged(c) && c.GetFirstMineable(map) is Mineable m && m.def.building.isNaturalRock;
+
         private static bool TfFindStairs(Map map, AnnexMapComponent a)
         {
             IntVec3 home = Centroid(map);
@@ -424,11 +455,19 @@ namespace ProjectZ.Dev
                     {
                         continue;
                     }
-                    if (StairShape.Footprint(p, rot).Cells.Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map)))
+                    // (1x4 stairs: the solid end under the exit may be the mountain's rock, dug first: TfSolidRock)
+                    if (StairShape.Ramp(p, rot).Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map)))
                     {
                         continue;
                     }
-                    if (!GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                    IntVec3 solid = StairShape.Solid(p, rot);
+                    bool solidRock = TfSolidRock(solid, map);
+                    if (!solidRock && (!solid.InBounds(map) || map.fogGrid.IsFogged(solid) || solid.GetEdifice(map) != null || !solid.Standable(map)))
+                    {
+                        continue;
+                    }
+                    AcceptanceReport okP = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog);
+                    if (!(okP.Accepted || solidRock && okP.Reason == "PZ_StairsMineFirst".Translate("PZ_StairsPart3".Translate()).ToString()))
                     {
                         continue;
                     }
@@ -1015,7 +1054,7 @@ namespace ProjectZ.Dev
                     // a rim the crew can work from: a walkable level-1 cell over the stairwell's ring that the top
                     // reaches (as StairTouch.UpperCells); an exit over the lip with no top beside the stairwell has none
                     IntVec3 topc = top;
-                    if (!StairShape.Footprint(p, rot).ExpandedBy(1).Cells.Any(c => c.InBounds(map) && ProjectZ.FloorOf(c, map) == 0
+                    if (!StairShape.RampRect(p, rot).ExpandedBy(1).Cells.Any(c => c.InBounds(map) && ProjectZ.FloorOf(c, map) == 0
                         && ProjectZ.CellOnFloor(c, 1, map) is IntVec3 u && u.IsValid && u.InBounds(map) && u.Walkable(map) && map.reachability.CanReach(topc, u, PathEndMode.OnCell, tp)))
                     {
                         continue;

@@ -109,7 +109,7 @@ namespace ProjectZ.Dev
                     Place(ThingDefOf.Wall, stuffs[i], c, map);
                 }
                 IntVec3 sp = new IntVec3(h.maxX - 1, 0, h.minZ + 2);
-                HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Footprint(sp, Rot4.North).Cells);
+                HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(sp, Rot4.North));
                 foreach (IntVec3 g in h)
                 {
                     if (!well.Contains(g))

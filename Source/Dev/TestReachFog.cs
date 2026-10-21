@@ -626,9 +626,14 @@ namespace ProjectZ.Dev
                     {
                         continue;
                     }
-                    if (StairShape.Footprint(p, rot).Cells.Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
+                    // (1x4 stairs: the solid end under the exit may be the mountain's rock, dug first by vanilla Mine on the ground)
+                    IntVec3 solid = StairShape.Solid(p, rot);
+                    bool solidRock = solid.InBounds(map) && !map.fogGrid.IsFogged(solid) && solid.GetFirstMineable(map) != null;
+                    AcceptanceReport okP = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog);
+                    if (StairShape.Ramp(p, rot).Any(c => !c.InBounds(map) || map.fogGrid.IsFogged(c) || c.Roofed(map) || c.GetEdifice(map) != null || !c.Standable(map))
+                        || !solidRock && (!solid.InBounds(map) || map.fogGrid.IsFogged(solid) || solid.GetEdifice(map) != null || !solid.Standable(map))
                         || any == null || !map.reachability.CanReach(any.Position, p, PathEndMode.Touch, TraverseParms.For(TraverseMode.PassDoors))
-                        || !GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_Stairs, p, rot, map, stuffDef: ThingDefOf.WoodLog).Accepted)
+                        || !(okP.Accepted || solidRock && okP.Reason == "PZ_StairsMineFirst".Translate("PZ_StairsPart3".Translate()).ToString()))
                     {
                         continue;
                     }
@@ -1001,6 +1006,25 @@ namespace ProjectZ.Dev
                     rfArea.Clear();
                     rfArea.AddRange(RfFlat(rfExit, map, 4000));
                     rfBefore = RfSnap(map);
+                    // the solid end's rock first (vanilla Mine on the ground: the exit's top stays)
+                    IntVec3 solid = StairShape.Solid(rfStairs, rfRot);
+                    if (solid.GetFirstMineable(map) != null)
+                    {
+                        map.designationManager.AddDesignation(new Designation(solid, DesignationDefOf.Mine));
+                        MuCrew(map, WorkTypeDefOf.Mining, 2);
+                        Info($"R3 the solid end {solid} is rock: mined first");
+                        MuRun(200, 71720, () => solid.GetFirstMineable(map) == null, "rf_r3_place");
+                        return true;
+                    }
+                    stage = "rf_r3_place";
+                    return true;
+                }
+
+                case "rf_r3_place":
+                {
+                    IntVec3 solid = StairShape.Solid(rfStairs, rfRot);
+                    Result("R3 the stairs' solid end dug on the ground (vanilla Mine), the exit above it still the plateau's rim top", solid.GetFirstMineable(map) == null && TmTop(rfExit, map),
+                        $"solid {solid} rock {solid.GetFirstMineable(map)?.def.defName ?? "none"}, exit {rfExit} {rfExit.GetTerrain(map)?.defName}");
                     MuWood(map, rfStairs - rfRot.FacingCell * 3);
                     GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, rfStairs, map, rfRot, Faction.OfPlayer, ThingDefOf.WoodLog);
                     MuCrew(map, WorkTypeDefOf.Construction, 3);

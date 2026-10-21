@@ -11,7 +11,7 @@ namespace ProjectZ.Dev
 {
     // Mode deadend, part 2 (branch stairroute: the router's search is bounded and agrees with reachability). A second
     // house H2 (13 x 10, roofed, door south) beside the first, its upper floor D over the whole inside. Three "decoy"
-    // stairs face west with their exits over the west wall (one-cell floor islands, as the dead-end stairs above); the
+    // stairs face west, their solid ends in the west wall and their exits over it (one-cell floor islands, as the dead-end stairs above); the
     // good stairs face north at the east end onto D. One colonist does cleaning only:
     //   r_a   a filth on D walled in on its floor (no way there at all): not reachable, no job, the router answers fast;
     //   r_fog a filth on the ground in a walled pocket under a hole in D, its landing cell fogged: before 2026-10-19 only a
@@ -211,6 +211,10 @@ namespace ProjectZ.Dev
             IntVec3 door = CG(4, 0);
             foreach (IntVec3 c in h2.EdgeCells)
             {
+                if (c == CG(0, 1) || c == CG(0, 4) || c == CG(0, 7))
+                {
+                    continue;   // (the decoy stairs' solid ends stand in the west wall: 1x4 stairs, 2026-10-20)
+                }
                 Place(c == door ? ThingDefOf.Door : ThingDefOf.Wall, ThingDefOf.WoodLog, c, map);
             }
             foreach (IntVec3 c in h2)
@@ -229,7 +233,7 @@ namespace ProjectZ.Dev
                 Place(ThingDefOf.Wall, ThingDefOf.WoodLog, w, map);
             }
             map.roofGrid.SetRoof(cA, null);
-            HashSet<IntVec3> wells = new HashSet<IntVec3>(cDecoys.SelectMany(p => StairShape.Footprint(p, Rot4.West).Cells).Concat(StairShape.Footprint(cGood, Rot4.North).Cells));
+            HashSet<IntVec3> wells = new HashSet<IntVec3>(cDecoys.SelectMany(p => StairShape.Ramp(p, Rot4.West)).Concat(StairShape.Ramp(cGood, Rot4.North)));
             foreach (IntVec3 g in h2.ContractedBy(1))
             {
                 if (!wells.Contains(g))

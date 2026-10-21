@@ -72,4 +72,10 @@
   <PZ_LadderAfterRaid>袭击结束一天后消失</PZ_LadderAfterRaid>
   <PZ_LadderFallsApart>{0}后消失</PZ_LadderFallsApart>
   <PZ_LadderNoDrop>开口一侧下方要是空的</PZ_LadderNoDrop>
+  <PZ_StairsSolid>这是楼梯的一部分</PZ_StairsSolid>
+  <PZ_StairsMineFirst>先开采岩石：{0}</PZ_StairsMineFirst>
+  <PZ_StairsPart0>最低一级</PZ_StairsPart0>
+  <PZ_StairsPart1>中间一级</PZ_StairsPart1>
+  <PZ_StairsPart2>最高一级</PZ_StairsPart2>
+  <PZ_StairsPart3>末端实心格</PZ_StairsPart3>
 </LanguageData>
