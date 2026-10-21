@@ -12,13 +12,16 @@ namespace ProjectZ
 {
     // Raiders use ladders when the game's own last resort can't get them there (isorim-pz-siege-ladders-design.md, stage 2;
     // the vertical axis is just another direction). JobGiver_AIClimb sits right after JobGiver_AISapper in the duties that
-    // end in it (AssaultColony, Sapper, PrisonerAssaultColony, HuntDownColonists, AssaultThing) and at the end of Breaching,
+    // end in it (AssaultColony, Sapper, PrisonerAssaultColony, HuntDownColonists, AssaultThing, PrisonerEscapeSapper), after
+    // the walk in PrisonerEscape, and at the end of Breaching,
     // HuntEnemiesIndividual and the exit duties (ExitMap*, Kidnap, Steal, TakeWoundedGuest: Patches/PZ_RaidClimb.xml). It
     // acts only where the game's last resort found no route at all (TraverseMode.PassAllDestroyableThings: walls, doors
     // and rock count as passable), with the sapper's target rule: a player target within the game's 50 cells (3D distance,
     // Dist3D), or the Sapper duty's focus; for exits, a map edge on the ground. Raiders whose target is reachable never
     // get here: AISapper (and the nodes before it) take them, as without ProjectZ.
-    // Who: humanlike raiders and mechanoids (a lift), hostile to the player and in a lord. Never animals, mutants
+    // Who (MayClimb): humanlike raiders and mechanoids (a lift), hostile to the player, in a lord; escaping prisoners
+    // (PrisonerEscape, PrisonerEscapeSapper); in the exit duties only, other factions' humanlike visitors, traders and
+    // their guards. Never animals, mutants
     // (shamblers) or Anomaly entities.
     // Planner (ClimbPlanner): ladders still to be placed are virtual edges known only to it, never to reachability. Then:
     // walk to the ladder's near end the game's way (a PassAllDestroyableThings path, its first blocker cleared with the
@@ -87,6 +90,29 @@ namespace ProjectZ
             return p.RaceProps.Humanlike || p.RaceProps.IsMechanoid;
         }
 
+        // Whose duty may climb (user 2026-10-20): raiders (hostile to the player) in every duty that has the climb; escaping
+        // prisoners; and, in the exit duties only, other factions' humanlikes (visitors, traders and their guards) leaving.
+        public static bool MayClimb(Pawn pawn, bool exit)
+        {
+            if (pawn.Faction == Faction.OfPlayer && !pawn.IsPrisoner)
+            {
+                return false;
+            }
+            if (pawn.IsPrisoner)
+            {
+                return PrisonBreakUtility.IsPrisonBreaking(pawn);
+            }
+            if (pawn.Faction == null)
+            {
+                return false;
+            }
+            if (pawn.HostileTo(Faction.OfPlayer))
+            {
+                return true;
+            }
+            return exit && pawn.RaceProps.Humanlike;
+        }
+
         public static Job TryGive(Pawn pawn, bool exit, bool mineNonMineables)
         {
             if (Off || pawn == null || !pawn.Spawned)
@@ -99,7 +125,7 @@ namespace ProjectZ
             {
                 return null;
             }
-            if (!Climber(pawn) || pawn.Faction == null || !pawn.HostileTo(Faction.OfPlayer))
+            if (!Climber(pawn) || !MayClimb(pawn, exit))
             {
                 Excluded++;
                 return null;
@@ -409,8 +435,32 @@ namespace ProjectZ
             lordTargets.Clear();
         }
 
+        // Sapper and breach lords to turn into an ordinary assault (RaidDegrade), with the toil they were in.
+        private readonly List<(Lord lord, LordToil from)> toAssault = new List<(Lord, LordToil)>();
+
+        public void QueueAssault(Lord lord)
+        {
+            for (int i = 0; i < toAssault.Count; i++)
+            {
+                if (toAssault[i].lord == lord)
+                {
+                    return;
+                }
+            }
+            toAssault.Add((lord, lord.CurLordToil));
+        }
+
         public override void MapComponentTick()
         {
+            if (toAssault.Count > 0)
+            {
+                List<(Lord, LordToil)> queued = new List<(Lord, LordToil)>(toAssault);
+                toAssault.Clear();
+                foreach ((Lord l, LordToil from) in queued)
+                {
+                    RaidDegrade.ToAssault(l, from);
+                }
+            }
             if ((Find.TickManager.TicksGame + map.uniqueID) % 2500 != 0 || plans.Count == 0 && memo.Count == 0)
             {
                 return;

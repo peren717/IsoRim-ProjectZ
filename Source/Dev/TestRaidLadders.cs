@@ -25,7 +25,10 @@ namespace ProjectZ.Dev
     //   R10 a kidnapper carries a downed colonist down a ladder and leaves
     //   R11 raiders on an island platform with nothing in range give up and leave down a ladder
     //   R12 a mechanoid raid places a lift
-    //   R13 sappers, R14 breachers against a ladder-only base (recorded: what they do)
+    //   R13 sappers, R14 breachers against a ladder-only base: the lord turns into an ordinary assault, then climbs;
+    //       R13V/R14V the same raids against a walled base on the ground stay the game's
+    //   R17 a trader caravan stranded on a stairless platform leaves down a ladder
+    //   R18 a prison break on floor 1 with the stairs taken up: the prisoner gets out down a ladder
     //   R15 a manhunter pack and a shambler assault never place ladders
     //   R16 a base out of the 50-cell (3D) radius from the ground: raiders wander (recorded)
     //   MT  (-projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt) a base on a natural
@@ -62,6 +65,7 @@ namespace ProjectZ.Dev
         private static string rlNote;
         private static IntVec3 rlSpawn;
         private static readonly Dictionary<Pawn, int> rlInjuries0 = new Dictionary<Pawn, int>();
+        private static int rlDegradedAt;
 
         private static IntVec3 RlG(int x, int z) => new IntVec3(x, 0, z);
 
@@ -236,6 +240,7 @@ namespace ProjectZ.Dev
             rlLord = null;
             rlRaiders.Clear();
             rlPlacedAt = LadderSite.Placed;
+            rlDegradedAt = RaidDegrade.Degraded;
             rlMaxUp = 0;
             rlUpLevel = 2;
             rlFightSeen = 0;
@@ -333,7 +338,7 @@ namespace ProjectZ.Dev
             {
                 foreach (LinkSteps.Step st in s.steps)
                 {
-                    if (st.pawn == null || !st.link.IsLadder || !st.climbing || !st.pawn.HostileTo(Faction.OfPlayer))
+                    if (st.pawn == null || !st.link.IsLadder || !st.climbing || !st.pawn.HostileTo(Faction.OfPlayer) && !rlRaiders.Contains(st.pawn))
                     {
                         continue;
                     }
@@ -794,13 +799,116 @@ namespace ProjectZ.Dev
                     check = m =>
                     {
                         string duties = string.Join(", ", rlRaiders.Where(p => p.Spawned).GroupBy(p => p.mindState.duty?.def.defName ?? "none").Select(gr => $"{gr.Key} x{gr.Count()}"));
-                        string dests = string.Join(" ", rlRaiders.Where(p => p.Spawned && p.mindState.duty != null && p.mindState.duty.focus.IsValid).Select(p => p.mindState.duty.focus.Cell).Distinct().Take(4).Select(c => $"{c}(L{Levels.LevelOf(c, m)})"));
                         bool climbed = rlLadders.Count > 0 && rlHostileUp > 0 && RlUpAndFighting(m);
-                        Info($"{id.ToUpperInvariant()} observed: {strat} against a ladder-only base: climbed {climbed}; duties now {duties}; duty foci {dests}; climb giver asked {RaidClimb.Asked}, focus reachable {RaidClimb.Reachable}; {rlNote}; {RlSummary(m)}");
-                        Result($"{id.ToUpperInvariant()} (recorded) {strat} against a ladder-only base: the run went through (what they did: the INFO line above)", true, climbed ? "they climbed" : "they did not climb within " + (Find.TickManager.TicksGame - rlT0) + " ticks");
+                        Result($"{id.ToUpperInvariant()} {strat} against a ladder-only base: no real destination, so the lord turns into an ordinary assault; then they place a ladder, climb and fight",
+                            RaidDegrade.Degraded > rlDegradedAt && climbed && rlLadders.All(b => b.Faction == rlFaction),
+                            $"lords turned {RaidDegrade.Degraded - rlDegradedAt}; duties now {duties}; {rlNote}; {RlSummary(m)}");
                     },
                 };
             }
+            // ---- R13V, R14V: the same raids against a base on the ground they can reach (walls only): the game's own
+            foreach ((string id, string strat) in new[] { ("r13v", "ImmediateAttackSappers"), ("r14v", "ImmediateAttackBreaching") })
+            {
+                yield return new RlCase
+                {
+                    id = id, name = strat + " against a walled base on the ground: stays the game's", maxTicks = 1500,
+                    setup = m =>
+                    {
+                        RlClear(m);
+                        RlBase(m, RlBaseRect(m), 0);
+                        rlUpLevel = 0;
+                        Faction f = Find.FactionManager.AllFactions.Where(x => x.HostileTo(Faction.OfPlayer) && x.def.humanlikeFaction && !x.def.hidden && !x.temporary && x.def.pawnGroupMakers != null && x.def.techLevel >= TechLevel.Industrial).OrderBy(x => x.loadID).FirstOrDefault() ?? RlEnemy();
+                        RlRaid(m, f, strat, PawnsArrivalModeDefOf.EdgeWalkIn, RlWestEdge(m), 500f);
+                    },
+                    done = m => false,
+                    check = m =>
+                    {
+                        string toil = rlLord?.CurLordToil?.GetType().Name;
+                        Result($"{id.ToUpperInvariant()} {strat} against a base it can reach: its lord stays a {strat.Substring("ImmediateAttack".Length).ToLowerInvariant()} raid, no ladder", RaidDegrade.Degraded == rlDegradedAt && rlLadders.Count == 0 && (toil == "LordToil_AssaultColonySappers" || toil == "LordToil_AssaultColonyBreaching"),
+                            $"toil {toil}, lords turned {RaidDegrade.Degraded - rlDegradedAt}, ladders {rlLadders.Count}, climb plans {RaidClimb.Plans}");
+                    },
+                };
+            }
+            // ---- R17: a trader caravan stranded on a stairless platform leaves down a ladder
+            yield return new RlCase
+            {
+                id = "r17", name = "a trader caravan stranded on a stairless platform leaves", maxTicks = 70000,
+                setup = m =>
+                {
+                    RlClear(m);
+                    RlBase(m, RlBaseRect(m), 0);
+                    int zc = ProjectZ.Annex(m).groundZ / 2;
+                    rlIsland = new CellRect(14, zc - 4, 8, 8);
+                    R2Floor(m, rlIsland, 2);
+                    m.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+                    rlUpLevel = 2;
+                    Faction f = Find.FactionManager.AllFactions.Where(x => !x.IsPlayer && !x.HostileTo(Faction.OfPlayer) && x.def.humanlikeFaction && !x.def.hidden && !x.temporary && x.def.caravanTraderKinds.Any()).OrderBy(x => x.loadID).FirstOrDefault();
+                    List<Pawn> before = m.mapPawns.AllPawnsSpawned.ToList();
+                    IncidentParms p = StorytellerUtility.DefaultParmsNow(IncidentCategoryDefOf.Misc, m);
+                    p.faction = f;
+                    p.forced = true;
+                    p.spawnCenter = RlWestEdge(m);
+                    bool fired = f != null && IncidentDefOf.TraderCaravanArrival.Worker.TryExecute(p);
+                    List<Pawn> all = m.mapPawns.AllPawnsSpawned.Except(before).Where(x => x.Faction == f).ToList();
+                    // stranded: the caravan's people up on the platform (animals can't climb: they go)
+                    List<IntVec3> spots = rlIsland.ContractedBy(1).Cells.Select(g => Levels.Cell(g, 2, m)).ToList();
+                    int i = 0;
+                    foreach (Pawn x in all)
+                    {
+                        if (x.RaceProps.Humanlike)
+                        {
+                            Teleport(x, spots[i++ % spots.Count]);
+                            rlRaiders.Add(x);
+                        }
+                        else
+                        {
+                            x.Destroy();
+                        }
+                    }
+                    rlFaction = f;
+                    rlLord = m.lordManager.lords.LastOrDefault(l => l.faction == f);
+                    rlNote = $"caravan of {f?.Name} fired {fired}: {rlRaiders.Count} people on the platform, lord {rlLord?.LordJob?.GetType().Name}";
+                    Info("R17 " + rlNote);
+                },
+                done = m => rlRaiders.Count > 0 && rlRaiders.All(x => x.Dead || !x.Spawned),
+                check = m =>
+                {
+                    int left = rlRaiders.Count(x => !x.Dead && !x.Spawned);
+                    Result("R17 a trader caravan stranded on a stairless platform places a ladder and leaves the map", rlRaiders.Count > 0 && left == rlRaiders.Count && rlLadders.Count > 0 && rlLadders.All(b => b.Faction == rlFaction),
+                        $"{rlNote}; left {left} of {rlRaiders.Count}; ladders {string.Join(", ", rlLadders.Select(b => b.Faction?.Name + " " + b.foot + "->" + b.top))}; toil {rlLord?.CurLordToil?.GetType().Name}; after {Find.TickManager.TicksGame - rlT0} ticks");
+                },
+            };
+            // ---- R18: a prison break with the stairs taken up: the prisoner gets out down a ladder
+            yield return new RlCase
+            {
+                id = "r18", name = "a prison break on floor 1, its stairs taken up: out down a ladder", maxTicks = 15000,
+                setup = m =>
+                {
+                    RlClear(m);
+                    CellRect r = RlBaseRect(m);
+                    List<Pawn> keep = rlCols;
+                    rlCols = new List<Pawn>();
+                    RlBase(m, r, 1);
+                    rlCols = keep;
+                    rlUpLevel = 1;
+                    rlStairs = RlStairs(m, r);
+                    Pawn pr = PawnGenerator.GeneratePawn(new PawnGenerationRequest(PawnKindDefOf.Villager, RlEnemy(), forceGenerateNewPawn: true));
+                    GenSpawn.Spawn(pr, Levels.Cell(r.CenterCell, 1, m), m);
+                    pr.guest.SetGuestStatus(Faction.OfPlayer, GuestStatus.Prisoner);
+                    rlVictim = pr;
+                    rlRaiders.Add(pr);
+                    PrisonBreakUtility.StartPrisonBreak(pr);
+                    rlLord = pr.GetLord();
+                    rlFaction = pr.Faction;
+                    rlNote = $"prisoner {pr} at {pr.Position}, breaking {PrisonBreakUtility.IsPrisonBreaking(pr)}, lord {rlLord?.LordJob?.GetType().Name}; stairs {rlStairs?.Position}";
+                    rlStairs?.Destroy(DestroyMode.Deconstruct);
+                    m.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+                    Info("R18 " + rlNote + ", stairs taken up");
+                },
+                done = m => rlVictim != null && !rlVictim.Spawned,
+                check = m => Result("R18 a prisoner breaking out of a floor-1 prison whose stairs were taken up places a ladder, climbs down and gets off the map", rlVictim != null && !rlVictim.Spawned && !rlVictim.Dead && rlLadders.Count > 0 && rlHostileDown > 0,
+                    $"{rlNote}; prisoner spawned {rlVictim?.Spawned} dead {rlVictim?.Dead}; ladders {rlLadders.Count}, down climbs {rlHostileDown}; toil {rlLord?.CurLordToil?.GetType().Name}; after {Find.TickManager.TicksGame - rlT0} ticks"),
+            };
             // ---- R15: animals and shamblers
             yield return new RlCase
             {

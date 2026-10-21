@@ -19,7 +19,7 @@ namespace ProjectZ.Dev
     //   house A: 9x7, stairs inside (east side, up to the north), a floor over all of it but the stairwell;
     //   house B: 7x7, a floor over its west half only; two ornate doors in its south wall (one under the floor);
     //   flows: F4 jump only without a route (+ save mid-jump), stairs shots, F1 break the stairs with everyone upstairs,
-    //          F5 the ground never goes up, F6 raiders upstairs, F7 a rescue and a fire panic without stairs, F2 rebuild from
+    //          F5 the ground never goes up, F6 raiders upstairs (they come down a ladder), F7 a rescue and a fire panic without stairs, F2 rebuild from
     //          upstairs only (+ save mid-frame), F3 auto-rebuild, height rule, lock, door, ghost shots.
     public static partial class TestRunner
     {
@@ -28,6 +28,8 @@ namespace ProjectZ.Dev
         private static readonly Rot4 StairRot = Rot4.North;
         private static IntVec3 farGround;
         private static string walkerId, builderId, carrierId, patientId, panicId, raiderId, fleerId;
+        private static Pawn sFleer;
+        private static int sLaddersAt;
         private static int tripsLeft, climbsAt, jumpsAt, jumpsColAt, jumpsHosAt, resetsAt, landingsAt;
         private static int rimTicks, offRimWorkTicks, jumpsBeforeLoad, sErrorsAt, sFindsAt;
         private static bool hungry;
@@ -404,7 +406,8 @@ namespace ProjectZ.Dev
                     return true;
                 }
 
-                // ---- F6: raiders upstairs without stairs: no way down (no jumps, user 2026-10-19: stranded raiders are left as they are)
+                // ---- F6: raiders upstairs without stairs: they place a ladder and come down (siege ladders stage 2, user
+                // 2026-10-20; still no jumps)
                 case "s_f6":
                 {
                     foreach (Pawn p in Colonists(map))
@@ -421,10 +424,12 @@ namespace ProjectZ.Dev
                     LordMaker.MakeNewLord(r.Faction, new LordJob_AssaultColony(r.Faction, canKidnap: false, canTimeoutOrFlee: false, canSteal: false), map, new List<Pawn> { r });
                     Pawn f = MakeRaider(map, UpInner(map, sHouseA).Last());
                     fleerId = f.ThingID;
+                    sFleer = f;
                     LordMaker.MakeNewLord(f.Faction, new LordJob_ExitMapBest(LocomotionUrgency.Jog), map, new List<Pawn> { f });
                     Mark();
+                    sLaddersAt = LadderSite.Placed;
                     sErrorsAt = errors;
-                    TickUntil(1500, () =>
+                    TickUntil(4000, () =>
                     {
                         Pawn ra = ById(map, raiderId);
                         Pawn fl = ById(map, fleerId);
@@ -437,8 +442,9 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     Pawn ra = ById(map, raiderId);
                     Pawn fl = ById(map, fleerId);
-                    Result("F6 a raider upstairs without stairs stays there (no jump), no error", ra != null && ProjectZ.FloorOf(ra.Position, map) == 1 && jumpsHostiles - jumpsHosAt == 0 && errors == sErrorsAt, $"{ra} at {ra?.Position} job {ra?.CurJobDef?.defName}; errors {errors - sErrorsAt}; {Counts()}");
-                    Result("F6 a raider upstairs without stairs told to leave stays there too (no jump)", fl != null && ProjectZ.FloorOf(fl.Position, map) == 1 && jumpsHostiles - jumpsHosAt == 0, $"fleer {fl} at {fl?.Position} {fl?.CurJobDef?.defName}; {Counts()}");
+                    Result("F6 a raider upstairs without stairs places a ladder and comes down (no jump), no error", ra != null && ProjectZ.FloorOf(ra.Position, map) == 0 && LadderSite.Placed > sLaddersAt && jumpsHostiles - jumpsHosAt == 0 && errors == sErrorsAt, $"{ra} at {ra?.Position} job {ra?.CurJobDef?.defName}; ladders placed {LadderSite.Placed - sLaddersAt}; errors {errors - sErrorsAt}; {Counts()}");
+                    fl = sFleer;
+                    Result("F6 a raider upstairs without stairs told to leave goes down a ladder and off the map (no jump)", fl != null && !fl.Dead && (!fl.Spawned || ProjectZ.FloorOf(fl.Position, map) == 0) && jumpsHostiles - jumpsHosAt == 0, $"fleer {fl} spawned {fl?.Spawned} at {fl?.PositionHeld} {fl?.CurJobDef?.defName}; {Counts()}");
                     foreach (Pawn h in map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer)).ToList())
                     {
                         h.Destroy();
@@ -450,6 +456,12 @@ namespace ProjectZ.Dev
                 // ---- F7: no stairs (F1 broke them): a rescue down to a bed on the ground can't happen (no jumps), nothing breaks
                 case "s_f7":
                 {
+                    // (the ladders F6's raiders left go first: no way down but the stairs F1 broke)
+                    foreach (Thing l in map.listerThings.ThingsOfDef(PZDefOf.PZ_SiegeLadder).Concat(map.listerThings.ThingsOfDef(PZDefOf.PZ_SiegeLift)).ToList())
+                    {
+                        l.Destroy();
+                    }
+                    map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
                     List<Pawn> cols = Colonists(map);
                     Pawn carrier = cols.FirstOrDefault(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Doctor)) ?? cols[0];
                     Pawn patient = cols.First(p => p != carrier);

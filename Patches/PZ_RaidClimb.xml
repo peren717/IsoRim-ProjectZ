@@ -12,6 +12,25 @@
     </value>
   </Operation>
 
+  <!-- Escaping prisoners: the sapper after its last resort (target: the escape point), the others after the walk to it. -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="PrisonerEscapeSapper"]/thinkNode/subNodes/li[@Class="JobGiver_AISapper"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb" />
+    </value>
+  </Operation>
+
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="PrisonerEscape"]/thinkNode/subNodes/li[@Class="JobGiver_GotoTravelDestination"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb">
+        <exit>true</exit>
+      </li>
+    </value>
+  </Operation>
+
   <!-- At the end of the assault duties without it. -->
   <Operation Class="PatchOperationAdd">
     <xpath>Defs/DutyDef[defName="Breaching" or defName="HuntEnemiesIndividual"]/thinkNode/subNodes</xpath>
