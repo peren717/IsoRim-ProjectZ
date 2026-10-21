@@ -574,6 +574,8 @@ namespace ProjectZ.Patches
 
         public static int DigKey(TraverseMode m) => m == TraverseMode.PassAllDestroyablePlayerOwnedThings ? 1 : m == TraverseMode.PassAllDestroyableThingsNotWater ? 2 : 0;
 
+        public static TraverseMode DigModeOf(int key) => key == 1 ? TraverseMode.PassAllDestroyablePlayerOwnedThings : key == 2 ? TraverseMode.PassAllDestroyableThingsNotWater : TraverseMode.PassAllDestroyableThings;
+
         public static bool DigMode(TraverseMode m) => m == TraverseMode.PassAllDestroyableThings || m == TraverseMode.PassAllDestroyablePlayerOwnedThings || m == TraverseMode.PassAllDestroyableThingsNotWater;
 
         private bool DigPassable(IntVec3 c, int key, PathGrid pg)
@@ -681,10 +683,11 @@ namespace ProjectZ.Patches
             if (digUfFor[key] != anyVersion)
             {
                 d.Clear();
+                TraverseParms digger = TraverseParms.For(DigModeOf(key));
                 for (int i = 0; i < links.Count; i++)
                 {
-                    // (wall breakers are raiders and the like: never let into a player's elevator)
-                    if (!Usable(i) || links[i].IsElevator)
+                    // (wall breakers: no elevator, StairGrid.MayTake)
+                    if (!Usable(i) || !StairGrid.MayTake(links[i], digger))
                     {
                         continue;
                     }
@@ -863,11 +866,19 @@ namespace ProjectZ.Patches
         // ---------------------------------------------------------------------------------------------- partners
 
         // The regions one stair step away from a region (H's region <-> E's region), for the game's region searches
-        // (BFSWorker_Patch). Indexed per region, rebuilt when the regions or the stairs change.
-        private readonly Dictionary<Region, List<Region>> partners = new Dictionary<Region, List<Region>>();
+        // (BFSWorker_Patch), each with the link that joins them: a link whose use depends on the traveller (an elevator,
+        // StairGrid.AsksTraveller) is asked of the search's own traveller there (StairGrid.MayTake). Indexed per region,
+        // rebuilt when the regions or the stairs change.
+        public struct Partner
+        {
+            public Region region;
+            public int link;
+        }
+
+        private readonly Dictionary<Region, List<Partner>> partners = new Dictionary<Region, List<Partner>>();
         private int partnersFor = -1;
 
-        public List<Region> PartnersOf(Region r)
+        public List<Partner> PartnersOf(Region r)
         {
             EnsureNodes();
             if (links.Count == 0)
@@ -890,24 +901,45 @@ namespace ProjectZ.Patches
                     {
                         continue;
                     }
-                    AddPartner(b, t);
-                    AddPartner(t, b);
+                    AddPartner(b, t, i);
+                    AddPartner(t, b, i);
                 }
                 partnersFor = anyVersion;
             }
-            return partners.TryGetValue(r, out List<Region> l) ? l : null;
+            return partners.TryGetValue(r, out List<Partner> l) ? l : null;
         }
 
-        private void AddPartner(Region a, Region b)
+        // One entry per partner region for links any traveller takes; a link that asks the traveller gets its own entry
+        // unless such a link already joins the two regions.
+        private void AddPartner(Region a, Region b, int link)
         {
-            if (!partners.TryGetValue(a, out List<Region> l))
+            if (!partners.TryGetValue(a, out List<Partner> l))
             {
-                partners[a] = l = new List<Region>();
+                partners[a] = l = new List<Partner>();
             }
-            if (!l.Contains(b))
+            bool asks = StairGrid.AsksTraveller(links[link]);
+            for (int i = 0; i < l.Count; i++)
             {
-                l.Add(b);
+                if (l[i].region != b)
+                {
+                    continue;
+                }
+                bool otherAsks = StairGrid.AsksTraveller(links[l[i].link]);
+                if (!otherAsks)
+                {
+                    return;
+                }
+                if (!asks)
+                {
+                    l[i] = new Partner { region = b, link = link };
+                    return;
+                }
+                if (ReferenceEquals(links[l[i].link].thing, links[link].thing))
+                {
+                    return;
+                }
             }
+            l.Add(new Partner { region = b, link = link });
         }
 
         // ---------------------------------------------------------------------------------------------- memo

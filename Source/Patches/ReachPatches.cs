@@ -27,9 +27,10 @@ namespace ProjectZ.Patches
         internal static int suppress;
 
         // The regions one stair step away from 'region' (either way); null for most regions.
-        internal static List<Region> Partners(Region region, Map map)
+        internal static List<RouteGraph.Partner> Partners(Region region, Map map, out RouteGraph g)
         {
-            return RouteGraph.For(map)?.PartnersOf(region);
+            g = RouteGraph.For(map);
+            return g?.PartnersOf(region);
         }
 
         // The regions a usable stairs link joins (bottom b = H's, top t = E's; false when unusable or one region), read by
@@ -138,20 +139,173 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            List<Region> partners = StairRegions.Partners(region, map);
+            List<RouteGraph.Partner> partners = StairRegions.Partners(region, map, out RouteGraph g);
             if (partners == null)
             {
                 return;
             }
             int pos = (int)closedArrayPosF.GetValue(worker);
             uint closed = (uint)closedIndexF.GetValue(worker);
+            TraverseParms? who = null;
             for (int i = 0; i < partners.Count; i++)
             {
-                Region r = partners[i];
-                if (r.valid && r.closedIndex[pos] != closed && (r.type & types) != RegionType.None && (entryCondition == null || entryCondition(region, r)))
+                Region r = partners[i].region;
+                if (!r.valid || r.closedIndex[pos] == closed || (r.type & types) == RegionType.None)
+                {
+                    continue;
+                }
+                // a link that asks the traveller (an elevator): the search's own traveller, by the one rule
+                VLink l = g.links[partners[i].link];
+                if (StairGrid.AsksTraveller(l))
+                {
+                    who ??= SearchTraveller.Of(entryCondition);
+                    if (!StairGrid.MayTake(l, who.Value))
+                    {
+                        continue;
+                    }
+                }
+                if (entryCondition == null || entryCondition(region, r))
                 {
                     queueM.Invoke(worker, new object[] { r });
                 }
+            }
+        }
+    }
+
+    // The traveller of a region search, read from its entry test (the game's searches hand the traveller to it: a
+    // RegionProcessorDelegateCache with its TraverseParms, or a closure over TraverseParms or a pawn, possibly nested
+    // one closure deep). None found (PassAll, a search for no one): no traveller (StairGrid.MayTake: an open door).
+    // The way to read it is worked out once per type of entry test.
+    internal static class SearchTraveller
+    {
+        private static readonly Dictionary<Type, Func<object, TraverseParms>> readers = new Dictionary<Type, Func<object, TraverseParms>>();
+        private static readonly object gate = new object();
+        public static int Unknown;   // (tests) searches whose traveller could not be read
+
+        public static TraverseParms Of(RegionEntryPredicate entry)
+        {
+            object target = entry?.Target;
+            if (target == null)
+            {
+                Unknown++;
+                return default;
+            }
+            Func<object, TraverseParms> f;
+            lock (gate)
+            {
+                Type t = target.GetType();
+                if (!readers.TryGetValue(t, out f))
+                {
+                    readers[t] = f = Reader(t, 0);
+                }
+            }
+            if (f == null)
+            {
+                Unknown++;
+                return default;
+            }
+            return f(target);
+        }
+
+        private static Func<object, TraverseParms> Reader(Type t, int depth)
+        {
+            List<FieldInfo> fields = new List<FieldInfo>();
+            for (Type x = t; x != null && x != typeof(object); x = x.BaseType)
+            {
+                fields.AddRange(x.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
+            }
+            foreach (FieldInfo fi in fields)
+            {
+                if (fi.FieldType == typeof(TraverseParms))
+                {
+                    return o => (TraverseParms)fi.GetValue(o);
+                }
+            }
+            foreach (FieldInfo fi in fields)
+            {
+                if (typeof(Pawn).IsAssignableFrom(fi.FieldType))
+                {
+                    return o => fi.GetValue(o) is Pawn p ? TraverseParms.For(p) : default;
+                }
+            }
+            if (depth > 0)
+            {
+                return null;
+            }
+            // a closure nested in another (the compiler's display classes): one level down
+            foreach (FieldInfo fi in fields)
+            {
+                Type ft = fi.FieldType;
+                if (ft.IsClass && ft.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), false))
+                {
+                    Func<object, TraverseParms> inner = Reader(ft, depth + 1);
+                    if (inner != null)
+                    {
+                        return o => fi.GetValue(o) is object v ? inner(v) : default;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    // Region searches for the closest thing (GenClosest: melee targets, job scans ...) pick a thing on another floor only
+    // where reachability says the traveller gets there (the stairs' rule and the router's "no route" memo, RouteGraph.Memo),
+    // so a target the path follower can't reach is not handed out again and again (a job loop); the search goes on to
+    // the next thing. Checked only when a thing on another floor becomes the best so far.
+    [HarmonyPatch(typeof(RegionProcessorClosestThingReachable), "ProcessThing")]
+    [PatchGroup(FailSoft.StairRouting)]
+    public static class ClosestReachable_CrossFloor_Patch
+    {
+        private static readonly AccessTools.FieldRef<RegionProcessorClosestThingReachable, TraverseParms> TpRef = AccessTools.FieldRefAccess<RegionProcessorClosestThingReachable, TraverseParms>("traverseParams");
+        private static readonly AccessTools.FieldRef<RegionProcessorClosestThingReachable, IntVec3> RootRef = AccessTools.FieldRefAccess<RegionProcessorClosestThingReachable, IntVec3>("root");
+        private static readonly AccessTools.FieldRef<RegionProcessorClosestThingReachable, PathEndMode> ModeRef = AccessTools.FieldRefAccess<RegionProcessorClosestThingReachable, PathEndMode>("peMode");
+        private static readonly AccessTools.FieldRef<RegionProcessorClosestThingReachable, float> DistRef = AccessTools.FieldRefAccess<RegionProcessorClosestThingReachable, float>("closestDistSquared");
+        private static readonly AccessTools.FieldRef<RegionProcessorClosestThingReachable, float> PrioRef = AccessTools.FieldRefAccess<RegionProcessorClosestThingReachable, float>("bestPrio");
+
+        public static int Refused;   // (tests)
+
+        public struct Best
+        {
+            public Thing thing;
+            public float dist;
+            public float prio;
+        }
+
+        public static void Prefix(RegionProcessorClosestThingReachable __instance, out Best __state)
+        {
+            __state = new Best { thing = __instance.closestThing, dist = DistRef(__instance), prio = PrioRef(__instance) };
+        }
+
+        public static void Postfix(RegionProcessorClosestThingReachable __instance, Region reg, Best __state)
+        {
+            Thing now = __instance.closestThing;
+            if (now == null || ReferenceEquals(now, __state.thing) || reg == null)
+            {
+                return;
+            }
+            Map map = reg.Map;
+            if (map == null || ProjectZ.Annex(map) == null || ReachRefs.WorkingRef(map.reachability))
+            {
+                return;
+            }
+            Thing at = now.SpawnedParentOrMe;
+            IntVec3 root = RootRef(__instance);
+            if (at == null || !at.Spawned || at.Map != map || !root.InBounds(map))
+            {
+                return;
+            }
+            int ls = Levels.LevelOf(root, map), lt = Levels.LevelOf(at.Position, map);
+            if (ls == lt || ls == Levels.None || lt == Levels.None)
+            {
+                return;
+            }
+            if (!map.reachability.CanReach(root, at, ModeRef(__instance), TpRef(__instance)))
+            {
+                Refused++;
+                __instance.closestThing = __state.thing;
+                DistRef(__instance) = __state.dist;
+                PrioRef(__instance) = __state.prio;
             }
         }
     }

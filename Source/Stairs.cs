@@ -321,12 +321,22 @@ namespace ProjectZ
         // game's region search would (a door it can't or may not open, a fence, danger: Region.Allows).
         public bool Passable(VLink l, TraverseParms tp) => PassableIn(l, tp, map);
 
-        // Usable, and an elevator only for whom it lets in (the router's test on dig parts, where regions are not asked).
-        public static bool UsableFor(VLink l, TraverseParms tp, Map map) => UsableIn(l, map) && (!l.IsElevator || ElevatorRule.MayUse(l.thing, tp.pawn));
+        // THE rule for which links a traveller may take, asked by everything that joins floors for a traveller:
+        // reachability (StairReach), the router, the dig components and the game's region searches (BFSWorker_Patch).
+        // Stairs, ladders, lifts: anyone. An elevator (powered, or its emergency ladder): never for traversal modes that
+        // break walls (raiders and the like), else whoever may open its owner's doors (ElevatorRule.MayUse; no traveller:
+        // yes, as an open door).
+        public static bool MayTake(VLink l, TraverseParms tp) => !AsksTraveller(l) || !Patches.RouteGraph.DigMode(tp.mode) && ElevatorRule.MayUse(l.thing, tp.pawn);
+
+        // MayTake depends on the traveller for this link (else: true for anyone).
+        public static bool AsksTraveller(VLink l) => l.IsElevator;
+
+        // Usable, and taken by this traveller (MayTake): the router's test on dig parts, where regions are not asked.
+        public static bool UsableFor(VLink l, TraverseParms tp, Map map) => UsableIn(l, map) && MayTake(l, tp);
 
         public static bool PassableIn(VLink l, TraverseParms tp, Map map)
         {
-            if (!UsableIn(l, map) || l.IsElevator && !ElevatorRule.MayUse(l.thing, tp.pawn))
+            if (!UsableIn(l, map) || !MayTake(l, tp))
             {
                 return false;
             }

@@ -357,6 +357,16 @@ namespace ProjectZ.Dev
                 case "el_rd2_check":
                     ElRaidCheck(map, false);
                     return true;
+                case "el_rd3":
+                    elRdMelee = true;
+                    ElRaid(map, false);
+                    return true;
+                case "el_rd3_go":
+                    ElRaidGo(map, false);
+                    return true;
+                case "el_rd3_check":
+                    ElRaidCheck(map, false);
+                    return true;
             }
             return false;
         }
@@ -1747,11 +1757,25 @@ namespace ProjectZ.Dev
 
         private static readonly List<Pawn> elRaiders = new List<Pawn>();
 
+        // RD3: the RD2 fixture with the raiders given a knife (a melee raider: its target search is the game's region
+        // search, GenClosest, not a reachability check), watched for the job loop of 2026-10-21 (AttackMelee on the
+        // unreachable colonist over and over, the climb planner never reached).
+        private static bool elRdMelee;
+        private static int elMeleeTries;
+        private static int elClimbInvokedAt;
+        private static int elClimbTick;
+        private static int elRaidTick;
+        private static readonly Dictionary<Pawn, Job> elLastJob = new Dictionary<Pawn, Job>();
+        private static int elJobLines;
+        // (the raider walks in and may trash buildings on the way first, the game's AssaultColony duty: up to ~2300 ticks
+        // seen; the loop never gets there)
+        public const int RdClimbTicks = 5000;
+
         // Level 2 holds a colonist (the raid's target); the elevator on the ground beside the platform; withStairs: stairs
         // up to level 1 at the far side and a slab ramp up... (level 1 to 2 joined by stairs too).
         private static void ElRaid(Map map, bool withStairs)
         {
-            ElFixture(map, withStairs ? "el_rd_go" : "el_rd2_go", true, 2, r2Q);
+            ElFixture(map, withStairs ? "el_rd_go" : elRdMelee ? "el_rd3_go" : "el_rd2_go", true, 2, r2Q);
             Heal(r2Q);
             elStairs = null;
             if (withStairs)
@@ -1768,7 +1792,8 @@ namespace ProjectZ.Dev
             }
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             R2Hide(map, r2Q);
-            Teleport(r2Q, ElL(13, 13, 2, map));
+            // (RD3: on the platform's north edge, in sight of the ground north of it, where the raider is put)
+            Teleport(r2Q, elRdMelee ? ElL(17, 19, 2, map) : ElL(13, 13, 2, map));
             Draft(r2Q, true);
         }
 
@@ -1786,6 +1811,26 @@ namespace ProjectZ.Dev
             parms.forced = true;
             bool fired = IncidentDefOf.RaidEnemy.Worker.TryExecute(parms);
             elRaiders.AddRange(map.mapPawns.AllPawnsSpawned.Except(before).Where(p => p.Faction == parms.faction));
+            if (elRdMelee)
+            {
+                ThingDef knife = DefDatabase<ThingDef>.GetNamed("MeleeWeapon_Knife");
+                // put 11 cells north of the platform, in sight of the colonist on its edge and a few regions from the
+                // elevator's ground stop: the game's melee target search (GenClosest's region search, 40 regions, sight
+                // needed for pawns) gets as far as the elevator wherever the map's own terrain is
+                IntVec3 at = ElG(17, 30);
+                foreach (Pawn p in elRaiders)
+                {
+                    p.equipment?.DestroyAllEquipment();
+                    p.equipment?.AddEquipment((ThingWithComps)ThingMaker.MakeThing(knife, GenStuff.DefaultStuffFor(knife)));
+                    Teleport(p, CellFinder.StandableCellNear(at, map, 3f, c => !elRaiders.Any(o => o != p && o.Position == c)));
+                }
+            }
+            elMeleeTries = 0;
+            elClimbInvokedAt = RaidClimb.Invoked;
+            elClimbTick = -1;
+            elRaidTick = Find.TickManager.TicksGame;
+            elLastJob.Clear();
+            elJobLines = 0;
             elPawns.Clear();
             elPawns.AddRange(elRaiders);
             ElResetRides();
@@ -1793,13 +1838,37 @@ namespace ProjectZ.Dev
             elStairSteps.Clear();
             bool reach = elRaiders.Count > 0 && elRaiders[0].CanReach(ElL(13, 13, 2, map), PathEndMode.OnCell, Danger.Deadly);
             elNote = $"raid fired {fired}, {elRaiders.Count} raider(s) at {parms.spawnCenter}, first can reach level 2 {reach}, stairs {elStairs?.Position}";
-            SeedTicks(withStairs ? "el_rd" : "el_rd2");
+            if (elRdMelee && elRaiders.Count > 0)
+            {
+                elNote += $", put at {elRaiders[0].Position}, sees the colonist {Combat.Heights.CanSeeLeaning(elRaiders[0], r2Q)}";
+            }
+            SeedTicks(withStairs ? "el_rd" : elRdMelee ? "el_rd3" : "el_rd2");
             TickUntil(12000, () =>
             {
                 ElWatch(map);
+                foreach (Pawn p in elRaiders)
+                {
+                    Job j = p.Spawned ? p.CurJob : null;
+                    if (j != null && (!elLastJob.TryGetValue(p, out Job last) || last != j))
+                    {
+                        elLastJob[p] = j;
+                        if (!withStairs && elJobLines++ < 60)
+                        {
+                            Log.Message($"[PZTest]   RD job {p} at {p.Position} L{Levels.LevelOf(p.Position, map)}: {j.def.defName} A {j.targetA} giver {j.jobGiver?.GetType().Name ?? "none"}");
+                        }
+                        if (j.def == JobDefOf.AttackMelee && j.targetA.Thing == r2Q)
+                        {
+                            elMeleeTries++;
+                        }
+                    }
+                }
+                if (elClimbTick < 0 && RaidClimb.Invoked > elClimbInvokedAt)
+                {
+                    elClimbTick = Find.TickManager.TicksGame - elRaidTick;
+                }
                 bool up = elRaiders.Any(p => p.Spawned && Levels.LevelOf(p.Position, map) >= 1);
                 return withStairs ? elRaiders.Any(p => elStairSteps.ContainsKey(p)) && up : LadderSite.Placed > elPlacedAt && up;
-            }, withStairs ? "el_rd_check" : "el_rd2_check", 1);
+            }, withStairs ? "el_rd_check" : elRdMelee ? "el_rd3_check" : "el_rd2_check", 1);
         }
 
         private static void ElRaidCheck(Map map, bool withStairs)
@@ -1814,10 +1883,19 @@ namespace ProjectZ.Dev
                 Result("RD a raid on a platform reachable by stairs and the elevator: the raiders take the stairs, never the elevator",
                     elRaiders.Count > 0 && rides == 0 && stairs > 0 && upNow > 0, $"{elNote}; elevator rides {rides}, stair steps {stairs}, ladders {ladders}, raiders up {upNow}, elevator spawned {elE.Spawned}");
             }
-            else
+            else if (!elRdMelee)
             {
                 Result("RD a raid on a platform reachable only by the elevator: the raiders place siege ladders and climb, never ride the elevator",
-                    elRaiders.Count > 0 && rides == 0 && ladders > 0 && upNow > 0, $"{elNote}; elevator rides {rides}, ladders {ladders}, raiders up {upNow}, elevator spawned {elE.Spawned} hp {elE.HitPoints}");
+                    elRaiders.Count > 0 && rides == 0 && ladders > 0 && upNow > 0, $"{elNote}; elevator rides {rides}, ladders {ladders}, raiders up {upNow}, elevator spawned {elE.Spawned} hp {elE.HitPoints}; melee jobs on the target {elMeleeTries}, climb planner after {elClimbTick} ticks");
+            }
+            else
+            {
+                string weapons = string.Join(", ", elRaiders.Select(p => p.equipment?.Primary?.def.defName ?? "none"));
+                Result($"RD3 a melee raider (knife) facing an elevator-only target reaches the climb planner (AIClimb) within {RdClimbTicks} ticks, no melee job loop on the unreachable target",
+                    elRaiders.Count > 0 && elClimbTick >= 0 && elClimbTick <= RdClimbTicks && elMeleeTries <= 2,
+                    $"{elNote}; weapons {weapons}; climb planner after {elClimbTick} ticks, melee jobs on the target {elMeleeTries}");
+                Result("RD3 the melee raider places a siege ladder and climbs, never rides the elevator",
+                    elRaiders.Count > 0 && rides == 0 && ladders > 0 && upNow > 0, $"elevator rides {rides}, ladders {ladders}, raiders up {upNow}, elevator spawned {elE.Spawned} hp {elE.HitPoints}");
             }
             foreach (Pawn p in elRaiders)
             {
@@ -1841,6 +1919,12 @@ namespace ProjectZ.Dev
                 stage = "el_rd2";
                 return;
             }
+            if (!elRdMelee)
+            {
+                stage = "el_rd3";
+                return;
+            }
+            elRdMelee = false;
             Finish();
         }
     }
