@@ -30,6 +30,12 @@ namespace ProjectZ.Dev
     //   CO  the shaft kept open: floor, wall, roof area, roof work, blueprints refused (the elevator's message);
     //       placement refused where the shaft is blocked (a floor, a roof, a blueprint); the safety net (a floor spawned
     //       in the shaft: links only below it, a rider on a link past it falls; opened again: linked again)
+    //   RF  the shaft roofed (second round): its cells carry the stairwell roof, a room beside it on level 1 is indoors and
+    //       roofed; a colonist lays a floor in the shaft on level 3 (the cap): the elevator serves levels 0-2; the colonist
+    //       takes it up again: no ordinary roof left, the elevator serves 0-4 again
+    //   PU  placed under a floor: the floor in the shaft is marked for removal, the elevator waits, colonists take the
+    //       floor up and build the elevator
+    //   K2  the last way out: an elevator whose own floor would be cut off without it is not taken down from there
     //   XB  a stop whose exit is blocked is skipped (the ride goes past it), its floor unreachable
     //   S   screenshots of a ride (3D), up and down
     //   SV  saved and loaded mid-ride: the rider starts its ride again and arrives
@@ -220,6 +226,36 @@ namespace ProjectZ.Dev
                 case "el_co_ride_check":
                     ElNetRideCheck(map);
                     return true;
+                case "el_rf":
+                    ElRoof(map);
+                    return true;
+                case "el_rf_go":
+                    ElRoofGo(map);
+                    return true;
+                case "el_rf_capped":
+                    ElCapped(map);
+                    return true;
+                case "el_rf_uncapped":
+                    ElUncapped(map);
+                    return true;
+                case "el_pu":
+                    ElUnder(map);
+                    return true;
+                case "el_pu_go":
+                    ElUnderGo(map);
+                    return true;
+                case "el_pu_check":
+                    ElUnderCheck(map);
+                    return true;
+                case "el_k2":
+                    ElK2(map);
+                    return true;
+                case "el_k2_go":
+                    ElK2Go(map);
+                    return true;
+                case "el_k2_check":
+                    ElK2Check(map);
+                    return true;
                 case "el_xb":
                     ElExitBlocked(map);
                     return true;
@@ -247,6 +283,7 @@ namespace ProjectZ.Dev
                     return true;
                 case "el_s1_take":
                     Capture("elevator_ride_up_50");
+                    Result("S5 a platform is drawn under the powered rider (IsoRim Api 8)", IsoRimBridge.ApiVersion < 8 || ElevatorDraw.Drawn > 0, $"IsoRim Api {IsoRimBridge.ApiVersion}, platforms drawn {ElevatorDraw.Drawn}");
                     TickUntil(2000, () => r2P.Position == elDest, "el_s2", 5);
                     return true;
                 case "el_s2":
@@ -1066,11 +1103,14 @@ namespace ProjectZ.Dev
             bool roofWork = new WorkGiver_BuildRoof().HasJobOnCell(r2P, s1);
             map.areaManager.BuildRoof[s1] = false;
             AcceptanceReport roofOver = new Designator_AreaBuildRoof().CanDesignateCell(s0);
-            Result("CO the shaft is kept open: a floor, a wall and a lamp in it are refused with the elevator's message; no roof area or roof work over it",
-                !floor.Accepted && floor.Reason == msg && !wall.Accepted && wall.Reason == msg && !lamp.Accepted && !roofArea.Accepted && roofArea.Reason == msg && !roofWork && !roofOver.Accepted,
+            Result("CO the shaft is kept open: a wall and a lamp in it are refused with the elevator's message; a floor is not refused by the shaft (it caps it; the slab support rule still applies); a roof area may be drawn but no roof work comes (the shaft has its own roof)",
+                (floor.Accepted || floor.Reason != msg) && !wall.Accepted && wall.Reason == msg && !lamp.Accepted && roofArea.Accepted && !roofWork && map.roofGrid.RoofAt(s1) == PZDefOf.PZ_StairwellRoof,
                 $"floor {floor.Accepted} ({floor.Reason}), wall {wall.Accepted} ({wall.Reason}), lamp {lamp.Accepted} ({lamp.Reason}), roof area {roofArea.Accepted} ({roofArea.Reason}), roof over the elevator {roofOver.Accepted} ({roofOver.Reason}), roof work {roofWork}");
-            // placement where the shaft is blocked: a floor on level 3, a roof over the cell, a blueprint on level 2
-            IntVec3 a = ElG(25, 6), b = ElG(27, 6), c = ElG(29, 6), d = ElG(31, 6);
+            // placement where the shaft is not open: a floor on level 3 and a roof over the cell (allowed: the floor is taken
+            // up, the roof becomes the shaft's), a blueprint on level 2 and a wall on a floor on level 2 (refused)
+            IntVec3 a = ElG(25, 6), b = ElG(27, 6), c = ElG(29, 6), d = ElG(31, 6), w = ElG(33, 6);
+            map.terrainGrid.SetTerrain(ElL(33, 6, 2, map), PZDefOf.PZ_UpperFloor);
+            R2Wall(map, ElL(33, 6, 2, map));
             map.terrainGrid.SetTerrain(ElL(25, 6, 3, map), PZDefOf.PZ_UpperFloor);
             map.roofGrid.SetRoof(b, RoofDefOf.RoofConstructed);
             // (a floor blueprint put there as it stands: the player may have planned it before)
@@ -1080,10 +1120,11 @@ namespace ProjectZ.Dev
             AcceptanceReport pb = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, b, Rot4.West, map);
             AcceptanceReport pc = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, c, Rot4.West, map);
             AcceptanceReport pd = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, d, Rot4.West, map);
+            AcceptanceReport pw = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, w, Rot4.West, map);
             AcceptanceReport top = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, ElL(31, 13, 4, map), Rot4.West, map);
-            Result("CO placement is refused where the shaft is blocked (a floor on level 3, a roof over the cell, a floor blueprint on level 2), allowed where open, refused on the top level",
-                !pa.Accepted && pa.Reason == blocked && !pb.Accepted && pb.Reason == blocked && bpFloor != null && bpFloor.Spawned && !pc.Accepted && pc.Reason == blocked && pd.Accepted && !top.Accepted,
-                $"floor {pa.Accepted} ({pa.Reason}), roof {pb.Accepted} ({pb.Reason}), blueprint {bpFloor?.def.defName} at {bpFloor?.Position} -> {pc.Accepted} ({pc.Reason}), open {pd.Accepted} ({pd.Reason}), top level {top.Accepted} ({top.Reason})");
+            Result("CO placement: under a floor (level 3) and under a built roof it is allowed; a floor blueprint (level 2) or a wall (level 2) in the shaft refuse it; open: allowed; the top level: refused",
+                pa.Accepted && pb.Accepted && bpFloor != null && bpFloor.Spawned && !pc.Accepted && pc.Reason == blocked && !pw.Accepted && pw.Reason == blocked && pd.Accepted && !top.Accepted,
+                $"floor {pa.Accepted} ({pa.Reason}), roof {pb.Accepted} ({pb.Reason}), blueprint {bpFloor?.def.defName} at {bpFloor?.Position} -> {pc.Accepted} ({pc.Reason}), wall {pw.Accepted} ({pw.Reason}), open {pd.Accepted} ({pd.Reason}), top level {top.Accepted} ({top.Reason})");
             // an elevator blueprint keeps its shaft open too
             GenConstruct.PlaceBlueprintForBuild(ElevatorDefOf.PZ_Elevator, d, map, Rot4.West, Faction.OfPlayer, null);
             AcceptanceReport inBp = GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Wall, ElL(31, 6, 3, map), Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
@@ -1104,9 +1145,9 @@ namespace ProjectZ.Dev
             bool reach2 = r2P.CanReach(ElL(14, 13, 2, map), PathEndMode.OnCell, Danger.Deadly);
             Result("CO safety net: a floor spawned in the shaft on level 3: the elevator stands and links only levels 0-2 (3 links); level 4 unreachable, level 2 still reachable",
                 elE.Spawned && elE.LinkedTop == 2 && ls.Count == 3 && !reach4 && reach2, $"{ElLinks(map)}, reach level 4 {reach4}, level 2 {reach2}, relinks {Building_Elevator.Relinks - elRelinksAt}");
-            // the floor taken away again, and the roof it left under it (FloorRoof: an ordinary roof then)
+            // the floor taken away again: the roof it leaves under it is the shaft's own (no ordinary roof to take away)
             map.terrainGrid.SetTerrain(ElL(19, 13, 3, map), PZDefOf.PZ_OpenAir);
-            map.roofGrid.SetRoof(ElL(19, 13, 2, map), null);
+            elNote = $"roof left under it: {map.roofGrid.RoofAt(ElL(19, 13, 2, map))?.defName ?? "none"}";
             SeedTicks("el_co_open");
             TickUntil(600, () => elE.LinkedTop == 4, "el_co_open", 1);
         }
@@ -1114,7 +1155,8 @@ namespace ProjectZ.Dev
         private static void ElNetOpenCheck(Map map)
         {
             tickWatch = null;
-            Result("CO the shaft open again: linked up to level 4 again (within a rare tick)", elE.LinkedTop == 4 && StairGrid.For(map).links.Count(l => l.thing == elE) == 10, ElLinks(map));
+            Result("CO the floor taken out of the shaft: it leaves the shaft's own roof (not an ordinary one), linked up to level 4 again (within a rare tick)",
+                elE.LinkedTop == 4 && StairGrid.For(map).links.Count(l => l.thing == elE) == 10 && elNote.Contains("PZ_StairwellRoof"), $"{elNote}; {ElLinks(map)}");
             stage = "el_co_ride";
         }
 
@@ -1163,8 +1205,285 @@ namespace ProjectZ.Dev
                 elFlag && r2P.Position == ElG(18, 13) && LinkSteps.Falls - elFallsAt == 1 && fell == 2 && HasBruise(r2P) && elE.LinkedTop == 2,
                 $"height {elHeightAt:0.00}, at {r2P.Position}, falls {LinkSteps.Falls - elFallsAt}, floors {fell}, bruised {HasBruise(r2P)}; {ElLinks(map)}");
             map.terrainGrid.SetTerrain(ElL(19, 13, 3, map), PZDefOf.PZ_OpenAir);
-            map.roofGrid.SetRoof(ElL(19, 13, 2, map), null);
             Heal(r2P);
+            stage = "el_rf";
+        }
+
+        // ------------------------------------------------------------------------------------------------ RF: roof and cap
+
+        private static void ElRoof(Map map)
+        {
+            ElFixture(map, "el_rf_go", true, 4, r2P);
+            Heal(r2P);
+            Teleport(r2P, ElG(15, 13));
+            // a room on level 1 beside the shaft: interior (16..18, 12..14) with the stop (18, 13) and the shaft cell
+            // (19, 13); walls round it, round the shaft too (floors laid beside the shaft for them)
+            R2Floor(map, CellRect.SingleCell(ElG(19, 12)), 1);
+            R2Floor(map, CellRect.SingleCell(ElG(19, 14)), 1);
+            R2Floor(map, new CellRect(ElG(20, 12).x, ElG(20, 12).z, 1, 3), 1);
+            foreach (IntVec3 g in new CellRect(ElG(15, 11).x, ElG(15, 11).z, 5, 5).EdgeCells)
+            {
+                if (g.x != ElG(19, 0).x)
+                {
+                    R2Wall(map, Levels.Cell(g, 1, map));
+                }
+            }
+            R2Wall(map, ElL(19, 12, 1, map));
+            R2Wall(map, ElL(19, 14, 1, map));
+            R2Wall(map, ElL(20, 13, 1, map));
+            // stairs up to level 3 (the floors above the cap are reached without the elevator), on ledges outside the stack
+            // (nothing over their stairwells): ground -> 1 at (8, 10); a level-1 ledge x 5..9, z 14..18 with stairs on to
+            // level 2 at (7, 16); a level-2 ledge x 10..18, z 3..7 with stairs on to level 3 at (14, 5)
+            R2Floor(map, new CellRect(ElG(5, 14).x, ElG(5, 14).z, 5, 5), 1);
+            R2Floor(map, new CellRect(ElG(10, 3).x, ElG(10, 3).z, 9, 5), 2);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            elStairs = R2Stairs(map, ElG(8, 10), Rot4.East);
+            Building_Stairs s12 = R2Stairs(map, ElL(7, 16, 1, map), Rot4.East);
+            Building_Stairs s23 = R2Stairs(map, ElL(14, 5, 2, map), Rot4.North);
+            elNote = $"stairs {elStairs?.Position}, {s12?.Position}, {s23?.Position}";
+            // a wall on level 2 holds the cap's floor (the slab support rule), wood for it on level 3
+            R2Wall(map, ElL(17, 10, 2, map));
+            Thing wood = ThingMaker.MakeThing(ThingDefOf.WoodLog);
+            wood.stackCount = 20;
+            GenPlace.TryPlaceThing(wood, ElL(16, 16, 3, map), map, ThingPlaceMode.Direct);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+        }
+
+        private static void ElRoofGo(Map map)
+        {
+            tickWatch = null;
+            bool allRoofed = true;
+            string roofs = "";
+            for (int L = 0; L <= 4; L++)
+            {
+                IntVec3 c = ElL(19, 13, L, map);
+                RoofDef r = map.roofGrid.RoofAt(c);
+                roofs += $"L{L} {r?.defName ?? "none"} open {Column.OpenAbove(c, map)}; ";
+                allRoofed &= r == PZDefOf.PZ_StairwellRoof && Column.OpenAbove(c, map);
+            }
+            Room room = ElL(17, 13, 1, map).GetRoom(map);
+            bool indoors = room != null && !room.PsychologicallyOutdoors && !room.UsesOutdoorTemperature && room.OpenRoofCount == 0 && !room.TouchesMapEdge;
+            Result("RF every shaft cell (levels 0-4) has the invisible stairwell roof (no rain or snow in, the column stays open); a room beside it on level 1 is indoors and roofed",
+                allRoofed && indoors, $"{roofs}room {room?.ID} cells {room?.CellCount}, outdoors {room?.PsychologicallyOutdoors}, outdoor temperature {room?.UsesOutdoorTemperature}, open roof {room?.OpenRoofCount}, edge {room?.TouchesMapEdge}");
+            // the cap: a wood floor planned in the shaft on level 3 (allowed, with the cap message), laid by a colonist
+            IntVec3 cap = ElL(19, 13, 3, map);
+            int shown = ElevatorCap.Shown;
+            AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, cap, Rot4.North, map);
+            if (ok.Accepted)
+            {
+                GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_UpperFloor, cap, map, Rot4.North, Faction.OfPlayer, null);
+            }
+            elNote += $"; cap placement {ok.Accepted} ({ok.Reason}), message shown {ElevatorCap.Shown > shown}";
+            elFlag = ok.Accepted && ElevatorCap.Shown > shown;
+            Draft(r2P, false);
+            foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+            {
+                if (!r2P.WorkTypeIsDisabled(wt))
+                {
+                    r2P.workSettings.SetPriority(wt, wt == WorkTypeDefOf.Construction || wt == WorkTypeDefOf.Hauling ? 1 : 0);
+                }
+            }
+            SeedTicks("el_rf_cap");
+            TickUntil(10000, () => ProjectZ.HasFloor(cap, map) && elE.LinkedTop == 2, "el_rf_capped", 10);
+        }
+
+        private static void ElCapped(Map map)
+        {
+            tickWatch = null;
+            IntVec3 cap = ElL(19, 13, 3, map);
+            List<VLink> ls = StairGrid.For(map).links.Where(l => l.thing == elE).ToList();
+            bool roofsAbove = map.roofGrid.RoofAt(cap) == null && map.roofGrid.RoofAt(ElL(19, 13, 4, map)) == null;
+            Result("RF a colonist lays a floor in the shaft on level 3 (placement allowed, the cap message shown): the elevator serves levels 0-2 only (3 links), no shaft roof above the cap",
+                elFlag && ProjectZ.HasFloor(cap, map) && elE.LinkedTop == 2 && ls.Count == 3 && ls.All(l => Levels.LevelOf(l.top, map) <= 2) && roofsAbove,
+                $"{elNote}; floor {ProjectZ.HasFloor(cap, map)}, {ElLinks(map)}, roof under the cap {map.roofGrid.RoofAt(ElL(19, 13, 2, map))?.defName}, over it {map.roofGrid.RoofAt(cap)?.defName ?? "none"}, inspect '{elE.GetInspectString().Replace("\n", " | ")}'");
+            map.designationManager.AddDesignation(new Designation(cap, DesignationDefOf.RemoveFoundation));
+            SeedTicks("el_rf_uncap");
+            TickUntil(10000, () => !ProjectZ.HasFloor(cap, map) && elE.LinkedTop == 4, "el_rf_uncapped", 10);
+        }
+
+        private static void ElUncapped(Map map)
+        {
+            tickWatch = null;
+            IntVec3 cap = ElL(19, 13, 3, map);
+            Result("RF the colonist takes the cap up again: no ordinary roof left under it (the shaft's own), the elevator serves 0-4 again (10 links), the shaft roofed up to the top",
+                !ProjectZ.HasFloor(cap, map) && elE.LinkedTop == 4 && StairGrid.For(map).links.Count(l => l.thing == elE) == 10 && map.roofGrid.RoofAt(ElL(19, 13, 2, map)) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(ElL(19, 13, 4, map)) == PZDefOf.PZ_StairwellRoof,
+                $"floor {ProjectZ.HasFloor(cap, map)}, {ElLinks(map)}, roofs L2 {map.roofGrid.RoofAt(ElL(19, 13, 2, map))?.defName}, L3 {map.roofGrid.RoofAt(cap)?.defName}, L4 {map.roofGrid.RoofAt(ElL(19, 13, 4, map))?.defName}, worker at {r2P.Position}");
+            foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+            {
+                if (!r2P.WorkTypeIsDisabled(wt))
+                {
+                    r2P.workSettings.SetPriority(wt, 3);
+                }
+            }
+            Draft(r2P, true);
+            stage = "el_pu";
+        }
+
+        // ------------------------------------------------------------------------------------------------ PU: under a floor
+
+        // Level 1 platform over x 10..20 (the shaft cell included), stairs up to it; the elevator planned at (19, 13)
+        // under it, materials on the ground.
+        private static void ElUnder(Map map)
+        {
+            R2Clear(map);
+            R2Park(map, r2P, r2Q);
+            R2Feed(map);
+            LinkSteps.For(map)?.steps.Clear();
+            R2Floor(map, new CellRect(ElG(10, 8).x, ElG(10, 8).z, 10, 12), 1);
+            ResearchProjectDef machining = DefDatabase<ResearchProjectDef>.GetNamedSilentFail("Machining");
+            if (machining != null && !machining.IsFinished)
+            {
+                Find.ResearchManager.FinishProject(machining);
+            }
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            elStairs = R2Stairs(map, ElG(8, 10), Rot4.East);
+            ElNewBattery(map);
+            Thing steel = ThingMaker.MakeThing(ThingDefOf.Steel);
+            steel.stackCount = 120;
+            GenPlace.TryPlaceThing(steel, ElG(22, 10), map, ThingPlaceMode.Near);
+            Thing comp = ThingMaker.MakeThing(ThingDefOf.ComponentIndustrial);
+            comp.stackCount = 5;
+            GenPlace.TryPlaceThing(comp, ElG(22, 12), map, ThingPlaceMode.Near);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            Teleport(r2P, ElG(22, 14));
+            Teleport(r2Q, ElG(23, 14));
+            SeedTicks("el_pu_wait");
+            StartTicks(5, "el_pu_go");
+        }
+
+        private static void ElUnderGo(Map map)
+        {
+            IntVec3 up = ElL(19, 13, 1, map);
+            AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, ElG(19, 13), Rot4.West, map);
+            Blueprint bp = ok.Accepted ? GenConstruct.PlaceBlueprintForBuild(ElevatorDefOf.PZ_Elevator, ElG(19, 13), map, Rot4.West, Faction.OfPlayer, null) : null;
+            bool marked = map.designationManager.DesignationAt(up, DesignationDefOf.RemoveFoundation) != null;
+            bool waiting = bp != null && ElevatorSite.Waiting(bp) && !GenConstruct.CanConstruct(bp, r2P, false);
+            elNote = $"placement {ok.Accepted} ({ok.Reason}), floor over it marked {marked}, waiting {waiting}, inspect '{bp?.GetInspectString().Replace("\n", " | ")}'";
+            elFlag = ok.Accepted && marked && waiting;
+            foreach (Pawn p in new[] { r2P, r2Q })
+            {
+                Draft(p, false);
+                foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+                {
+                    if (!p.WorkTypeIsDisabled(wt))
+                    {
+                        p.workSettings.SetPriority(wt, wt == WorkTypeDefOf.Construction || wt == WorkTypeDefOf.Hauling ? 1 : 0);
+                    }
+                }
+            }
+            elE = null;
+            SeedTicks("el_pu");
+            TickUntil(30000, () =>
+            {
+                elE = map.listerThings.ThingsOfDef(ElevatorDefOf.PZ_Elevator).OfType<Building_Elevator>().FirstOrDefault();
+                return elE != null;
+            }, "el_pu_check", 30);
+        }
+
+        private static void ElUnderCheck(Map map)
+        {
+            tickWatch = null;
+            IntVec3 up = ElL(19, 13, 1, map);
+            if (elE == null)
+            {
+                Thing site = ElG(19, 13).GetThingList(map).FirstOrDefault(x => ElevatorSite.Is(x));
+                string s = site == null ? "no site" : $"{site.def.defName}, waiting {ElevatorSite.Waiting(site)}";
+                foreach (Pawn p in new[] { r2P, r2Q })
+                {
+                    bool can = site != null && GenConstruct.CanConstruct(site, p, false);
+                    s += $"; {p.LabelShort} at {p.Position} job {p.CurJobDef?.defName} drafted {p.Drafted}, can construct {can} ({JobFailReason.Reason})";
+                    foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefs.Where(w => w.Worker is WorkGiver_Scanner && (w.workType == WorkTypeDefOf.Construction || w.workType == WorkTypeDefOf.Hauling)))
+                    {
+                        Job j = null;
+                        try { j = site != null && ((WorkGiver_Scanner)wg.Worker).HasJobOnThing(p, site) ? ((WorkGiver_Scanner)wg.Worker).JobOnThing(p, site) : null; } catch (Exception e) { s += " ex " + e.Message; }
+                        if (j != null) s += $", {wg.defName} -> {j.def.defName}";
+                    }
+                }
+                s += "; things on the cell: " + string.Join(", ", ElG(19, 13).GetThingList(map).Select(x => x.def.defName)) + "; steel left " + map.listerThings.ThingsOfDef(ThingDefOf.Steel).Sum(x => x.stackCount);
+                Info("PU diag: " + s);
+            }
+            Result("PU placed under a floor: allowed, the floor in the shaft marked for removal, the elevator waits for it; colonists take it up and build the elevator, which links up to level 4 with its shaft roofed",
+                elFlag && elE != null && !ProjectZ.HasFloor(up, map) && elE.LinkedTop == 4 && map.roofGrid.RoofAt(ElG(19, 13)) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(up) == PZDefOf.PZ_StairwellRoof,
+                $"{elNote}; built {elE != null} at tick {Find.TickManager.TicksGame}, floor left {ProjectZ.HasFloor(up, map)}, {ElLinks(map)}, roof over it {map.roofGrid.RoofAt(ElG(19, 13))?.defName ?? "none"}, L1 {map.roofGrid.RoofAt(up)?.defName ?? "none"}");
+            foreach (Pawn p in new[] { r2P, r2Q })
+            {
+                foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+                {
+                    if (!p.WorkTypeIsDisabled(wt))
+                    {
+                        p.workSettings.SetPriority(wt, 3);
+                    }
+                }
+                Draft(p, true);
+            }
+            stage = "el_k2";
+        }
+
+        // ------------------------------------------------------------------------------------------------ K2: last way
+
+        // A: level 1 at x 4..12, z 8..12 (stairs up from the ground), stairs on to C: level 2 at x 4..24, z 12..19 (with a
+        // hole for the shaft at (20, 16)); B: a level 1 island at x 20..24, z 14..18 holding the elevator at (20, 16)
+        // turned east (stops (21, 16) on levels 1-4). B is reached only by the elevator from C.
+        private static void ElK2(Map map)
+        {
+            R2Clear(map);
+            R2Park(map, r2P, r2Q);
+            R2Feed(map);
+            LinkSteps.For(map)?.steps.Clear();
+            R2Floor(map, new CellRect(ElG(4, 8).x, ElG(4, 8).z, 9, 5), 1);
+            R2Floor(map, new CellRect(ElG(20, 14).x, ElG(20, 14).z, 5, 5), 1);
+            R2Floor(map, new CellRect(ElG(4, 12).x, ElG(4, 12).z, 21, 8), 2);
+            IntVec3 hole = ElL(20, 16, 2, map);
+            map.terrainGrid.SetTerrain(hole, PZDefOf.PZ_OpenAir);
+            map.roofGrid.SetRoof(ElL(20, 16, 1, map), null);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            elStairs = R2Stairs(map, ElG(2, 10), Rot4.East);
+            Building_Stairs s2 = R2Stairs(map, ElL(8, 10, 1, map), Rot4.North);
+            elE = Place(ElevatorDefOf.PZ_Elevator, null, ElL(20, 16, 1, map), map, Rot4.East) as Building_Elevator;
+            elBattery = Place(ThingDefOf.Battery, null, ElL(23, 15, 1, map), map, Rot4.North);
+            elBattery.TryGetComp<CompPowerBattery>()?.AddEnergy(10000f);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            Teleport(r2Q, ElL(22, 17, 1, map));
+            elNote = $"stairs {elStairs?.Position} and {s2?.Position}, elevator {elE?.Position}";
+            SeedTicks("el_k2_power");
+            TickUntil(400, () => elE != null && elE.LinkedPowered, "el_k2_go", 1);
+        }
+
+        private static void ElK2Go(Map map)
+        {
+            tickWatch = null;
+            bool cReach = r2Q.CanReach(ElL(10, 15, 2, map), PathEndMode.OnCell, Danger.Deadly);
+            bool cuts = elE.CutsOffItsFloor();
+            new Designator_Deconstruct().DesignateThing(elE);
+            Draft(r2Q, false);
+            foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+            {
+                if (!r2Q.WorkTypeIsDisabled(wt))
+                {
+                    r2Q.workSettings.SetPriority(wt, wt == WorkTypeDefOf.Construction ? 1 : 0);
+                }
+            }
+            bool job = new WorkGiver_Deconstruct { def = DefDatabase<WorkGiverDef>.AllDefs.FirstOrDefault(d => d.giverClass == typeof(WorkGiver_Deconstruct)) }.HasJobOnThing(r2Q, elE);
+            elNote += $"; island reaches level 2 by it {cReach}, cuts off its floor {cuts}, deconstruct job {job} ({JobFailReason.Reason})";
+            elFlag = cReach && cuts && !job;
+            SeedTicks("el_k2");
+            StartTicks(2500, "el_k2_check");
+        }
+
+        private static void ElK2Check(Map map)
+        {
+            Result("K2 the last way out: an elevator on an island it alone joins to the rest is not taken down from the island (the worker would be stranded); it stands after 2500 ticks with the designation on",
+                elFlag && elE.Spawned && map.designationManager.DesignationOn(elE, DesignationDefOf.Deconstruct) != null,
+                $"{elNote}; spawned {elE.Spawned}, worker {r2Q} at {r2Q.Position} job {r2Q.CurJobDef?.defName}");
+            map.designationManager.DesignationOn(elE, DesignationDefOf.Deconstruct)?.Delete();
+            foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+            {
+                if (!r2Q.WorkTypeIsDisabled(wt))
+                {
+                    r2Q.workSettings.SetPriority(wt, 3);
+                }
+            }
+            Draft(r2Q, true);
             stage = "el_xb";
         }
 

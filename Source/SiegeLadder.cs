@@ -59,12 +59,18 @@ namespace ProjectZ
             if (top.IsValid && span > 0)
             {
                 map.GetComponent<StairGrid>()?.Register(VLink.Ladder(Kind, this, foot, top, span, topBlocker, map));
+                ColumnRoof.Apply(map, Levels.Ground(foot, map), Levels.LevelOf(foot, map), Levels.LevelOf(top, map));
             }
         }
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
         {
-            Map?.GetComponent<StairGrid>()?.Deregister(this);
+            Map map = Map;
+            map?.GetComponent<StairGrid>()?.Deregister(this);
+            if (map != null && top.IsValid && foot.IsValid)
+            {
+                ColumnRoof.Clear(map, Levels.Ground(foot, map), Levels.LevelOf(foot, map), Levels.LevelOf(top, map));
+            }
             base.DeSpawn(mode);
         }
 
@@ -468,8 +474,9 @@ namespace ProjectZ
         // c is an open cell of a ladder's column.
         public static bool Reserved(IntVec3 c, Map map) => Owner(c, map, false) != null;
 
-        // c is a roof cell under a ladder's column (a roof there would close it).
-        public static bool Plane(IntVec3 c, Map map) => Owner(c, map, true) != null;
+        // c is a roof cell under a ladder's column (a roof there would close it). A built elevator's shaft takes a floor
+        // there as its cap (Elevator.cs); its roofs are the shaft's own (ColumnRoof).
+        public static bool Plane(IntVec3 c, Map map) => Owner(c, map, true) is Thing t && !(t is Building_Elevator);
 
         // The ladder (or its site) whose column holds c (plane: as a roof cell), or null.
         public static Thing Owner(IntVec3 c, Map map, bool plane)
@@ -570,7 +577,7 @@ namespace ProjectZ
                 {
                     return false;
                 }
-                if (L < topL && map.roofGrid.Roofed(c))
+                if (L < topL && ColumnRoof.Blocks(c, map))
                 {
                     return false;
                 }
@@ -660,7 +667,8 @@ namespace ProjectZ
             }
             foreach (IntVec3 c in GenAdj.OccupiedRect(center, rot, entDef.Size))
             {
-                if (LadderColumn.Reserved(c, map))
+                // (a floor in a built elevator's shaft caps it: ElevatorCap)
+                if (LadderColumn.Reserved(c, map) && !(entDef is TerrainDef && LadderColumn.Owner(c, map, false) is Building_Elevator))
                 {
                     __result = LadderColumn.Refusal(c, map, false);
                     return;

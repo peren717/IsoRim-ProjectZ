@@ -85,5 +85,7 @@
   <PZ_ElevatorNoFloorAbove>上面没有楼层</PZ_ElevatorNoFloorAbove>
   <PZ_ElevatorNoExit>门的一侧在地图外</PZ_ElevatorNoExit>
   <PZ_ElevatorStops>停靠楼层：{0}</PZ_ElevatorStops>
+  <PZ_ElevatorCap>这块楼板会封住电梯井，电梯只到它下面</PZ_ElevatorCap>
+  <PZ_ElevatorLastWay>这是离开这里的最后一条路</PZ_ElevatorLastWay>
   <PZ_ElevatorNoPower>没电：当梯子爬</PZ_ElevatorNoPower>
 </LanguageData>

@@ -62,6 +62,15 @@ namespace ProjectZ
             return last;
         }
 
+        // (a platform drawn under each powered elevator rider: Elevator.cs, ElevatorDraw)
+        public override void MapComponentUpdate()
+        {
+            if (steps.Count > 0)
+            {
+                ElevatorDraw.Platforms(map, steps);
+            }
+        }
+
         public Step Of(Pawn p)
         {
             for (int i = 0; i < steps.Count; i++)
