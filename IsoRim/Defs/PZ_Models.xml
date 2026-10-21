@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
 
-  <!-- IsoRim's model of the stairs (loaded only with IsoRim, LoadFolders.xml): a stepped ramp up to one storey at the
-       locked wall height (1.65 + 0.02) and, since 2026-10-20, a plain block on the solid 4th cell under the exit
-       (placeholder; built for 1x4). Big plain shapes with box-projected UVs; treads, sides and back plain "stuff" so
-       the stairs read like walls of the same stuff, risers "stuff_dark", the hidden bottom "stuff_deep". No plate over the
-       exit cell: the landing is drawn as the floor laid there (bare slab, carpet, wood), like any floor cell. Written by
-       tools/projectz/stairs_obj.js (landing=0, solid=1). -->
+  <!-- IsoRim's model of the stairs (loaded only with IsoRim, LoadFolders.xml; 1x4 model 2026-10-21, user-approved): one
+       closed solid of the stairs' stuff on the 1x4 footprint, 6 equal risers (storey 1.67 / 6) over the 3 ramp cells with
+       the treads centred on the walk ramp (Jumps.RampRise), so a pawn's feet sit on the treads; the solid 4th cell under
+       the exit ends just under the floor slab IsoRim draws there (1.54), so the slab is the landing. Treads, sides and back
+       plain "stuff" so the stairs read like walls of the same stuff, risers "stuff_dark", the hidden bottom "stuff_deep".
+       Written by tools/projectz/stairs1x4_blender.py (supersedes stairs_obj.js). -->
   <IsoRim.ModelDef>
     <defName>R3D_PZ_Stairs</defName>
     <thingDef>PZ_Stairs</thingDef>
@@ -16,8 +16,8 @@
   </IsoRim.ModelDef>
 
   <!-- The ship stairs (multi-level gravships P5): the same stairs model (pz_ship_stairs.obj = pz_stairs.obj with its materials
-       and texture coordinates changed, tools/projectz/ship_stairs_obj.js) with a ship texture: gravship plating, dark
-       seams, cyan strips along both sides and at the landing edge. Fixed colours (stuffless). -->
+       and texture coordinates changed, tools/projectz/ship_stairs_obj.js, regenerated from the 1x4 model 2026-10-21) with a
+       ship texture: gravship plating, dark seams, cyan strips along both sides and at the landing edge. Fixed colours (stuffless). -->
   <IsoRim.ModelDef MayRequire="Ludeon.RimWorld.Odyssey">
     <defName>R3D_PZ_ShipStairs</defName>
     <thingDef>PZ_ShipStairs</thingDef>
