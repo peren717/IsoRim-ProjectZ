@@ -19,6 +19,9 @@ namespace ProjectZ
     //     dead -> the corpse comes down to the bottom; ended otherwise (a forced job) -> it stays at its own end.
     //   - the link gone (LinkGone, from StairGrid.Deregister): climbers fall at once, waiting pawns' paths fail. Stairs
     //     too (their steps are one floor: a fall of under a floor only moves the pawn to the bottom).
+    //   - a powered elevator (Elevator.cs) is no ladder: any number ride at once, each step pays one tick per tick; a rider
+    //     is not overridden either; downed or dead in the car, it gets out at the nearer end of its ride (no fall); the
+    //     elevator gone, it falls down the shaft like a climber. Without power its links are ladders (ElevatorLadder).
     // Nothing is saved: a pawn saved mid-step starts its step again (TryResumePathingAfterLoading_Patch).
     public class LinkSteps : MapComponent
     {
@@ -98,7 +101,7 @@ namespace ProjectZ
                 return false;
             }
             Step st = s.Of(p);
-            return st != null && st.climbing && st.link.IsLadder && !p.Downed && !p.Dead && p.pather.Moving && p.pather.nextCell == st.to && p.Position == st.from;
+            return st != null && st.climbing && (st.link.IsLadder || st.link.IsElevator) && !p.Downed && !p.Dead && p.pather.Moving && p.pather.nextCell == st.to && p.Position == st.from;
         }
 
         // The path follower set up a link step.
@@ -125,7 +128,7 @@ namespace ProjectZ
         public float Pay(Pawn p)
         {
             Step st = Of(p);
-            if (st == null || !st.link.IsLadder || p.pather.nextCell != st.to || p.Position != st.from)
+            if (st == null || !(st.link.IsLadder || st.link.IsElevator) || p.pather.nextCell != st.to || p.Position != st.from)
             {
                 return -1f;
             }
@@ -160,7 +163,11 @@ namespace ProjectZ
                 if (p.Dead)
                 {
                     steps.RemoveAt(i);
-                    if (st.climbing)
+                    if (st.climbing && st.link.kind == LinkKind.Elevator && StairGrid.UsableIn(st.link, map))
+                    {
+                        CarCorpse(st);
+                    }
+                    else if (st.climbing)
                     {
                         LowerCorpse(st);
                     }
@@ -185,7 +192,11 @@ namespace ProjectZ
                 {
                     continue;   // arrived
                 }
-                if (st.climbing && (p.Downed || !StairGrid.UsableIn(st.link, map)))
+                if (st.climbing && p.Downed && st.link.kind == LinkKind.Elevator && StairGrid.UsableIn(st.link, map))
+                {
+                    GetOut(st);
+                }
+                else if (st.climbing && (p.Downed || !StairGrid.UsableIn(st.link, map)))
                 {
                     Fall(st);
                 }
@@ -198,7 +209,7 @@ namespace ProjectZ
         // pawn waiting for it pushes no one); otherwise both would wait for each other at its two ends.
         private void ClearEnd(Step st, Pawn p)
         {
-            if (!st.link.IsLadder || !st.to.InBounds(map) || !PawnUtility.ShouldCollideWithPawns(p))
+            if (!(st.link.IsLadder || st.link.IsElevator) || !st.to.InBounds(map) || !PawnUtility.ShouldCollideWithPawns(p))
             {
                 return;
             }
@@ -231,6 +242,10 @@ namespace ProjectZ
 
         private static float Height(Step st, float pct)
         {
+            if (st.link.IsElevator)
+            {
+                return Links.ElevatorHeight(st.up, st.link, pct);
+            }
             if (st.link.IsLadder)
             {
                 return Links.LadderHeight(st.up ? StepKind.LadderUp : StepKind.LadderDown, st.link, pct);
@@ -242,11 +257,12 @@ namespace ProjectZ
         private void Fall(Step st)
         {
             Pawn p = st.pawn;
-            int fallen = Mathf.FloorToInt(st.height + 0.001f);
+            // (an elevator's rider falls down the shaft to its lowest stop, the floors under its ride counted too)
+            IntVec3 bottom = ElevatorRule.ShaftBottom(st.link, map, out int below);
+            int fallen = Mathf.FloorToInt(st.height + 0.001f) + below;
             Falls++;
             FallFloors += fallen;
-            ProjectZ.DebugLog($"{p} falls off {st.link.thing} ({st.link.kind}) from {st.height:0.00} floors ({fallen} counted), at {p.Position} -> {st.link.bottom}");
-            IntVec3 bottom = st.link.bottom;
+            ProjectZ.DebugLog($"{p} falls off {st.link.thing} ({st.link.kind}) from {st.height:0.00} floors ({fallen} counted), at {p.Position} -> {bottom}");
             if (p.Position != bottom && bottom.InBounds(map))
             {
                 p.Position = bottom;
@@ -264,10 +280,37 @@ namespace ProjectZ
             }
         }
 
+        // Downed in a powered elevator: out at the nearer end of the ride, unhurt.
+        private void GetOut(Step st)
+        {
+            Pawn p = st.pawn;
+            IntVec3 at = st.height * 2f >= st.link.span ? st.link.top : st.link.bottom;
+            CarExits++;
+            ProjectZ.DebugLog($"{p} downed in {st.link.thing} at {st.height:0.00} floors: out at {at}");
+            if (p.Position != at && at.InBounds(map))
+            {
+                p.Position = at;
+            }
+            p.Notify_Teleported(endCurrentJob: true, resetTweenedPos: true);
+        }
+
+        private void CarCorpse(Step st)
+        {
+            Corpse corpse = st.pawn.Corpse;
+            IntVec3 at = st.height * 2f >= st.link.span ? st.link.top : st.link.bottom;
+            if (corpse != null && corpse.Spawned && corpse.Map == map && corpse.Position != at && at.InBounds(map))
+            {
+                corpse.Position = at;
+                CarExits++;
+            }
+        }
+
+        public static int CarExits;
+
         private void LowerCorpse(Step st)
         {
             Corpse corpse = st.pawn.Corpse;
-            IntVec3 bottom = st.link.bottom;
+            IntVec3 bottom = ElevatorRule.ShaftBottom(st.link, map, out _);
             if (corpse != null && corpse.Spawned && corpse.Map == map && corpse.Position != bottom && bottom.InBounds(map))
             {
                 corpse.Position = bottom;
@@ -285,7 +328,10 @@ namespace ProjectZ
 
         // A link went (StairGrid.Deregister): its climbers fall now; pawns waiting on it, or about to step onto it, give up
         // their path (the job asks again).
-        public static void LinkGone(Map map, Building thing)
+        public static void LinkGone(Map map, Building thing) => LinkGone(map, thing, IntVec3.Invalid, IntVec3.Invalid);
+
+        // Only the link of thing with these ends (Invalid: every link of it).
+        public static void LinkGone(Map map, Building thing, IntVec3 bottom, IntVec3 top)
         {
             LinkSteps s = For(map);
             if (s == null || s.steps.Count == 0)
@@ -295,7 +341,7 @@ namespace ProjectZ
             for (int i = s.steps.Count - 1; i >= 0; i--)
             {
                 Step st = s.steps[i];
-                if (st.link.thing != thing)
+                if (st.link.thing != thing || bottom.IsValid && (st.link.bottom != bottom || st.link.top != top))
                 {
                     continue;
                 }

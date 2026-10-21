@@ -86,7 +86,7 @@ namespace ProjectZ
             }
             if (LadderColumn.Reserved(top, map))
             {
-                return "PZ_LadderColumnOpen".Translate();
+                return LadderColumn.Refusal(top, map, false);
             }
             if (!ShipDeck.At(top, map))
             {

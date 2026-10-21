@@ -121,7 +121,7 @@ namespace ProjectZ
             }
             if (LadderColumn.Plane(below, map))
             {
-                return "PZ_LadderColumnOpen".Translate();
+                return LadderColumn.Refusal(below, map, true);
             }
             Thing tall = HeightRule.TallThingAt(below, map);
             if (tall != null)

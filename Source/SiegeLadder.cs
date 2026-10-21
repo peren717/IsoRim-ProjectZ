@@ -458,8 +458,13 @@ namespace ProjectZ
     // area). Built ladders (their link) and the player's emergency ladder not built yet (blueprint or frame: the column
     // LadderSite finds for it) reserve it. If it still fills up (a gravship landing, dev spawning, another mod: a floor or
     // building in it, a roof over it), the ladder is destroyed as if shot down: climbers fall (LadderColumnWatch).
+    // The player elevator's shaft (Elevator.cs, ElevatorRule.ShaftOwner) is kept open by the same rules; filled anyway,
+    // the elevator links only up to where it is still open (LadderColumnWatch tells it).
     public static class LadderColumn
     {
+        // The refusal for c (the elevator's own message in its shaft).
+        public static TaggedString Refusal(IntVec3 c, Map map, bool plane) => (Owner(c, map, plane) is Thing t && ElevatorRule.IsElevatorThing(t) ? "PZ_ElevatorShaftOpen" : "PZ_LadderColumnOpen").Translate();
+
         // c is an open cell of a ladder's column.
         public static bool Reserved(IntVec3 c, Map map) => Owner(c, map, false) != null;
 
@@ -472,6 +477,11 @@ namespace ProjectZ
             if (map == null || !c.IsValid || !c.InBounds(map) || ProjectZ.Annex(map) == null)
             {
                 return null;
+            }
+            Thing shaft = ElevatorRule.ShaftOwner(c, map, plane);
+            if (shaft != null)
+            {
+                return shaft;
             }
             StairGrid sg = StairGrid.For(map);
             List<Thing> bps = Sites(map, PZDefOf.PZ_EmergencyLadder?.blueprintDef);
@@ -491,7 +501,7 @@ namespace ProjectZ
                 for (int i = 0; i < sg.links.Count; i++)
                 {
                     VLink l = sg.links[i];
-                    if (l.IsLadder && Levels.Ground(l.bottom, map) == g && Holds(L, Levels.LevelOf(l.bottom, map), Levels.LevelOf(l.top, map), plane))
+                    if (l.IsLadder && !l.IsElevator && Levels.Ground(l.bottom, map) == g && Holds(L, Levels.LevelOf(l.bottom, map), Levels.LevelOf(l.top, map), plane))
                     {
                         return l.thing;
                     }
@@ -603,6 +613,11 @@ namespace ProjectZ
             {
                 foreach (bool plane in new[] { false, true })
                 {
+                    if (LadderColumn.Owner(c, map, plane) is Building_Elevator el && !el.Destroyed)
+                    {
+                        el.ShaftChanged();
+                        continue;
+                    }
                     if (LadderColumn.Owner(c, map, plane) is Building b && !b.Destroyed)
                     {
                         StairGrid sg = StairGrid.For(map);
@@ -647,7 +662,7 @@ namespace ProjectZ
             {
                 if (LadderColumn.Reserved(c, map))
                 {
-                    __result = "PZ_LadderColumnOpen".Translate();
+                    __result = LadderColumn.Refusal(c, map, false);
                     return;
                 }
             }
@@ -663,7 +678,7 @@ namespace ProjectZ
         {
             if (__result.Accepted && LadderColumn.Plane(c, __instance.Map))
             {
-                __result = "PZ_LadderColumnOpen".Translate();
+                __result = LadderColumn.Refusal(c, __instance.Map, true);
             }
         }
     }

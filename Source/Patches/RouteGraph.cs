@@ -261,8 +261,12 @@ namespace ProjectZ.Patches
                 AddNode(i, Low, l.low);
                 AddNode(i, High, l.bottom);
                 AddNode(i, Top, l.top);
-                pair[l.bottom] = l.top;
-                pair[l.top] = l.bottom;
+                if (!l.IsElevator)
+                {
+                    // (an elevator's exits are no neighbours for touching: several floors share them)
+                    pair[l.bottom] = l.top;
+                    pair[l.top] = l.bottom;
+                }
                 if (l.HasRamp)
                 {
                     rampOf[l.low] = i;
@@ -336,6 +340,9 @@ namespace ProjectZ.Patches
         // THE link test for a traveller: usable, and the regions of its cells let it in as the game's region search would
         // (Region.Allows: a door it may not open, a fence, danger).
         public bool Passable(int link, TraverseParms tp) => StairGrid.PassableIn(links[link], tp, map);
+
+        // Usable by this traveller where regions are not asked (dig parts): an elevator only for whom it lets in.
+        public bool UsableFor(int link, TraverseParms tp) => StairGrid.UsableFor(links[link], tp, map);
 
         // ---------------------------------------------------------------------------------------------- node parts
 
@@ -639,7 +646,8 @@ namespace ProjectZ.Patches
                 d.Clear();
                 for (int i = 0; i < links.Count; i++)
                 {
-                    if (!Usable(i))
+                    // (wall breakers are raiders and the like: never let into a player's elevator)
+                    if (!Usable(i) || links[i].IsElevator)
                     {
                         continue;
                     }

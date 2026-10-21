@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <PZ_Elevator.label>电梯</PZ_Elevator.label>
+  <PZ_Elevator.description>通电后沿电梯井到达上面每一层，每层的停靠点在门的一侧。电梯井要留空。没电时可以当梯子爬。</PZ_Elevator.description>
+</LanguageData>

@@ -47,6 +47,10 @@ namespace ProjectZ.Dev
     //                                   -projectzraidref=<tag>: compare RA's end state; -projectzraidtiming: every plan made twice,
     //                                   timed; the mountain-top case "mt" with
     //                                   -projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt)
+    //                                   elevator: the player elevator (rides and timings, route choice, several riders, hauling,
+    //                                   a tame animal, visitors, raiders and prisoners kept out, power cut and the emergency
+    //                                   ladder, carrying, the shaft kept open and its safety net, a blocked stop, shots, save
+    //                                   mid-ride, gone mid-ride, real raids; TestElevator), -projectzfloors=5 -projectzseed=7
     //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
     //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
     //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
@@ -660,6 +664,11 @@ namespace ProjectZ.Dev
                 StepLadders(map);
                 return;
             }
+            if (stage.StartsWith("el_"))
+            {
+                StepElevator(map);
+                return;
+            }
             if (stage.StartsWith("os_"))
             {
                 StepOldStairs(map);
@@ -1035,6 +1044,10 @@ namespace ProjectZ.Dev
                     else if (mode == "ladders")
                     {
                         stage = "ld_setup";
+                    }
+                    else if (mode == "elevator")
+                    {
+                        stage = "el_setup";
                     }
                     else if (mode == "oldstairs")
                     {

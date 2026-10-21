@@ -540,7 +540,7 @@ namespace ProjectZ.Patches
             if (kind == RouteGraph.High)
             {
                 int link = g.nodes[u].link;
-                if (!c.dig ? g.Passable(link, c.tp) : g.Usable(link))
+                if (!c.dig ? g.Passable(link, c.tp) : g.UsableFor(link, c.tp))
                 {
                     IntVec3 top = g.links[link].top;
                     nbrs.Add((u + 1, Exact(c, u, u + 1, KindStep, StepCost(c.map, g.links[link].stepTicks, top, c.tp, g.links[link].IsLadder), new List<IntVec3> { top })));
@@ -629,7 +629,7 @@ namespace ProjectZ.Patches
                     nbrs.Add((h, Exact(c, u, h, KindRamp, 0, new List<IntVec3>())));
                 }
             }
-            else if (!c.dig ? g.Passable(lk, c.tp) : g.Usable(lk))
+            else if (!c.dig ? g.Passable(lk, c.tp) : g.UsableFor(lk, c.tp))
             {
                 IntVec3 hc = g.links[lk].bottom;
                 nbrs.Add((h, Exact(c, u, h, KindStep, StepCost(c.map, g.links[lk].stepTicks, hc, c.tp, g.links[lk].IsLadder), new List<IntVec3> { hc })));

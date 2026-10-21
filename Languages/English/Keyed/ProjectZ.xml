@@ -80,4 +80,10 @@
   <PZ_StairsPart3>end block</PZ_StairsPart3>
   <PZ_LadderColumnOpen>Keep the space along the ladder open</PZ_LadderColumnOpen>
   <PZ_LadderColumnBlocked>Something is in the way down</PZ_LadderColumnBlocked>
+  <PZ_ElevatorShaftOpen>Keep the elevator shaft open</PZ_ElevatorShaftOpen>
+  <PZ_ElevatorShaftBlocked>The shaft above is blocked</PZ_ElevatorShaftBlocked>
+  <PZ_ElevatorNoFloorAbove>No floor above</PZ_ElevatorNoFloorAbove>
+  <PZ_ElevatorNoExit>The door side is off the map</PZ_ElevatorNoExit>
+  <PZ_ElevatorStops>Stops at floors {0}</PZ_ElevatorStops>
+  <PZ_ElevatorNoPower>No power: climbed like a ladder</PZ_ElevatorNoPower>
 </LanguageData>
