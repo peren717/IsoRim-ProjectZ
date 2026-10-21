@@ -19,10 +19,11 @@ namespace ProjectZ
     //     the side the ladder leans on (toward the top cell). The building's own sprite is not printed while these show
     //     (Building_SiegeLadder.Print, Replaces).
     // Each piece is drawn on the rows of its own level at its height over that floor (Api.DrawModel, true space as IsoRim's
-    // floors expect), so a hidden level hides its pieces as it hides its pawns. A level faded while peeking
-    // (Api.PeekUpperFloors) would get them solid (DrawModel draws outside a thing's draw and takes no floor fade), so
-    // levels above the viewed one are left out, as the power risers do (RiserView). IsoRim Api >= 8 only, behind
-    // no-inline methods; 3D or IsoRim's models off: nothing here (the 2D placeholders show).
+    // floors expect), so a hidden level hides its pieces as it hides its pawns. While peeking (Api.PeekUpperFloors) the
+    // levels above the viewed one are drawn too: from IsoRim Api 10 DrawModel fades a piece on a faded level as that
+    // level's own things (and draws nothing on a level still hidden). An older IsoRim would draw them solid there, so
+    // with Api < 10 levels above the viewed one are left out, as the power risers do (RiserView). IsoRim Api >= 8 only,
+    // behind no-inline methods; 3D or IsoRim's models off: nothing here (the 2D placeholders show).
     public static class LiftModels
     {
         public const int ElevatorShaft = 0, ElevatorTop = 1, Platform = 2, LadderFoot = 3, LadderSegment = 4, LadderTop = 5, LiftBase = 6, LiftMast = 7, LiftTop = 8;
@@ -46,8 +47,12 @@ namespace ProjectZ
         public static int Pieces, LastFrame = -1;
         public static bool DrawAboveView;
 
-        // A level's pieces are drawn: the viewed level and those under it.
-        public static bool LevelDrawn(int level, int view) => DrawAboveView || level <= view;
+        // A level's pieces are drawn: the viewed level and those under it; while peeking with IsoRim Api >= 10 also those
+        // above (IsoRim fades the faded levels' pieces and leaves out the hidden ones).
+        public static bool LevelDrawn(int level, int view) => DrawAboveView || level <= view || (IsoRimBridge.Present && IsoRimBridge.ApiVersion >= 10 && Peeking());
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static bool Peeking() => IsoRim.Api.PeekUpperFloors;
 
         // The model of a part (an IsoRim.ModelHandle; null if it did not load). Only with IsoRim Api >= 8.
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

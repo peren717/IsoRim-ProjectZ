@@ -546,7 +546,7 @@ namespace ProjectZ
                 int floor = ProjectZ.FloorOf(p.Position, map);
                 if (!LiftModels.LevelDrawn(floor, view))
                 {
-                    continue;   // the rider's floor is not drawn solid (hidden, or faded while peeking: LiftModels)
+                    continue;   // the rider's floor is not drawn (above the viewed one; while peeking with IsoRim Api >= 10 it is, faded: LiftModels)
                 }
                 Thing el = st.link.thing;
                 IntVec3 shaft = el != null ? ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(el.Position, map), floor, map) : IntVec3.Invalid;

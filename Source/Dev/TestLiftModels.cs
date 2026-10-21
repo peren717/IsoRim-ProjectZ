@@ -10,7 +10,7 @@ namespace ProjectZ.Dev
     // Mode liftmodels (the elevator, ladder and lift models, LiftModels.cs; run with -projectzfloors=5 -projectzseed=7).
     // Screenshots in the 3D view, each scene built in one cleared area (router2's R2Clear), the camera on it, from several
     // views: every level shown (viewing the top), the ground viewed (upper levels hidden), a middle level viewed, the camera
-    // turned 90 and 180 degrees, peeking (IsoRim Api 7), the 3D view off. The pieces drawn are counted per view against
+    // turned 90 and 180 degrees, peeking (IsoRim Api 7; from Api 10 the ground and level 1 viewed: the levels over it faded), the 3D view off. The pieces drawn are counted per view against
     // what each scene should show.
     //   all    the elevator at (19, 13) turned east, its shaft open to the top (5 storeys); a raiders' ladder up to level 2,
     //          the player's emergency ladder from level 3, a mechanoid lift up to level 4, all on the west edge of
@@ -118,7 +118,13 @@ namespace ProjectZ.Dev
             };
             if (peek)
             {
-                v.Add(new LmView { name = "peek1", floor = 1, peek = true });
+                // IsoRim Api >= 10: while peeking every level's pieces are handed to IsoRim, which fades the two levels over
+                // the viewed one (25%, 12.5%) and leaves out the rest; older: only the viewed level and under.
+                bool fades = IsoRimBridge.ApiVersion >= 10;
+                v.Add(new LmView { name = "peek0", floor = 0, peek = true, expect = fades ? all : ground });
+                v.Add(new LmView { name = "peek0_turn90", floor = 0, peek = true, yaw = 90f, expect = fades ? all : ground });
+                v.Add(new LmView { name = "peek0_close", floor = 0, peek = true, expect = fades ? all : ground, size = 4.5f, cx = 19, cz = 14 });
+                v.Add(new LmView { name = "peek1", floor = 1, peek = true, expect = fades ? all : -1 });
                 v.Add(new LmView { name = "peek1_drawn", floor = 1, peek = true, above = true });
             }
             if (flat)
@@ -210,6 +216,7 @@ namespace ProjectZ.Dev
                         new LmView { name = "ground", floor = 0, expect = 0 },
                         new LmView { name = "turn90", floor = 4, yaw = 90f, expect = 5 },
                         new LmView { name = "turn180", floor = 4, yaw = 180f, expect = 5 },
+                        new LmView { name = "peek0", floor = 0, peek = true, expect = IsoRimBridge.ApiVersion >= 10 ? 5 : 0 },
                     },
                 },
             };
