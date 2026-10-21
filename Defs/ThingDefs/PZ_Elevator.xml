@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- The player elevator (Source/Elevator.cs, user 2026-10-20): 1x1, its rotation is its door side; the shaft over it is
+       kept open through every floor above; a stop on the door side of each floor; 0.5 s + 0.65 s per floor, any number
+       of riders; without power a ladder (3 s per floor). Placeholder sprite (a shaft frame open on the door side). -->
+  <ThingDef ParentName="BuildingBase">
+    <defName>PZ_Elevator</defName>
+    <label>elevator</label>
+    <description>A powered lift up its shaft to every floor above, with a stop on its door side on each floor. Keep the shaft open. Without power it can still be climbed like a ladder.</description>
+    <thingClass>ProjectZ.Building_Elevator</thingClass>
+    <graphicData>
+      <texPath>ProjectZ/Elevator</texPath>
+      <graphicClass>Graphic_Multi</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>Impassable</passability>
+    <fillPercent>0.5</fillPercent>
+    <disableImpassableShotOverConfigError>true</disableImpassableShotOverConfigError>
+    <castEdgeShadows>false</castEdgeShadows>
+    <rotatable>true</rotatable>
+    <size>(1,1)</size>
+    <tickerType>Rare</tickerType>
+    <techLevel>Industrial</techLevel>
+    <statBases>
+      <MaxHitPoints>250</MaxHitPoints>
+      <WorkToBuild>3000</WorkToBuild>
+      <Flammability>0.5</Flammability>
+      <Beauty>-2</Beauty>
+      <Mass>60</Mass>
+    </statBases>
+    <costList>
+      <Steel>100</Steel>
+      <ComponentIndustrial>4</ComponentIndustrial>
+    </costList>
+    <researchPrerequisites>
+      <li>Machining</li>
+    </researchPrerequisites>
+    <designationCategory>Structure</designationCategory>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_Elevator</li>
+    </placeWorkers>
+    <comps>
+      <li Class="CompProperties_Power">
+        <compClass>CompPowerTrader</compClass>
+        <basePowerConsumption>150</basePowerConsumption>
+      </li>
+    </comps>
+    <building>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <uiOrder>2905</uiOrder>
+  </ThingDef>
+
+</Defs>

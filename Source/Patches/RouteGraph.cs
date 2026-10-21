@@ -261,8 +261,12 @@ namespace ProjectZ.Patches
                 AddNode(i, Low, l.low);
                 AddNode(i, High, l.bottom);
                 AddNode(i, Top, l.top);
-                pair[l.bottom] = l.top;
-                pair[l.top] = l.bottom;
+                if (!l.IsElevator)
+                {
+                    // (an elevator's exits are no neighbours for touching: several floors share them)
+                    pair[l.bottom] = l.top;
+                    pair[l.top] = l.bottom;
+                }
                 if (l.HasRamp)
                 {
                     rampOf[l.low] = i;
@@ -336,6 +340,9 @@ namespace ProjectZ.Patches
         // THE link test for a traveller: usable, and the regions of its cells let it in as the game's region search would
         // (Region.Allows: a door it may not open, a fence, danger).
         public bool Passable(int link, TraverseParms tp) => StairGrid.PassableIn(links[link], tp, map);
+
+        // Usable by this traveller where regions are not asked (dig parts): an elevator only for whom it lets in.
+        public bool UsableFor(int link, TraverseParms tp) => StairGrid.UsableFor(links[link], tp, map);
 
         // ---------------------------------------------------------------------------------------------- node parts
 
@@ -512,6 +519,43 @@ namespace ProjectZ.Patches
             return side;
         }
 
+        // K2 for a thing with several links (an elevator): would taking all of them up cut the part at 'side' off from the
+        // map edge (it reaches the edge now, and no longer without them)?
+        public bool CutsOff(Thing thing, IntVec3 side)
+        {
+            EnsureComps();
+            int sp = PartAt(side);
+            if (sp < 0)
+            {
+                return false;
+            }
+            Dictionary<int, int> d = new Dictionary<int, int>();
+            for (int i = 0; i < links.Count; i++)
+            {
+                if (!Usable(i) || ReferenceEquals(links[i].thing, thing))
+                {
+                    continue;
+                }
+                int a = nodePart[i * 3], h = nodePart[i * 3 + 1], b = nodePart[i * 3 + 2];
+                if (a >= 0 && h >= 0)
+                {
+                    Union(d, a, h);
+                }
+                if (h >= 0 && b >= 0)
+                {
+                    Union(d, h, b);
+                }
+            }
+            int now = FindRoot(uf, sp), without = FindRoot(d, sp);
+            bool edgeNow = false, edgeWithout = false;
+            foreach (int p in edgeParts)
+            {
+                edgeNow |= FindRoot(uf, p) == now;
+                edgeWithout |= FindRoot(d, p) == without;
+            }
+            return edgeNow && !edgeWithout;
+        }
+
         // ---------------------------------------------------------------------------------------------- dig parts
 
         // Traversal modes that break walls (sappers, breachers, a pawn digging out): per floor, the cells joined over
@@ -639,7 +683,8 @@ namespace ProjectZ.Patches
                 d.Clear();
                 for (int i = 0; i < links.Count; i++)
                 {
-                    if (!Usable(i))
+                    // (wall breakers are raiders and the like: never let into a player's elevator)
+                    if (!Usable(i) || links[i].IsElevator)
                     {
                         continue;
                     }

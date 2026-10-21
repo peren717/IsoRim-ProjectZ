@@ -80,4 +80,12 @@
   <PZ_StairsPart3>末端实心格</PZ_StairsPart3>
   <PZ_LadderColumnOpen>梯子经过的空间要留空</PZ_LadderColumnOpen>
   <PZ_LadderColumnBlocked>下方的路被挡住了</PZ_LadderColumnBlocked>
+  <PZ_ElevatorShaftOpen>电梯井要留空</PZ_ElevatorShaftOpen>
+  <PZ_ElevatorShaftBlocked>上方的电梯井被挡住了</PZ_ElevatorShaftBlocked>
+  <PZ_ElevatorNoFloorAbove>上面没有楼层</PZ_ElevatorNoFloorAbove>
+  <PZ_ElevatorNoExit>门的一侧在地图外</PZ_ElevatorNoExit>
+  <PZ_ElevatorStops>停靠楼层：{0}</PZ_ElevatorStops>
+  <PZ_ElevatorCap>这块楼板会封住电梯井，电梯只到它下面</PZ_ElevatorCap>
+  <PZ_ElevatorLastWay>这是离开这里的最后一条路</PZ_ElevatorLastWay>
+  <PZ_ElevatorNoPower>没电：当梯子爬</PZ_ElevatorNoPower>
 </LanguageData>

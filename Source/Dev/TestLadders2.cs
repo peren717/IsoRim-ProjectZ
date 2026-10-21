@@ -117,8 +117,9 @@ namespace ProjectZ.Dev
         {
             tickWatch = null;
             Draft(r2P, true);
-            Result("COL a colonist roofing the area builds the roof beside the column, none over it; the ladder stands",
-                map.roofGrid.Roofed(LdG(18, 13)) && !map.roofGrid.Roofed(ldFoot) && !map.roofGrid.Roofed(Ld2Col(1, map)) && ldLadder.Spawned,
+            // (the column carries its own invisible stairwell roof since the elevator round 2, ColumnRoof: no built roof over it)
+            Result("COL a colonist roofing the area builds the roof beside the column, none over it (only the column's own stairwell roof); the ladder stands",
+                map.roofGrid.Roofed(LdG(18, 13)) && map.roofGrid.RoofAt(ldFoot) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(Ld2Col(1, map)) == PZDefOf.PZ_StairwellRoof && ldLadder.Spawned,
                 $"beside {map.roofGrid.Roofed(LdG(18, 13))}, foot {map.roofGrid.Roofed(ldFoot)}, level 1 {map.roofGrid.Roofed(Ld2Col(1, map))}, ladder {ldLadder.Spawned}, worker job {r2P.CurJobDef?.defName}");
             map.areaManager.BuildRoof[ldFoot] = false;
             map.areaManager.BuildRoof[Ld2Col(1, map)] = false;
@@ -195,13 +196,23 @@ namespace ProjectZ.Dev
                 }
             }
             SeedTicks("ld_col_net_fill" + ld2Mode);
-            TickUntil(120, () => ldLadder.Destroyed && Links.Kind(r2P) == StepKind.None, "ld_col_net_check", 1);
+            // (a roof written over the column becomes its own stairwell roof, ColumnRoof: it closes nothing, the climb goes on)
+            TickUntil(ld2Mode == 1 ? 1200 : 120, () => ld2Mode == 1 ? Links.Kind(r2P) == StepKind.None : ldLadder.Destroyed && Links.Kind(r2P) == StepKind.None, "ld_col_net_check", 1);
         }
 
         private static void Ld2NetCheck(Map map)
         {
             tickWatch = null;
             string what = ld2Mode == 0 ? "a floor laid in the column" : ld2Mode == 1 ? "a roof put over its foot" : "a wall spawned in the column";
+            if (ld2Mode == 1)
+            {
+                Result("COL a roof put over its foot becomes the column's own stairwell roof: the ladder stands, the climber gets up",
+                    ldLadder.Spawned && map.roofGrid.RoofAt(ldFoot) == PZDefOf.PZ_StairwellRoof && LinkSteps.Falls == ld2Falls0 && Levels.LevelOf(r2P.Position, map) > 0,
+                    $"roof {map.roofGrid.RoofAt(ldFoot)?.defName}, ladder spawned {ldLadder.Spawned}, falls {LinkSteps.Falls - ld2Falls0}, climber at {r2P.Position} L{Levels.LevelOf(r2P.Position, map)}");
+                ld2Mode++;
+                stage = "ld_col_net";
+                return;
+            }
             Result($"COL safety net: {what} brings the ladder down at once; the climber falls from {ldHeightAt:0.0} floors",
                 ldLadder.Destroyed && LinkSteps.Falls > ld2Falls0 && Levels.LevelOf(r2P.Position, map) == 0 && StairGrid.For(map)?.IndexOf(ldLadder) is null or < 0,
                 $"ladder destroyed {ldLadder.Destroyed}, falls {LinkSteps.Falls - ld2Falls0}, climber at {r2P.Position} L{Levels.LevelOf(r2P.Position, map)}, column kills {LadderColumnWatch.Destroyed}");

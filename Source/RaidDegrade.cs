@@ -433,7 +433,8 @@ namespace ProjectZ
                     VLink l = sg.links[i];
                     foreach (IntVec3 c in new[] { l.top, l.bottom })
                     {
-                        if (Levels.LevelOf(c, map) != L || !sg.Usable(l) || ClimbPlanner.CompAt(g, c, map) != comp)
+                        // (raiders never ride a player elevator)
+                        if (Levels.LevelOf(c, map) != L || !sg.Usable(l) || l.IsElevator || ClimbPlanner.CompAt(g, c, map) != comp)
                         {
                             continue;
                         }

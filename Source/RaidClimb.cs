@@ -654,7 +654,7 @@ namespace ProjectZ
             for (int i = 0; i < sg.links.Count; i++)
             {
                 VLink l = sg.links[i];
-                if (l.IsLadder && l.bottom == foot && l.top == top)
+                if (l.IsLadder && !l.IsElevator && l.bottom == foot && l.top == top)
                 {
                     return l.thing as Building_SiegeLadder;
                 }

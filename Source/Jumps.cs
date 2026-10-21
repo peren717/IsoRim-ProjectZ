@@ -164,7 +164,9 @@ namespace ProjectZ
         StairUp,
         StairDown,
         LadderUp,
-        LadderDown
+        LadderDown,
+        ElevatorUp,
+        ElevatorDown
     }
 
     // The single place that says what a pawn's current step is, and how it is drawn (rise and horizontal position).
@@ -202,6 +204,10 @@ namespace ProjectZ
             }
             link = g.links[i];
             bool up = next == link.top;
+            if (link.IsElevator)
+            {
+                return up ? StepKind.ElevatorUp : StepKind.ElevatorDown;
+            }
             if (link.IsLadder)
             {
                 return up ? StepKind.LadderUp : StepKind.LadderDown;
@@ -221,6 +227,21 @@ namespace ProjectZ
                 return l.span * Mathf.Clamp01(pct / (1f - LadderAcross));
             }
             return l.span * (1f - Mathf.Clamp01((pct - LadderAcross) / (1f - LadderAcross)));
+        }
+
+        // An elevator ride is drawn as: from the exit into the shaft, up (or down) the shaft, out onto the other exit. The
+        // way in and the way out take ElevatorDoorTicks each (a part of the step at most ElevatorDoorMax).
+        public const int ElevatorDoorTicks = 15;
+        public const float ElevatorDoorMax = 0.3f;
+
+        public static float ElevatorDoor(VLink l) => Mathf.Min(ElevatorDoorMax, ElevatorDoorTicks / (float)Mathf.Max(1, l.stepTicks));
+
+        // How far up the shaft a rider is, in floors over the lower exit (0 .. span).
+        public static float ElevatorHeight(bool up, VLink l, float pct)
+        {
+            float a = ElevatorDoor(l);
+            float v = Mathf.Clamp01((pct - a) / (1f - 2f * a));
+            return up ? l.span * v : l.span * (1f - v);
         }
 
         // How high a ramp cell lifts a pawn standing on it (cells over its floor): the middle of its third.
@@ -250,6 +271,12 @@ namespace ProjectZ
                 return perched * storey;   // up a ladder, clearing its top (stage 3)
             }
             StepKind k = Kind(p, out VLink link);
+            if (k == StepKind.ElevatorUp || k == StepKind.ElevatorDown)
+            {
+                // up the shaft (over the floor it stands on: the lower exit going up, the upper coming down)
+                float h = ElevatorHeight(k == StepKind.ElevatorUp, link, p.pather.MovePercentage);
+                return (k == StepKind.ElevatorUp ? h : h - link.span) * storey;
+            }
             if (k == StepKind.LadderUp || k == StepKind.LadderDown)
             {
                 // up the foot's column (over the floor it stands on: the foot going up, the top coming down)
@@ -304,6 +331,22 @@ namespace ProjectZ
                 to = pos;
             }
             float pct = Mathf.Clamp01(p.pather.MovePercentage);
+            if (k == StepKind.ElevatorUp || k == StepKind.ElevatorDown)
+            {
+                // into the shaft, along it, out again (the shaft over the elevator, on this floor's rows)
+                StairGrid sg = StairGrid.For(map);
+                int li = sg == null ? -1 : sg.StepLink(pos, p.pather.nextCell);
+                VLink l = li < 0 ? default : sg.links[li];
+                IntVec3 shaft = l.thing == null ? pos : ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(l.thing.Position, map), ProjectZ.FloorOf(pos, map), map);
+                if (!shaft.IsValid)
+                {
+                    shaft = pos;
+                }
+                float a = li < 0 ? ElevatorDoorMax : ElevatorDoor(l);
+                Vector3 s = shaft.ToVector3Shifted();
+                at = pct < a ? Vector3.Lerp(pos.ToVector3Shifted(), s, pct / a) : pct > 1f - a ? Vector3.Lerp(s, to.ToVector3Shifted(), (pct - (1f - a)) / a) : s;
+                return true;
+            }
             if (k == StepKind.LadderUp)
             {
                 pct = Mathf.Clamp01((pct - (1f - LadderAcross)) / LadderAcross);   // across onto the top at the end
@@ -326,7 +369,7 @@ namespace ProjectZ
         public static int Direction(Pawn p)
         {
             StepKind k = Links.Kind(p);
-            return k == StepKind.StairUp || k == StepKind.LadderUp ? 1 : k == StepKind.StairDown || k == StepKind.LadderDown ? -1 : 0;
+            return k == StepKind.StairUp || k == StepKind.LadderUp || k == StepKind.ElevatorUp ? 1 : k == StepKind.StairDown || k == StepKind.LadderDown || k == StepKind.ElevatorDown ? -1 : 0;
         }
     }
 }

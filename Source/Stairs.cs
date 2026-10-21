@@ -20,12 +20,17 @@ namespace ProjectZ
     //     and middle L1, span 1, step Climb.StepTicks.
     //   Ladder / lift (SiegeLadder.cs): bottom = low = mid = the foot (no ramp), top = the cell beside the open column,
     //     span floors up, step LadderTicksPerFloor x span.
+    //   Elevator (Elevator.cs): bottom = low = mid = the door-side exit on a lower floor, top = the exit on a higher floor
+    //     (one link per pair of floors along the shaft), step ElevatorBoardTicks + ElevatorTicksPerFloor x span; without
+    //     power the same links as ElevatorLadder (a ladder: LadderTicksPerFloor x span, one at a time, falls).
     // topBlocker: the top is a wall or rock to clear after the climb (later stages; stage 1 never registers one).
     public enum LinkKind
     {
         Stairs,
         Ladder,
-        Lift
+        Lift,
+        Elevator,
+        ElevatorLadder
     }
 
     public struct VLink
@@ -45,9 +50,15 @@ namespace ProjectZ
 
         public bool HasRamp => kind == LinkKind.Stairs;
 
-        public bool IsLadder => kind != LinkKind.Stairs;
+        // ladder rules: one climber at a time, falls (an elevator without power too)
+        public bool IsLadder => kind == LinkKind.Ladder || kind == LinkKind.Lift || kind == LinkKind.ElevatorLadder;
+
+        // a player elevator, powered or not (its links join its door-side exits; no column of their own, no touch across)
+        public bool IsElevator => kind == LinkKind.Elevator || kind == LinkKind.ElevatorLadder;
 
         public const int LadderTicksPerFloor = 180;   // 3 s per floor (design)
+        public const int ElevatorBoardTicks = 30;      // 0.5 s boarding (user 2026-10-20)
+        public const int ElevatorTicksPerFloor = 39;   // 0.65 s per floor
 
         public static VLink Stairs(Building_Stairs s, IntVec3 bottom, IntVec3 top, Map map)
         {
@@ -58,6 +69,11 @@ namespace ProjectZ
         public static VLink Ladder(LinkKind kind, Building b, IntVec3 foot, IntVec3 top, int span, bool topBlocker, Map map)
         {
             return new VLink { kind = kind, low = foot, mid = foot, bottom = foot, top = top, floor = ProjectZ.FloorOf(foot, map), span = span, stepTicks = LadderTicksPerFloor * span, topBlocker = topBlocker, thing = b };
+        }
+
+        public static VLink Elevator(Building b, IntVec3 lower, IntVec3 upper, int span, bool powered, Map map)
+        {
+            return new VLink { kind = powered ? LinkKind.Elevator : LinkKind.ElevatorLadder, low = lower, mid = lower, bottom = lower, top = upper, floor = ProjectZ.FloorOf(lower, map), span = span, stepTicks = powered ? ElevatorBoardTicks + ElevatorTicksPerFloor * span : LadderTicksPerFloor * span, thing = b };
         }
     }
 
@@ -218,6 +234,23 @@ namespace ProjectZ
             Changed();
         }
 
+        // A thing with several links (an elevator: one per pair of floors) takes a new set at once. Pawns on a link that
+        // stays (the same two ends) finish their step as it began; a link that goes drops its climbers (LinkSteps).
+        public void Replace(Building s, List<VLink> now)
+        {
+            List<VLink> was = links.FindAll(l => l.thing == s);
+            links.RemoveAll(l => l.thing == s);
+            links.AddRange(now);
+            Changed();
+            foreach (VLink o in was)
+            {
+                if (!now.Exists(n => n.bottom == o.bottom && n.top == o.top))
+                {
+                    LinkSteps.LinkGone(map, s, o.bottom, o.top);
+                }
+            }
+        }
+
         public void Deregister(Building s, bool notify = true)
         {
             int removed = links.RemoveAll(l => l.thing == s);
@@ -288,9 +321,12 @@ namespace ProjectZ
         // game's region search would (a door it can't or may not open, a fence, danger: Region.Allows).
         public bool Passable(VLink l, TraverseParms tp) => PassableIn(l, tp, map);
 
+        // Usable, and an elevator only for whom it lets in (the router's test on dig parts, where regions are not asked).
+        public static bool UsableFor(VLink l, TraverseParms tp, Map map) => UsableIn(l, map) && (!l.IsElevator || ElevatorRule.MayUse(l.thing, tp.pawn));
+
         public static bool PassableIn(VLink l, TraverseParms tp, Map map)
         {
-            if (!UsableIn(l, map))
+            if (!UsableIn(l, map) || l.IsElevator && !ElevatorRule.MayUse(l.thing, tp.pawn))
             {
                 return false;
             }
@@ -507,7 +543,8 @@ namespace ProjectZ
             }
             // (one rule: an opening is a stairs thing or a mined shaft under a covered top; a hole to the sky keeps a roof
             // built over it, Shaft.ApplyRoof)
-            bool well = StairThingAt(c, map) || Shaft.Covered(c, map);
+            // (an elevator shaft and a ladder column too: ColumnRoof)
+            bool well = StairThingAt(c, map) || Shaft.Covered(c, map) || ColumnRoof.Open(c, map);
             if (well && def != PZDefOf.PZ_StairwellRoof)
             {
                 return PZDefOf.PZ_StairwellRoof;
@@ -655,8 +692,8 @@ namespace ProjectZ
             }
             if (LadderColumn.Reserved(top, map))
             {
-                // (no landing laid in a ladder's open column)
-                return "PZ_LadderColumnOpen".Translate();
+                // (no landing laid in a ladder's open column or an elevator's shaft)
+                return LadderColumn.Refusal(top, map, false);
             }
             if (top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
