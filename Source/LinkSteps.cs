@@ -62,9 +62,11 @@ namespace ProjectZ
             return last;
         }
 
-        // (a platform drawn under each powered elevator rider: Elevator.cs, ElevatorDraw)
+        // (the elevators' shafts and the ladders' and lifts' models: LiftModels; a platform drawn under each powered
+        // elevator rider: Elevator.cs, ElevatorDraw)
         public override void MapComponentUpdate()
         {
+            LiftModels.Draw(map);
             if (steps.Count > 0)
             {
                 ElevatorDraw.Platforms(map, steps);

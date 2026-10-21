@@ -669,6 +669,11 @@ namespace ProjectZ.Dev
                 StepElevator(map);
                 return;
             }
+            if (stage.StartsWith("lm_"))
+            {
+                StepLiftModels(map);
+                return;
+            }
             if (stage.StartsWith("os_"))
             {
                 StepOldStairs(map);
@@ -1048,6 +1053,10 @@ namespace ProjectZ.Dev
                     else if (mode == "elevator")
                     {
                         stage = "el_setup";
+                    }
+                    else if (mode == "liftmodels")
+                    {
+                        stage = "lm_setup";
                     }
                     else if (mode == "oldstairs")
                     {

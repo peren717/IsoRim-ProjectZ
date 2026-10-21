@@ -26,4 +26,15 @@
     <groundShadow>false</groundShadow>
   </IsoRim.ModelDef>
 
+  <!-- The elevator's base (Grok 2026-10-20, user-approved): the shaft's first storey, an open steel frame with its door
+       side to the north as modelled (the game turns it to the elevator's rotation), a floor plate and a machine box.
+       Fixed colours (pz_lifts.mtl). The shaft segments over it, its top piece and the rider's platform are drawn each
+       frame (Source/LiftModels.cs, ElevatorDraw); the base is a storey tall, which HeightRule leaves to the shaft rules. -->
+  <IsoRim.ModelDef>
+    <defName>R3D_PZ_Elevator</defName>
+    <thingDef>PZ_Elevator</thingDef>
+    <model>Models/pz_elevator_base.obj</model>
+    <groundShadow>false</groundShadow>
+  </IsoRim.ModelDef>
+
 </Defs>

@@ -74,6 +74,16 @@ namespace ProjectZ
             base.DeSpawn(mode);
         }
 
+        // In 3D its models stand in for the sprite (LiftModels): nothing printed then.
+        public override void Print(SectionLayer layer)
+        {
+            if (LiftModels.Replaces(this))
+            {
+                return;
+            }
+            base.Print(layer);
+        }
+
         public override string GetInspectString()
         {
             string s = base.GetInspectString();

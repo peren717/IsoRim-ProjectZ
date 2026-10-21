@@ -509,14 +509,12 @@ namespace ProjectZ
         public static int Applied;
     }
 
-    // A small platform under each powered elevator rider, moving with it (IsoRim Api 8: Api.LoadModel / Api.DrawModel;
-    // an older IsoRim or none: nothing). Drawn each frame from LinkSteps.MapComponentUpdate, at the rider's drawn spot
-    // (its floor's rows) and its rise in the shaft (Links.Rise: true height over its own floor, as IsoRim's floors expect).
+    // The platform under each powered elevator rider, moving with it (IsoRim Api 8: Api.LoadModel / Api.DrawModel;
+    // an older IsoRim or none: nothing). Drawn each frame from LinkSteps.MapComponentUpdate, in the shaft (the elevator's
+    // cell on the rider's floor's rows), turned to the door side, its deck at the rider's feet (Links.Rise: true height
+    // over its own floor, as IsoRim's floors expect). The model: pz_elevator_platform.obj (LiftModels).
     public static class ElevatorDraw
     {
-        private static object model;
-        private static bool tried;
-
         // (tests) platforms drawn
         public static int Drawn;
 
@@ -526,25 +524,17 @@ namespace ProjectZ
             {
                 return;
             }
-            Draw(steps);
+            Draw(map, steps);
         }
 
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-        private static void Draw(List<LinkSteps.Step> steps)
+        private static void Draw(Map map, List<LinkSteps.Step> steps)
         {
-            if (!IsoRim.Api.ModelsOn)
+            if (!IsoRim.Api.ModelsOn || !(LiftModels.Handle(LiftModels.Platform) is IsoRim.ModelHandle m))
             {
                 return;
             }
-            if (!tried)
-            {
-                tried = true;
-                model = IsoRim.Api.LoadModel(LoadedModManager.GetMod<ProjectZMod>()?.Content, "Models/pz_elevator_platform.obj");
-            }
-            if (!(model is IsoRim.ModelHandle m))
-            {
-                return;
-            }
+            int view = FloorView.Current;
             for (int i = 0; i < steps.Count; i++)
             {
                 LinkSteps.Step st = steps[i];
@@ -553,8 +543,15 @@ namespace ProjectZ
                 {
                     continue;
                 }
-                Vector3 d = p.DrawPos;
-                IsoRim.Api.DrawModel(m, new Vector3(d.x, Links.Rise(p) - 0.01f, d.z), 0f, Vector3.one, new Color(0.62f, 0.64f, 0.66f), "Metal");
+                int floor = ProjectZ.FloorOf(p.Position, map);
+                if (!LiftModels.LevelDrawn(floor, view))
+                {
+                    continue;   // the rider's floor is not drawn solid (hidden, or faded while peeking: LiftModels)
+                }
+                Thing el = st.link.thing;
+                IntVec3 shaft = el != null ? ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(el.Position, map), floor, map) : IntVec3.Invalid;
+                Vector3 at = shaft.IsValid ? shaft.ToVector3Shifted() : p.DrawPos;
+                IsoRim.Api.DrawModel(m, new Vector3(at.x, Links.Rise(p) - LiftModels.PlatformDeck, at.z), el != null ? el.Rotation.AsAngle : 0f, Vector3.one, Color.white);
                 Drawn++;
             }
         }

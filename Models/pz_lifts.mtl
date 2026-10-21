@@ -1,0 +1,34 @@
+# pz_lifts.mtl - self-contained, fixed colours only (stuffless). glow_ = IsoRim glow (lift lamp top faces)
+newmtl elev_dark
+Kd 0.300 0.310 0.330
+
+newmtl elev_floor
+Kd 0.440 0.450 0.470
+
+newmtl elev_frame
+Kd 0.580 0.600 0.630
+
+newmtl elev_rail
+Kd 0.700 0.720 0.740
+
+newmtl glow_lift_red
+Kd 1.000 0.220 0.160
+
+newmtl ladder_rope
+Kd 0.620 0.480 0.300
+
+newmtl ladder_wood
+Kd 0.500 0.350 0.190
+
+newmtl lift_body
+Kd 0.340 0.350 0.380
+
+newmtl lift_dark
+Kd 0.200 0.210 0.230
+
+newmtl lift_mast
+Kd 0.460 0.470 0.500
+
+newmtl lift_red
+Kd 0.720 0.100 0.080
+

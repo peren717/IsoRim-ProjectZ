@@ -18,7 +18,8 @@ namespace ProjectZ
         public static bool TooTall(BuildableDef def)
         {
             ThingDef t = def as ThingDef;
-            if (t == null || t.category != ThingCategory.Building || StairDefs.Is(t) || typeof(Building_Door).IsAssignableFrom(t.thingClass))
+            // (the elevator's base model is a storey tall by design: its shaft and cap rules decide what goes over it)
+            if (t == null || t.category != ThingCategory.Building || StairDefs.Is(t) || t == ElevatorDefOf.PZ_Elevator || typeof(Building_Door).IsAssignableFrom(t.thingClass))
             {
                 return false;
             }
