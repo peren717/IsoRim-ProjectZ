@@ -40,6 +40,13 @@ namespace ProjectZ.Dev
     //                                   job, claim, countdown, deconstruct, hauling, the last way down, shots, save mid-climb;
     //                                   TestLadders; with the column kept open, the climber first at the end, no melee over 2+
     //                                   floors: TestLadders2), -projectzfloors=5 -projectzseed=7
+    //                                   raidladders: siege ladders, stage 2: raiders use ladders where the game's last resort
+    //                                   finds no way (real raids against bases on floors, a moat, exits, kidnap, mechanoids,
+    //                                   animals and shamblers excluded; TestRaidLadders), -projectzfloors=5 -projectzseed=7
+    //                                   -projectzmapsize=120 (-projectznoraidladders: the feature off; -projectzraidonly=<ids>;
+    //                                   -projectzraidref=<tag>: compare RA's end state; -projectzraidtiming: every plan made twice,
+    //                                   timed; the mountain-top case "mt" with
+    //                                   -projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt)
     //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
     //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
     //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
@@ -219,7 +226,7 @@ namespace ProjectZ.Dev
         public static bool TallMountainsOverride;
 
         // Modes run on a mountainous tile (MtnTile); los3d too in a tall-mountain world (its mountain checks).
-        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "los3d" && TallMountainsOverride;
+        private static bool MtnTileMode => mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || (mode == "los3d" || mode == "raidladders") && TallMountainsOverride;
         // Test only (-projectznoexitfix): the stair-link test without the traveller's own check, to show the old freeze.
         public static bool NoExitFix;
         // -projectzoldroute: the stair router as before branch stairroute (no reachability check first, no memory of
@@ -643,6 +650,11 @@ namespace ProjectZ.Dev
                 StepRouter2(map);
                 return;
             }
+            if (stage.StartsWith("rl_"))
+            {
+                StepRaidLadders(map);
+                return;
+            }
             if (stage.StartsWith("ld_"))
             {
                 StepLadders(map);
@@ -1015,6 +1027,10 @@ namespace ProjectZ.Dev
                     else if (mode == "router2")
                     {
                         stage = "r2_setup";
+                    }
+                    else if (mode == "raidladders")
+                    {
+                        stage = "rl_setup";
                     }
                     else if (mode == "ladders")
                     {

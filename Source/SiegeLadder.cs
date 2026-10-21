@@ -208,6 +208,9 @@ namespace ProjectZ
             return best;
         }
 
+        // ladders placed (tests)
+        public static int Placed;
+
         // A ladder (a lift for mechanoids) at foot up to top, of the faction's. Null when the site is no good.
         public static Building_SiegeLadder Spawn(IntVec3 foot, IntVec3 top, Faction faction, Map map, bool lift)
         {
@@ -222,6 +225,7 @@ namespace ProjectZ
             b.SetFaction(faction);
             GenSpawn.Spawn(b, foot, map);
             b.GetComp<CompSiegeLadder>()?.SetOwner(faction);
+            Placed++;
             return b;
         }
     }
@@ -304,8 +308,9 @@ namespace ProjectZ
         }
     }
 
-    // Place a ladder: go to the foot, a 60-tick wait with a progress bar any faction shows, check the site again, spawn
-    // the ladder (a lift for mechanoids) of the pawn's faction. Job targets: A = foot, B = top.
+    // Place a ladder: go to the foot (or, going down, the top: target C), a 60-tick wait with a progress bar any faction
+    // shows, check the site again, spawn the ladder (a lift for mechanoids) of the pawn's faction. Job targets: A = foot,
+    // B = top, C = where to stand (none: the foot). Ends at once when a link already stands there (another raider's).
     public class JobDriver_PlaceSiegeLadder : JobDriver
     {
         public const int Ticks = 60;
@@ -314,9 +319,11 @@ namespace ProjectZ
 
         protected override IEnumerable<Toil> MakeNewToils()
         {
-            yield return Toils_Goto.GotoCell(TargetIndex.A, PathEndMode.OnCell);
+            TargetIndex stand = job.targetC.IsValid ? TargetIndex.C : TargetIndex.A;
+            this.FailOn(() => LinkAt(job.targetA.Cell, job.targetB.Cell, pawn.Map));
+            yield return Toils_Goto.GotoCell(stand, PathEndMode.OnCell);
             Toil wait = Toils_General.Wait(Ticks, TargetIndex.A);
-            wait.WithProgressBarAnyFaction(TargetIndex.A, () => 1f - (float)wait.actor.jobs.curDriver.ticksLeftThisToil / Ticks);
+            wait.WithProgressBarAnyFaction(stand, () => 1f - (float)wait.actor.jobs.curDriver.ticksLeftThisToil / Ticks);
             wait.FailOn(() => !LadderSite.Check(job.targetA.Cell, job.targetB.Cell, pawn.Map, out _, out _));
             yield return wait;
             yield return Toils_General.Do(delegate
@@ -332,6 +339,31 @@ namespace ProjectZ
         public static Job Make(IntVec3 foot, IntVec3 top)
         {
             return JobMaker.MakeJob(PZJobDefOf.PZ_PlaceSiegeLadder, foot, top);
+        }
+
+        // Placed from 'stand' (the foot going up, the top going down).
+        public static Job Make(IntVec3 foot, IntVec3 top, IntVec3 stand)
+        {
+            return JobMaker.MakeJob(PZJobDefOf.PZ_PlaceSiegeLadder, foot, top, stand);
+        }
+
+        // A link already stands at this site (its foot or its top taken).
+        public static bool LinkAt(IntVec3 foot, IntVec3 top, Map map)
+        {
+            StairGrid sg = StairGrid.For(map);
+            if (sg == null)
+            {
+                return false;
+            }
+            for (int i = 0; i < sg.links.Count; i++)
+            {
+                VLink l = sg.links[i];
+                if (l.bottom == foot || l.top == foot || l.IsLadder && l.top == top)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 

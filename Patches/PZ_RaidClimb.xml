@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- Raiders use ladders where the game's last resort finds no way (Source/RaidClimb.cs, siege ladders stage 2). -->
+
+  <!-- Right after the sapper's last resort, in the duties that have it. -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="AssaultColony" or defName="Sapper" or defName="PrisonerAssaultColony" or defName="HuntDownColonists" or defName="AssaultThing"]/thinkNode/subNodes/li[@Class="JobGiver_AISapper"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb" />
+    </value>
+  </Operation>
+
+  <!-- At the end of the assault duties without it. -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/DutyDef[defName="Breaching" or defName="HuntEnemiesIndividual"]/thinkNode/subNodes</xpath>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb" />
+    </value>
+  </Operation>
+
+  <!-- The exits: after the game's own exit (a map edge on the ground). -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>Defs/DutyDef[defName="Kidnap" or defName="Steal" or defName="TakeWoundedGuest" or defName="ExitMapBestAndDefendSelf" or defName="ExitMapNearDutyTarget"]/thinkNode/subNodes</xpath>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb">
+        <exit>true</exit>
+      </li>
+    </value>
+  </Operation>
+
+  <!-- ExitMapBest and ExitMapRandom are a single job giver: wrapped in a priority node (the game's values kept). -->
+  <Operation Class="PatchOperationReplace">
+    <xpath>Defs/DutyDef[defName="ExitMapBest"]/thinkNode[@Class="JobGiver_ExitMapBest"]</xpath>
+    <value>
+      <thinkNode Class="ThinkNode_Priority">
+        <subNodes>
+          <li Class="JobGiver_ExitMapBest">
+            <defaultLocomotion>Walk</defaultLocomotion>
+            <canFlyOutOfMap>false</canFlyOutOfMap>
+          </li>
+          <li Class="ProjectZ.JobGiver_AIClimb">
+            <exit>true</exit>
+          </li>
+        </subNodes>
+      </thinkNode>
+    </value>
+  </Operation>
+
+  <Operation Class="PatchOperationReplace">
+    <xpath>Defs/DutyDef[defName="ExitMapRandom"]/thinkNode[@Class="JobGiver_ExitMapRandom"]</xpath>
+    <value>
+      <thinkNode Class="ThinkNode_Priority">
+        <subNodes>
+          <li Class="JobGiver_ExitMapRandom">
+            <defaultLocomotion>Walk</defaultLocomotion>
+            <canFlyOutOfMap>false</canFlyOutOfMap>
+          </li>
+          <li Class="ProjectZ.JobGiver_AIClimb">
+            <exit>true</exit>
+          </li>
+        </subNodes>
+      </thinkNode>
+    </value>
+  </Operation>
+
+</Patch>

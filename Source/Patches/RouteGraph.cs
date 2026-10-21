@@ -999,6 +999,21 @@ namespace ProjectZ.Patches
         private static int budgetTick = -1;
         private static double spentMs;
 
+        // The budget is spent this tick (the raiders' ladder planner waits then: RaidClimb).
+        public static bool OverBudget => budgetTick == Find.TickManager.TicksGame && spentMs >= BudgetMs;
+
+        // Time spent outside the queue that counts against this tick's budget (the raiders' ladder planner).
+        public static void Spend(double ms)
+        {
+            int now = Find.TickManager.TicksGame;
+            if (budgetTick != now)
+            {
+                budgetTick = now;
+                spentMs = 0;
+            }
+            spentMs += ms;
+        }
+
         public void Enqueue(Pending p)
         {
             p.seq = seq++;
