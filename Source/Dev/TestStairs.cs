@@ -449,6 +449,19 @@ namespace ProjectZ.Dev
                     {
                         h.Destroy();
                     }
+                    // (the raider came down and fought the colonists: they start the next checks as before, unhurt and
+                    // with no stance left from that fight)
+                    foreach (Pawn c in Colonists(map))
+                    {
+                        HealthUtility.HealNonPermanentInjuriesAndRestoreLegs(c);
+                        foreach (Hediff h in c.health.hediffSet.hediffs.Where(h => h.def == HediffDefOf.BloodLoss).ToList())
+                        {
+                            c.health.RemoveHediff(h);
+                        }
+                        c.stances?.CancelBusyStanceHard();
+                        c.jobs?.StopAll();
+                    }
+                    Info($"F6 after the fight: {string.Join(", ", Colonists(map).Select(c => $"{c} {c.health.summaryHealth.SummaryHealthPercent:P0} {c.MentalStateDef?.defName}"))}");
                     stage = "s_f7";
                     return true;
                 }
