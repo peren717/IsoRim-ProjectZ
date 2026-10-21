@@ -183,7 +183,7 @@ namespace ProjectZ
     {
         public static int Opened;
 
-        public static void Prefix(Mineable __instance, out (Map map, IntVec3 lower) __state)
+        public static void Prefix(Mineable __instance, Pawn pawn, out (Map map, IntVec3 lower) __state)
         {
             __state = (null, IntVec3.Invalid);
             Map map = __instance.Map;
@@ -194,6 +194,13 @@ namespace ProjectZ
             IntVec3 u = __instance.Position;
             MineDir dir = MineSide.Get(u, map);
             IntVec3 lower = dir == MineDir.FromBelow ? FloorRoof.Below(u, map) : dir == MineDir.FromAbove ? u : IntVec3.Invalid;
+            // a raider mining up without the player's mark (RaidVertical: the Mine above job, ignoreDesignations)
+            Job j = pawn?.CurJob;
+            if (!lower.IsValid && j != null && j.def == PZMineDefOf.PZ_MineFromBelow && j.ignoreDesignations && j.targetA.Thing == __instance && j.targetB.Cell == FloorRoof.Below(u, map))
+            {
+                lower = j.targetB.Cell;
+                RaidVertical.MineUps++;
+            }
             if (lower.IsValid)
             {
                 __state = (map, lower);

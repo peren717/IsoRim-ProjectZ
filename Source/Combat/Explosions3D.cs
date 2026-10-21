@@ -89,7 +89,9 @@ namespace ProjectZ.Combat
                     {
                         continue;
                     }
-                    if (!IgnoreBlocking && !Heights.Clear(gc, g, hc, ht, map) && !Heights.Clear(gc, g, hc, hn, map))
+                    // (and the exact point where each line crosses a level's plane: the walk's windows can step over it on
+                    // a diagonal, which let a blast on a mountain top or a slab reach the cell diagonally under it)
+                    if (!IgnoreBlocking && !(Heights.Clear(gc, g, hc, ht, map) && PlanesClear(gc, g, hc, ht, map)) && !(Heights.Clear(gc, g, hc, hn, map) && PlanesClear(gc, g, hc, hn, map)))
                     {
                         continue;
                     }
@@ -97,6 +99,35 @@ namespace ProjectZ.Combat
                 }
             }
             return res;
+        }
+
+        public static int PlaneLeaksStopped;
+
+        // The line from height hs over ground cell gs to ht over gt crosses no solid plane between two levels (Column.
+        // PlaneSolid) at the exact points where it passes those levels' heights (the column under each point).
+        public static bool PlanesClear(IntVec3 gs, IntVec3 gt, float hs, float ht, Map map)
+        {
+            float lo = Mathf.Min(hs, ht), hi = Mathf.Max(hs, ht);
+            if (hi - lo < 0.0001f)
+            {
+                return true;
+            }
+            for (int k = Levels.Min(map) + 1; k <= Levels.Max(map) + 1; k++)
+            {
+                float level = k * Heights.Storey;
+                if (level < lo || level > hi)
+                {
+                    continue;
+                }
+                float t = (level - hs) / (ht - hs);
+                IntVec3 g = new IntVec3(Mathf.FloorToInt(gs.x + t * (gt.x - gs.x) + 0.5f), 0, Mathf.FloorToInt(gs.z + t * (gt.z - gs.z) + 0.5f));
+                if (g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.Annex(map).groundZ && Column.PlaneSolid(g, k, map))
+                {
+                    PlaneLeaksStopped++;
+                    return false;
+                }
+            }
+            return true;
         }
 
         // The game's angle filter (directional explosions) over the ground.

@@ -107,7 +107,8 @@ namespace ProjectZ.Patches
         {
             StairGrid sg = StairGrid.For(map);
             int i = sg == null ? -1 : sg.StepLink(a, b);
-            return i >= 0 && sg.links[i].IsLadder && sg.links[i].span >= 2;
+            // (a raider up the ladder clearing its top hits it: LadderPerch)
+            return i >= 0 && sg.links[i].IsLadder && sg.links[i].span >= 2 && !LadderPerch.OnLink(sg.links[i], map);
         }
 
         // K2: stairs being taken up (deconstruct or uninstall designated): +1 when their top side would be cut off from

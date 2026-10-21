@@ -25,8 +25,9 @@ namespace ProjectZ.Dev
     //   R10 a kidnapper carries a downed colonist down a ladder and leaves
     //   R11 raiders on an island platform with nothing in range give up and leave down a ladder
     //   R12 a mechanoid raid places a lift
-    //   R13 sappers, R14 breachers against a ladder-only base: the lord turns into an ordinary assault, then climbs;
-    //       R13V/R14V the same raids against a walled base on the ground stay the game's
+    //   R13 sappers, R14 breachers against a ladder-only base: the lord keeps its toil (no degrade, stage 3: their target
+    //       is chosen with the vertical moves) and climbs; R13V/R14V the same raids against a walled base on the ground
+    //       stay the game's
     //   R17 a trader caravan stranded on a stairless platform leaves down a ladder
     //   R18 a prison break on floor 1 with the stairs taken up: the prisoner gets out down a ladder
     //   R15 a manhunter pack and a shambler assault never place ladders
@@ -118,7 +119,8 @@ namespace ProjectZ.Dev
             RaidClimb.Off = GenCommandLine.CommandLineArgPassed("projectznoraidladders");
             RaidClimb.RepeatTiming = GenCommandLine.CommandLineArgPassed("projectzraidtiming");
             string only = GenCommandLine.TryGetCommandLineArg("projectzraidonly", out string o) ? o.ToLowerInvariant() : null;
-            rlCases = RlAllCases().Where(c => only == null ? c.id != "mt" : only.Split(',').Contains(c.id)).ToList();
+            rlCases = RlAllCases().Concat(RvCases()).Where(c => only == null ? c.id != "mt" && !c.id.StartsWith("v") : only.Split(',').Contains(c.id)).ToList();
+            ClimbPlanner.NoVertical = GenCommandLine.CommandLineArgPassed("projectznovertical");
             Info($"raidladders: map {map.Size}, levels {Levels.Min(map)}..{Levels.Max(map)}, cases {string.Join(" ", rlCases.Select(c => c.id))}, feature {(RaidClimb.Off ? "OFF" : "on")}, colonists {string.Join(", ", Colonists(map))}");
             rlIdx = 0;
             stage = "rl_run";
@@ -377,10 +379,24 @@ namespace ProjectZ.Dev
         private static void RlClear(Map map)
         {
             LinkSteps.For(map)?.steps.Clear();
+            LadderPerch.For(map)?.recs.Clear();
+            ShaftMarks.For(map)?.cells.Clear();
             // (a colonist killed in an earlier case comes back: every case starts with the same colonists)
             foreach (Corpse cp in map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse).OfType<Corpse>().Where(x => x.InnerPawn != null && x.InnerPawn.Faction == Faction.OfPlayer && x.InnerPawn.RaceProps.Humanlike).ToList())
             {
                 ResurrectionUtility.TryResurrect(cp.InnerPawn);
+            }
+            // (and one kidnapped in an earlier case comes back too)
+            foreach (Faction f in Find.FactionManager.AllFactions.ToList())
+            {
+                foreach (Pawn k in (f.kidnapped?.KidnappedPawnsListForReading ?? new List<Pawn>()).Where(x => x.Faction == Faction.OfPlayer && !x.Dead).ToList())
+                {
+                    f.kidnapped.RemoveKidnappedPawn(k);
+                    if (!k.Spawned)
+                    {
+                        GenSpawn.Spawn(k, new IntVec3(2, 0, 2), map);
+                    }
+                }
             }
             foreach (Pawn o in map.mapPawns.AllPawnsSpawned.Where(p => !p.IsColonist).ToList())
             {
@@ -800,8 +816,8 @@ namespace ProjectZ.Dev
                     {
                         string duties = string.Join(", ", rlRaiders.Where(p => p.Spawned).GroupBy(p => p.mindState.duty?.def.defName ?? "none").Select(gr => $"{gr.Key} x{gr.Count()}"));
                         bool climbed = rlLadders.Count > 0 && rlHostileUp > 0 && RlUpAndFighting(m);
-                        Result($"{id.ToUpperInvariant()} {strat} against a ladder-only base: no real destination, so the lord turns into an ordinary assault; then they place a ladder, climb and fight",
-                            RaidDegrade.Degraded > rlDegradedAt && climbed && rlLadders.All(b => b.Faction == rlFaction),
+                        Result($"{id.ToUpperInvariant()} {strat} against a ladder-only base: the target is chosen with the vertical moves, the lord stays a {strat.Substring("ImmediateAttack".Length).ToLowerInvariant()} raid (no degrade); they place a ladder, climb and fight (grenade breachers may wreck the wood slab round the walls they breach: then the fight with the colonists counts)",
+                            RaidDegrade.Degraded == rlDegradedAt && rlLadders.Count > 0 && (climbed || rlFightSeen > 0) && rlLadders.All(b => b.Faction == rlFaction) && RaidVertical.VerticalDests > 0,
                             $"lords turned {RaidDegrade.Degraded - rlDegradedAt}; duties now {duties}; {rlNote}; {RlSummary(m)}");
                     },
                 };
@@ -824,7 +840,7 @@ namespace ProjectZ.Dev
                     check = m =>
                     {
                         string toil = rlLord?.CurLordToil?.GetType().Name;
-                        Result($"{id.ToUpperInvariant()} {strat} against a base it can reach: its lord stays a {strat.Substring("ImmediateAttack".Length).ToLowerInvariant()} raid, no ladder", RaidDegrade.Degraded == rlDegradedAt && rlLadders.Count == 0 && (toil == "LordToil_AssaultColonySappers" || toil == "LordToil_AssaultColonyBreaching"),
+                        Result($"{id.ToUpperInvariant()} {strat} against a base it can reach: its lord stays the game's (never an ordinary assault; leaving when satisfied is the game's own), no ladder, no plan", RaidDegrade.Degraded == rlDegradedAt && rlLadders.Count == 0 && toil != "LordToil_AssaultColony" && RaidClimb.Plans == 0,
                             $"toil {toil}, lords turned {RaidDegrade.Degraded - rlDegradedAt}, ladders {rlLadders.Count}, climb plans {RaidClimb.Plans}");
                     },
                 };

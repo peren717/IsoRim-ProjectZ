@@ -9,4 +9,27 @@
     <casualInterruptible>false</casualInterruptible>
   </JobDef>
 
+  <!-- Raider vertical moves, stage 3 (Source/RaidVertical.cs). -->
+  <JobDef>
+    <defName>PZ_LadderPerch</defName>
+    <driverClass>ProjectZ.JobDriver_LadderPerch</driverClass>
+    <reportString>climbing a ladder.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+  </JobDef>
+
+  <JobDef>
+    <defName>PZ_RaidBlast</defName>
+    <driverClass>ProjectZ.JobDriver_RaidBlast</driverClass>
+    <reportString>blasting TargetA.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+    <alwaysShowWeapon>true</alwaysShowWeapon>
+  </JobDef>
+
+  <JobDef>
+    <defName>PZ_DigSlabUp</defName>
+    <driverClass>ProjectZ.JobDriver_DigSlabUp</driverClass>
+    <reportString>digging through the floor above.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+  </JobDef>
+
 </Defs>

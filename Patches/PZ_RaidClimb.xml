@@ -5,7 +5,27 @@
 
   <!-- Right after the sapper's last resort, in the duties that have it. -->
   <Operation Class="PatchOperationInsert">
-    <xpath>Defs/DutyDef[defName="AssaultColony" or defName="Sapper" or defName="PrisonerAssaultColony" or defName="HuntDownColonists" or defName="AssaultThing"]/thinkNode/subNodes/li[@Class="JobGiver_AISapper"]</xpath>
+    <xpath>Defs/DutyDef[defName="AssaultColony" or defName="PrisonerAssaultColony" or defName="HuntDownColonists" or defName="AssaultThing"]/thinkNode/subNodes/li[@Class="JobGiver_AISapper"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb" />
+    </value>
+  </Operation>
+
+  <!-- Sappers mine walls too (the game's JobGiver_AISapper default): they dig through a slab from below (stage 3). -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="Sapper"]/thinkNode/subNodes/li[@Class="JobGiver_AISapper"]</xpath>
+    <order>Append</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_AIClimb">
+        <canMineNonMineables>true</canMineNonMineables>
+      </li>
+    </value>
+  </Operation>
+
+  <!-- Breachers: right after the breach job (it has nothing left on this level: the vertical step, stage 3). -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/DutyDef[defName="Breaching"]/thinkNode/subNodes/li[@Class="JobGiver_AIBreaching"]</xpath>
     <order>Append</order>
     <value>
       <li Class="ProjectZ.JobGiver_AIClimb" />
@@ -33,7 +53,7 @@
 
   <!-- At the end of the assault duties without it. -->
   <Operation Class="PatchOperationAdd">
-    <xpath>Defs/DutyDef[defName="Breaching" or defName="HuntEnemiesIndividual"]/thinkNode/subNodes</xpath>
+    <xpath>Defs/DutyDef[defName="HuntEnemiesIndividual"]/thinkNode/subNodes</xpath>
     <value>
       <li Class="ProjectZ.JobGiver_AIClimb" />
     </value>

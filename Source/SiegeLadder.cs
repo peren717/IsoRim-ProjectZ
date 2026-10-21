@@ -21,7 +21,7 @@ namespace ProjectZ
         public IntVec3 top = IntVec3.Invalid;
         public IntVec3 foot = IntVec3.Invalid;
         public int span;
-        public bool topBlocker;   // later stages: the top is a wall or rock to clear (stage 1: always false)
+        public bool topBlocker;   // the top is a wall, door or rock a raider clears from the ladder (stage 3: RaidVertical, LadderPerch)
 
         public LinkKind Kind => def == PZDefOf.PZ_SiegeLift ? LinkKind.Lift : LinkKind.Ladder;
 
@@ -160,7 +160,7 @@ namespace ProjectZ
         }
 
         // The site of a ladder from 'foot' to 'top' is still good (the place-ladder job checks again before it spawns one).
-        public static bool Check(IntVec3 foot, IntVec3 top, Map map, out int span, out string why)
+        public static bool Check(IntVec3 foot, IntVec3 top, Map map, out int span, out string why, bool allowBlocker = false)
         {
             span = 0;
             why = "no side";
@@ -172,7 +172,7 @@ namespace ProjectZ
                 {
                     continue;
                 }
-                if (!Find(top, r, map, out IntVec3 f, out span, out why))
+                if (!Find(top, r, map, out IntVec3 f, out span, out why, allowBlocker))
                 {
                     return false;
                 }
@@ -212,9 +212,9 @@ namespace ProjectZ
         public static int Placed;
 
         // A ladder (a lift for mechanoids) at foot up to top, of the faction's. Null when the site is no good.
-        public static Building_SiegeLadder Spawn(IntVec3 foot, IntVec3 top, Faction faction, Map map, bool lift)
+        public static Building_SiegeLadder Spawn(IntVec3 foot, IntVec3 top, Faction faction, Map map, bool lift, bool allowBlocker = false)
         {
-            if (!Check(foot, top, map, out int span, out string why))
+            if (!Check(foot, top, map, out int span, out string why, allowBlocker && RaidVertical.ClearableTop(top, map)))
             {
                 ProjectZ.DebugLog($"siege ladder at {foot} -> {top} refused: {why}");
                 return null;
@@ -222,6 +222,7 @@ namespace ProjectZ
             Building_SiegeLadder b = (Building_SiegeLadder)ThingMaker.MakeThing(lift ? PZDefOf.PZ_SiegeLift : PZDefOf.PZ_SiegeLadder);
             b.top = top;
             b.span = span;
+            b.topBlocker = !top.Walkable(map);
             b.SetFaction(faction);
             GenSpawn.Spawn(b, foot, map);
             b.GetComp<CompSiegeLadder>()?.SetOwner(faction);
@@ -324,11 +325,11 @@ namespace ProjectZ
             yield return Toils_Goto.GotoCell(stand, PathEndMode.OnCell);
             Toil wait = Toils_General.Wait(Ticks, TargetIndex.A);
             wait.WithProgressBarAnyFaction(stand, () => 1f - (float)wait.actor.jobs.curDriver.ticksLeftThisToil / Ticks);
-            wait.FailOn(() => !LadderSite.Check(job.targetA.Cell, job.targetB.Cell, pawn.Map, out _, out _));
+            wait.FailOn(() => !LadderSite.Check(job.targetA.Cell, job.targetB.Cell, pawn.Map, out _, out _, RaidVertical.ClearableTop(job.targetB.Cell, pawn.Map)));
             yield return wait;
             yield return Toils_General.Do(delegate
             {
-                Building_SiegeLadder b = LadderSite.Spawn(job.targetA.Cell, job.targetB.Cell, pawn.Faction, pawn.Map, pawn.RaceProps.IsMechanoid);
+                Building_SiegeLadder b = LadderSite.Spawn(job.targetA.Cell, job.targetB.Cell, pawn.Faction, pawn.Map, pawn.RaceProps.IsMechanoid, allowBlocker: true);
                 if (b == null)
                 {
                     EndJobWith(JobCondition.Incompletable);

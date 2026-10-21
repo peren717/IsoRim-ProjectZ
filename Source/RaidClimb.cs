@@ -72,7 +72,7 @@ namespace ProjectZ
         public const int WanderTicks = 30;   // over the per-tick budget: a short wander, then think again
 
         // counters (tests)
-        public static int Invoked, Asked, Excluded, Reachable, NoTarget, Plans, PlanFails, MemoHits, Reused, BudgetWaits, PlaceJobs, BlockerJobs;
+        public static int Invoked, Asked, Excluded, Reachable, NoTarget, Plans, PlanFails, MemoHits, Reused, BudgetWaits, PlaceJobs, BlockerJobs, VerticalJobs;
         public static double PlanMsTotal, PlanMsMax;
         public static readonly List<double> PlanMs = new List<double>();
 
@@ -141,6 +141,16 @@ namespace ProjectZ
             {
                 return null;
             }
+            // up on a ladder whose top it clears (stage 3): the next blow, the game's way
+            LadderPerch.Rec perch = LadderPerch.Get(pawn);
+            if (perch != null && perch.atTop)
+            {
+                Job cj = RaidVertical.ClearJob(pawn, perch);
+                if (cj != null)
+                {
+                    return cj;
+                }
+            }
             if (map.regionDirtyer.AnyDirty)
             {
                 map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
@@ -196,6 +206,8 @@ namespace ProjectZ
                     goalKey = t.thingIDNumber;
                 }
             }
+            RaidVertical.PawnCost pc = RaidVertical.PawnCost.For(pawn, mineNonMineables);
+            goalKey = Gen.HashCombineInt(goalKey, pc.caps);   // (plans per lord, target and what the pawn can do)
             (int, int, int) key = (lord.loadID, goalKey, startComp);
             ClimbPlanner.Plan plan = cp.Get((lord.loadID, goalKey), map, g, startComp, out int step);
             if (plan != null)
@@ -217,7 +229,7 @@ namespace ProjectZ
                 }
                 int gc0 = GC.CollectionCount(0), gc1 = GC.CollectionCount(1), gc2 = GC.CollectionCount(2);
                 long t0 = Stopwatch.GetTimestamp();
-                plan = ClimbPlanner.Find(map, g, pawn, startComp, exit, goalCell);
+                plan = ClimbPlanner.Find(map, g, pawn, startComp, exit, goalCell, pc);
                 double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
                 RouteGraph.Spend(ms);
                 Plans++;
@@ -231,7 +243,7 @@ namespace ProjectZ
                 if (Dev.TestRunner.Active && RepeatTiming)
                 {
                     long t1 = Stopwatch.GetTimestamp();
-                    ClimbPlanner.Find(map, g, pawn, startComp, exit, goalCell);
+                    ClimbPlanner.Find(map, g, pawn, startComp, exit, goalCell, pc);
                     why += $"; again at once {(Stopwatch.GetTimestamp() - t1) * 1000.0 / Stopwatch.Frequency:0.00} ms (collect {ClimbPlanner.LastCollectMs:0.00}, search {ClimbPlanner.LastSearchMs:0.00}, legs {ClimbPlanner.LastLegMs:0.00}); a fixed loop {ClimbPlanner.Bench():0.00} ms";
                 }
                 if (plan == null)
@@ -252,6 +264,34 @@ namespace ProjectZ
             }
             ClimbPlanner.Hop h = plan.hops[step];
             IntVec3 stand = h.Stand;
+            Building_SiegeLadder standing = h.kind == 1 ? ClimbPlanner.LadderAt(h.foot, h.top, map) : null;
+            if (h.kind == 2)
+            {
+                // a ceiling to take off first: a blast from where the pawn can stand now, or the walk to the foot
+                if (h.how == RaidVertical.Method.BlastRock || h.how == RaidVertical.Method.BlastSlab || h.how == RaidVertical.Method.DigSlab || pawn.Position == stand)
+                {
+                    Job rj = RaidVertical.RemovalJob(pawn, pc, h.how, h.foot, h.work);
+                    if (rj != null)
+                    {
+                        VerticalJobs++;
+                        return rj;
+                    }
+                    ProjectZ.DebugLog($"{pawn} at {pawn.Position}: no {h.how} job for the ceiling {h.work} over {h.foot} now");
+                }
+            }
+            else if (standing != null && pawn.Position == stand)
+            {
+                // its ladder stands, the top still blocked: up it (one at a time), to clear the top from there
+                if (LadderPerch.Busy(standing, pawn))
+                {
+                    return JobMaker.MakeJob(JobDefOf.Wait, 60, checkOverrideOnExpiry: true);
+                }
+                VerticalJobs++;
+                RaidVertical.PerchJobs++;
+                Job pj = JobMaker.MakeJob(PZVJobDefOf.PZ_LadderPerch, standing, h.top);
+                pj.count = mineNonMineables ? 1 : 0;
+                return pj;
+            }
             if (pawn.Position != stand)
             {
                 // the way to the near end, the game's last resort's way: its first blocker cleared (the planner's own
@@ -279,6 +319,15 @@ namespace ProjectZ
                         return j;
                     }
                 }
+            }
+            if (h.kind == 2)
+            {
+                // at the foot (or the walk there found no blocker) and nothing to do yet: the walk
+                return pawn.Position == stand ? null : JobMaker.MakeJob(JobDefOf.Goto, stand, 500, checkOverrideOnExpiry: true);
+            }
+            if (standing != null)
+            {
+                return JobMaker.MakeJob(JobDefOf.Goto, stand, 500, checkOverrideOnExpiry: true);
             }
             PlaceJobs++;
             return JobDriver_PlaceSiegeLadder.Make(h.foot, h.top, stand);
@@ -326,12 +375,13 @@ namespace ProjectZ
             List<double> s = new List<double>(PlanMs);
             s.Sort();
             double P(double q) => s.Count == 0 ? 0 : s[Mathf.Clamp((int)(q * (s.Count - 1)), 0, s.Count - 1)];
-            return $"consulted {Invoked}, asked {Asked}, excluded {Excluded}, reachable {Reachable}, no target {NoTarget}, plans {Plans} (failed {PlanFails}), reused {Reused}, memo hits {MemoHits}, budget waits {BudgetWaits}, place jobs {PlaceJobs}, blocker jobs {BlockerJobs}; plan ms mean {(Plans == 0 ? 0 : PlanMsTotal / Plans):0.000}, median {P(0.5):0.000}, p95 {P(0.95):0.000}, max {PlanMsMax:0.000}";
+            return $"consulted {Invoked}, asked {Asked}, excluded {Excluded}, reachable {Reachable}, no target {NoTarget}, plans {Plans} (failed {PlanFails}), reused {Reused}, memo hits {MemoHits}, budget waits {BudgetWaits}, place jobs {PlaceJobs}, blocker jobs {BlockerJobs}, vertical jobs {VerticalJobs} (perch {RaidVertical.PerchJobs}, mine {RaidVertical.MineJobs}, blast {RaidVertical.BlastJobs}, dig {RaidVertical.DigJobs}; perches {RaidVertical.Perches}, stepped in {RaidVertical.PerchSteppedIn}, left {RaidVertical.PerchLeft}, fell {RaidVertical.PerchFalls}; slab hits blast {RaidVertical.SlabHitsBlast} dig {RaidVertical.SlabHitsDig}; rock blasts {RaidVertical.RockBlasts} opened {RaidVertical.RockBlastOpened}; ally waits {RaidVertical.AllyWaits}; vertical dests {RaidVertical.VerticalDests}, breach segments {RaidVertical.BreachSegments}); plan ms mean {(Plans == 0 ? 0 : PlanMsTotal / Plans):0.000}, median {P(0.5):0.000}, p95 {P(0.95):0.000}, max {PlanMsMax:0.000}";
         }
 
         public static void ResetStats()
         {
-            Invoked = Asked = Excluded = Reachable = NoTarget = Plans = PlanFails = MemoHits = Reused = BudgetWaits = PlaceJobs = BlockerJobs = 0;
+            Invoked = Asked = Excluded = Reachable = NoTarget = Plans = PlanFails = MemoHits = Reused = BudgetWaits = PlaceJobs = BlockerJobs = VerticalJobs = 0;
+            RaidVertical.ResetStats();
             PlanMsTotal = PlanMsMax = 0;
             PlanMs.Clear();
         }
@@ -516,6 +566,12 @@ namespace ProjectZ
     // + 60 per new ladder + 180 per floor climbed. A* over the ladder ends; the chosen ladders are checked with the
     // placement rule (LadderSite.Check) and the walk to the first one is run for real (FindPathNow, the last resort's
     // mode); a dearer or failed leg makes it search again (MaxRefine).
+    // Stage 3 (RaidVertical.cs), up only, only for the pawn that can take them (PawnCost; plans are kept per lord, target
+    // and abilities): a ladder whose top is a blocker (kind 1: the blocker rims near the start or the goal, BlockR, and
+    // ladders standing with their top still blocked; + the game's clearing time), and a ceiling taken off from below
+    // first (kind 2: over the cells near the goal, RemR, and the start, RemStartR; + mining, blasting or digging time,
+    // + the clearing of a blocked top beside it). A breach lord's Perlin noise adds NoiseTicks to the sites whose foot is
+    // in it, as the game varies its breach path.
     public static class ClimbPlanner
     {
         public const int MaxDepth = 4;
@@ -530,6 +586,14 @@ namespace ProjectZ
             public IntVec3 footG, topG;   // their ground cells
             public int footL, topL;
             public bool banned;
+            // stage 3 (RaidVertical): 0 a ladder; 1 a ladder whose top is a blocker to clear from it; 2 a ceiling over
+            // the foot to take off first (work = that cell), then a ladder (its top possibly a blocker). 1 and 2 go up only.
+            public int kind;
+            public bool existing;          // kind 1: its ladder stands already (the top still blocked)
+            public IntVec3 work = IntVec3.Invalid;
+            public RaidVertical.Removal removal;
+
+            public bool UpOnly => kind != 0;
         }
 
         public struct Hop
@@ -537,6 +601,11 @@ namespace ProjectZ
             public IntVec3 foot, top;
             public int span;
             public bool up;   // placed from the foot, climbed up (else from the top, climbed down)
+            public int kind;
+            public bool existing;
+            public IntVec3 work;
+            public RaidVertical.Removal removal;
+            public RaidVertical.Method how;
 
             public IntVec3 Stand => up ? foot : top;
         }
@@ -556,7 +625,7 @@ namespace ProjectZ
                     Hop h = hops[i];
                     if (CompAt(g, h.Stand, map) == comp)
                     {
-                        return LadderSite.Check(h.foot, h.top, map, out _, out _) ? i : -1;
+                        return HopOk(h, map) ? i : -1;
                     }
                 }
                 return -1;
@@ -567,10 +636,49 @@ namespace ProjectZ
                 List<string> s = new List<string>();
                 foreach (Hop h in hops)
                 {
-                    s.Add($"{(h.up ? "up" : "down")} {h.span} at foot {h.foot} top {h.top}");
+                    string what = h.kind == 2 ? $" after {h.how} of the {h.removal} at {h.work}" : h.kind == 1 ? (h.existing ? " (standing) top blocked" : " top blocked") : "";
+                    s.Add($"{(h.up ? "up" : "down")} {h.span} at foot {h.foot} top {h.top}{what}");
                 }
                 return $"cost {cost:0}, " + string.Join("; ", s);
             }
+        }
+
+        // The ladder standing from foot to top, or null.
+        public static Building_SiegeLadder LadderAt(IntVec3 foot, IntVec3 top, Map map)
+        {
+            StairGrid sg = StairGrid.For(map);
+            if (sg == null)
+            {
+                return null;
+            }
+            for (int i = 0; i < sg.links.Count; i++)
+            {
+                VLink l = sg.links[i];
+                if (l.IsLadder && l.bottom == foot && l.top == top)
+                {
+                    return l.thing as Building_SiegeLadder;
+                }
+            }
+            return null;
+        }
+
+        // A plan's step can still be taken: its ladder site is good (a blocked top still clearable, or its ladder standing
+        // with the top still blocked); a ceiling still there to take off.
+        public static bool HopOk(Hop h, Map map)
+        {
+            if (h.kind == 2)
+            {
+                return RaidVertical.CeilingOver(h.foot, map, out IntVec3 u) == h.removal && u == h.work;
+            }
+            if (h.kind == 1)
+            {
+                if (LadderAt(h.foot, h.top, map) != null)
+                {
+                    return RaidVertical.ClearableTop(h.top, map);
+                }
+                return RaidVertical.ClearableTop(h.top, map) && LadderSite.Check(h.foot, h.top, map, out _, out _, true);
+            }
+            return LadderSite.Check(h.foot, h.top, map, out _, out _);
         }
 
         // The dig component (PassAllDestroyableThings) at c, or of a neighbour as the game's reachability takes a start
@@ -639,6 +747,8 @@ namespace ProjectZ
         {
             public int version = -1;
             public readonly Dictionary<int, List<IntVec3>> byPart = new Dictionary<int, List<IntVec3>>();
+            // blockers beside open air (walls, doors, rock on a floor: RaidVertical.ClearableTop), by dig part
+            public readonly Dictionary<int, List<IntVec3>> blockByPart = new Dictionary<int, List<IntVec3>>();
         }
 
         private static readonly Dictionary<int, LevelRims> rims = new Dictionary<int, LevelRims>();
@@ -664,6 +774,7 @@ namespace ProjectZ
             }
             long t0 = Stopwatch.GetTimestamp();
             lr.byPart.Clear();
+            lr.blockByPart.Clear();
             lr.version = ver;
             AnnexMapComponent a = ProjectZ.Annex(map);
             int w = map.Size.x, h = a.groundZ, shift = Levels.Shift(map, L);
@@ -673,9 +784,14 @@ namespace ProjectZ
                 for (int x = 0; x < w; x++)
                 {
                     IntVec3 c = new IntVec3(x, 0, z + shift);
+                    bool block = false;
                     if (!pg.WalkableFast(c))
                     {
-                        continue;
+                        if (c.GetEdifice(map) == null)
+                        {
+                            continue;
+                        }
+                        block = true;
                     }
                     bool rim = false;
                     for (int d = 0; d < 4 && !rim; d++)
@@ -689,7 +805,7 @@ namespace ProjectZ
                         IntVec3 n = new IntVec3(nx, 0, nz + shift);
                         rim = !ProjectZ.HasFloor(n, map) && n.GetEdifice(map) == null;
                     }
-                    if (!rim)
+                    if (!rim || block && !RaidVertical.ClearableTop(c, map))
                     {
                         continue;
                     }
@@ -698,9 +814,10 @@ namespace ProjectZ
                     {
                         continue;
                     }
-                    if (!lr.byPart.TryGetValue(p, out List<IntVec3> list))
+                    Dictionary<int, List<IntVec3>> into = block ? lr.blockByPart : lr.byPart;
+                    if (!into.TryGetValue(p, out List<IntVec3> list))
                     {
-                        lr.byPart[p] = list = new List<IntVec3>();
+                        into[p] = list = new List<IntVec3>();
                     }
                     list.Add(c);
                 }
@@ -749,7 +866,160 @@ namespace ProjectZ
             {
                 return null;
             }
-            return new Site { foot = land, top = t, span = fallen, footComp = fc, topComp = topComp, footG = Levels.Ground(land, map), topG = Levels.Ground(t, map), footL = Levels.LevelOf(land, map), topL = L };
+            return new Site { foot = land, top = t, span = fallen, footComp = fc, topComp = topComp, footG = Levels.Ground(land, map), topG = Levels.Ground(t, map), footL = Levels.LevelOf(land, map), topL = L, kind = t.Walkable(map) ? 0 : 1 };
+        }
+
+        // Stage 3 candidate limits (the mountain map stays fast): blocker tops within BlockR cells (ground) of the start or
+        // the goal; ceilings over the cells within RemR of the goal's ground cell (and RemStartR of the start's).
+        public const float BlockR = 14f;
+        public const float RemR = 4f;
+        public const float RemStartR = 1.5f;
+
+        // The blocker-top sites with their top in component C near the start or the goal (made per plan: not kept), and
+        // ladders standing there whose top is still blocked.
+        private static void BlockerSitesWithTopIn(RouteGraph g, Map map, int C, IntVec3 startG, IntVec3 goalG, List<Site> into)
+        {
+            into.Clear();
+            StairGrid sg = StairGrid.For(map);
+            if (sg != null)
+            {
+                for (int i = 0; i < sg.links.Count; i++)
+                {
+                    VLink l = sg.links[i];
+                    if (!l.IsLadder || !(l.thing is Building_SiegeLadder) || l.top.Walkable(map) || !RaidVertical.ClearableTop(l.top, map))
+                    {
+                        continue;
+                    }
+                    int tp = g.DigPartAt(l.top, 0);
+                    int fp = g.DigPartAt(l.bottom, 0);
+                    if (tp <= 0 || fp <= 0 || g.DigCompOf(tp, 0) != C)
+                    {
+                        continue;
+                    }
+                    int fc = g.DigCompOf(fp, 0);
+                    if (fc == C)
+                    {
+                        continue;
+                    }
+                    into.Add(new Site { foot = l.bottom, top = l.top, span = l.span, footComp = fc, topComp = C, footG = Levels.Ground(l.bottom, map), topG = Levels.Ground(l.top, map), footL = Levels.LevelOf(l.bottom, map), topL = Levels.LevelOf(l.top, map), kind = 1, existing = true });
+                }
+            }
+            float r2 = BlockR * BlockR;
+            int lo = Levels.Min(map), hi = Levels.Max(map);
+            for (int L = lo + 1; L <= hi; L++)
+            {
+                LevelRims lr = RimsOf(g, map, L);
+                foreach (KeyValuePair<int, List<IntVec3>> kv in lr.blockByPart)
+                {
+                    if (g.DigCompOf(kv.Key, 0) != C)
+                    {
+                        continue;
+                    }
+                    List<IntVec3> cells = kv.Value;
+                    for (int i = 0; i < cells.Count; i++)
+                    {
+                        IntVec3 cg = Levels.Ground(cells[i], map);
+                        if ((!startG.IsValid || (cg - startG).LengthHorizontalSquared > r2) && (!goalG.IsValid || (cg - goalG).LengthHorizontalSquared > r2))
+                        {
+                            continue;
+                        }
+                        for (int d = 0; d < 4; d++)
+                        {
+                            Site s = MakeSite(g, map, cells[i], L, C, GenAdj.CardinalDirections[d]);
+                            if (s != null)
+                            {
+                                s.kind = 1;
+                                into.Add(s);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The ceilings over cells of component C (on any level) near the goal and the start that a raider could take off
+        // from below, each with the top beside it it leads to (RaidVertical.CeilingOver, TopBeside).
+        private static void RemovalSitesFrom(RouteGraph g, Map map, int C, IntVec3 startG, IntVec3 goalG, List<Site> into)
+        {
+            into.Clear();
+            int lo = Levels.Min(map), hi = Levels.Max(map);
+            int sx = map.Size.x, gz = ProjectZ.Annex(map).groundZ;
+            foreach ((IntVec3 centre, float radius) in new[] { (goalG, RemR), (startG, RemStartR) })
+            {
+                if (!centre.IsValid)
+                {
+                    continue;
+                }
+                int n = GenRadial.NumCellsInRadius(radius);
+                for (int i = 0; i < n; i++)
+                {
+                    IntVec3 gr = centre + GenRadial.RadialPattern[i];
+                    if (gr.x < 0 || gr.z < 0 || gr.x >= sx || gr.z >= gz)
+                    {
+                        continue;
+                    }
+                    for (int f = lo; f < hi; f++)
+                    {
+                        IntVec3 F = Levels.Cell(gr, f, map);
+                        if (!F.IsValid || !F.InBounds(map))
+                        {
+                            continue;
+                        }
+                        int fp = g.DigPartAt(F, 0);
+                        if (fp <= 0 || g.DigCompOf(fp, 0) != C)
+                        {
+                            continue;
+                        }
+                        Building fe = F.GetEdifice(map);
+                        if (fe != null && !(fe is Mineable) || f > 0 && !ProjectZ.HasFloor(F, map) || Stairwell.StairCellAt(F, map))
+                        {
+                            continue;
+                        }
+                        RaidVertical.Removal r = RaidVertical.CeilingOver(F, map, out IntVec3 U);
+                        if (r == RaidVertical.Removal.None || r == RaidVertical.Removal.Slab && !F.Standable(map))
+                        {
+                            continue;
+                        }
+                        IntVec3 T = RaidVertical.TopBeside(g, U, map, C, out int tc);
+                        if (!T.IsValid)
+                        {
+                            continue;
+                        }
+                        int u = Levels.LevelOf(U, map);
+                        into.Add(new Site { foot = F, top = T, span = u - f, footComp = C, topComp = tc, footG = gr, topG = Levels.Ground(T, map), footL = f, topL = u, kind = 2, work = U, removal = r });
+                    }
+                }
+            }
+        }
+
+        private static readonly List<Site> tmpSites = new List<Site>();
+
+        private static void AddSite(Site s, int depth)
+        {
+            long k = ((long)s.foot.x << 48) ^ ((long)s.foot.z << 32) ^ ((long)s.top.x << 16) ^ s.top.z ^ ((long)s.kind << 62);
+            if (!seenSite.Add(k))
+            {
+                return;
+            }
+            s.banned = false;
+            int id = sites.Count;
+            sites.Add(s);
+            Index(s.footComp, id, true);
+            if (!s.UpOnly)
+            {
+                Index(s.topComp, id, false);
+            }
+            if (depth + 1 < MaxDepth)
+            {
+                if (!scanned.Contains(s.footComp))
+                {
+                    compQueue.Enqueue((s.footComp, depth + 1));
+                }
+                if (s.UpOnly && !scanned.Contains(s.topComp))
+                {
+                    compQueue.Enqueue((s.topComp, depth + 1));
+                }
+            }
         }
 
         // ------------------------------------------------------------------------------------------------ search
@@ -765,7 +1035,7 @@ namespace ProjectZ
 
         private static double Ms(long t0) => (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
 
-        private static void Collect(RouteGraph g, Map map, int startComp, IEnumerable<int> goalComps)
+        private static void Collect(RouteGraph g, Map map, int startComp, IEnumerable<int> goalComps, IntVec3 startG, IntVec3 goalG, bool vertical)
         {
             sites.Clear();
             byComp.Clear();
@@ -793,20 +1063,23 @@ namespace ProjectZ
                 List<Site> list = SitesWithTopIn(g, map, C);
                 for (int i = 0; i < list.Count; i++)
                 {
-                    Site s = list[i];
-                    long k = ((long)s.foot.x << 48) ^ ((long)s.foot.z << 32) ^ ((long)s.top.x << 16) ^ s.top.z;
-                    if (!seenSite.Add(k))
+                    AddSite(list[i], depth);
+                }
+                if (!vertical)
+                {
+                    continue;
+                }
+                BlockerSitesWithTopIn(g, map, C, startG, goalG, tmpSites);
+                for (int i = 0; i < tmpSites.Count; i++)
+                {
+                    AddSite(tmpSites[i], depth);
+                }
+                if (goalG.IsValid)
+                {
+                    RemovalSitesFrom(g, map, C, startG, goalG, tmpSites);
+                    for (int i = 0; i < tmpSites.Count; i++)
                     {
-                        continue;
-                    }
-                    s.banned = false;
-                    int id = sites.Count;
-                    sites.Add(s);
-                    Index(s.footComp, id, true);
-                    Index(s.topComp, id, false);
-                    if (depth + 1 < MaxDepth && !scanned.Contains(s.footComp))
-                    {
-                        compQueue.Enqueue((s.footComp, depth + 1));
+                        AddSite(tmpSites[i], depth);
                     }
                 }
             }
@@ -901,6 +1174,69 @@ namespace ProjectZ
         private static readonly PriorityQueue<int, float> open = new PriorityQueue<int, float>();
 
         // A* over points: 0 = the start, 1 + 2s = site s's foot reached, 2 + 2s = its top reached, goal = last.
+        public const float NoiseTicks = 300f;
+        private static float[] extra = new float[0];
+        private static RaidVertical.Method[] hows = new RaidVertical.Method[0];
+
+        // A site's cost over its ladder (the pawn's clearing or removal time; +inf: this pawn can't take it), per plan.
+        private static void Extras(Map map, RaidVertical.PawnCost pc)
+        {
+            int n = sites.Count;
+            if (extra.Length < n)
+            {
+                extra = new float[n];
+                hows = new RaidVertical.Method[n];
+            }
+            for (int i = 0; i < n; i++)
+            {
+                Site s = sites[i];
+                hows[i] = RaidVertical.Method.None;
+                switch (s.kind)
+                {
+                    case 1:
+                        extra[i] = pc.ClearTicks(s.top.GetEdifice(map));
+                        break;
+                    case 2:
+                    {
+                        float t = RaidVertical.RemovalTicks(pc, s.removal, s.foot, s.work, s.span, map, out RaidVertical.Method how);
+                        if (how == RaidVertical.Method.BlastSlab || how == RaidVertical.Method.BlastRock && pc.blastRanged)
+                        {
+                            // (somewhere near the foot to blast from; else the pawn's other way, if any)
+                            RouteGraph g = RouteGraph.For(map);
+                            if (!RaidBlast.AnyStand(g, s.work, s.foot, s.footComp, how == RaidVertical.Method.BlastSlab, pc.explosionRadius, pc.blast.EffectiveRange, map))
+                            {
+                                t = float.PositiveInfinity;
+                                if (how == RaidVertical.Method.BlastRock && pc.mine && s.span == 1)
+                                {
+                                    t = pc.MineTicks(s.work.GetEdifice(map)?.HitPoints ?? 1000, true);
+                                    how = RaidVertical.Method.Mine;
+                                }
+                                else if (how == RaidVertical.Method.BlastSlab && pc.mineNonMineables && s.span == 1)
+                                {
+                                    t = RaidVertical.SlabHits(s.work, map) * pc.MineTicks(RaidVertical.SlabChunkHp(s.work, map), false);
+                                    how = RaidVertical.Method.DigSlab;
+                                }
+                            }
+                        }
+                        if (!s.top.Walkable(map) && !float.IsInfinity(t))
+                        {
+                            t += pc.ClearTicks(s.top.GetEdifice(map));
+                        }
+                        extra[i] = t;
+                        hows[i] = how;
+                        break;
+                    }
+                    default:
+                        extra[i] = 0f;
+                        break;
+                }
+                if (pc.breach != null && !float.IsInfinity(extra[i]) && pc.breach.WithinNoise(s.foot))
+                {
+                    extra[i] += NoiseTicks;   // (the game's breach path pays its Perlin cost the same way)
+                }
+            }
+        }
+
         private static List<(int site, bool up)> Search(Map map, IntVec3 start, int startComp, HashSet<int> goalComps, bool exit, IntVec3 goalCell, int tc, int td, Dictionary<int, float> firstLeg, out float total)
         {
             total = 0;
@@ -993,7 +1329,11 @@ namespace ProjectZ
                         continue;
                     }
                     float walk = u == 0 && firstLeg.TryGetValue(si * 2 + (fromFoot ? 0 : 1), out float real) ? real : Octile(atG, fromFoot ? s.footG : s.topG, tc, td) + Math.Abs(atL - (fromFoot ? s.footL : s.topL)) * Climb.StepTicks;
-                    float nd = du + walk + LadderCost(s.span);
+                    if (float.IsInfinity(extra[si]))
+                    {
+                        continue;
+                    }
+                    float nd = du + walk + LadderCost(s.span, s.existing) + extra[si];
                     if (nd < dist[v])
                     {
                         dist[v] = nd;
@@ -1022,7 +1362,10 @@ namespace ProjectZ
         private static readonly HashSet<int> goalSet = new HashSet<int>();
 
         // A plan for pawn from its component to the goal (a cell, or a ground edge), or null.
-        public static Plan Find(Map map, RouteGraph g, Pawn pawn, int startComp, bool exit, IntVec3 goalCell)
+        // (tests) -projectznovertical: stage 3's edges left out
+        public static bool NoVertical;
+
+        public static Plan Find(Map map, RouteGraph g, Pawn pawn, int startComp, bool exit, IntVec3 goalCell, RaidVertical.PawnCost pc = null)
         {
             goalSet.Clear();
             if (exit)
@@ -1047,7 +1390,9 @@ namespace ProjectZ
             }
             long tc0 = Stopwatch.GetTimestamp();
             LastSearchMs = LastLegMs = 0;
-            Collect(g, map, startComp, goalSet);
+            pc ??= RaidVertical.PawnCost.For(pawn, false);
+            Collect(g, map, startComp, goalSet, Levels.Ground(pawn.Position, map), goalCell.IsValid ? Levels.Ground(goalCell, map) : IntVec3.Invalid, !NoVertical);
+            Extras(map, pc);
             LastCollectMs = Ms(tc0);
             if (sites.Count == 0)
             {
@@ -1070,7 +1415,8 @@ namespace ProjectZ
                 foreach (var (si, _) in r)
                 {
                     Site s = sites[si];
-                    if (!LadderSite.Check(s.foot, s.top, map, out int span, out _) || span != s.span)
+                    bool ok = s.kind == 2 || s.kind == 1 && s.existing || LadderSite.Check(s.foot, s.top, map, out int span, out _, s.kind == 1) && span == s.span;
+                    if (!ok)
                     {
                         s.banned = true;
                         bad = true;
@@ -1123,7 +1469,7 @@ namespace ProjectZ
                 foreach ((int si, bool up) in r)
                 {
                     Site s = sites[si];
-                    plan.hops.Add(new Hop { foot = s.foot, top = s.top, span = s.span, up = up });
+                    plan.hops.Add(new Hop { foot = s.foot, top = s.top, span = s.span, up = up, kind = s.kind, existing = s.existing, work = s.work, removal = s.removal, how = hows[si] });
                 }
                 lastLegPawn = legBlock.TryGetValue(fk, out var lb) ? pawn : null;
                 lastLegAt = pawn.Position;

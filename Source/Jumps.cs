@@ -244,6 +244,11 @@ namespace ProjectZ
             }
             Map map = p.Map;
             float storey = IsoRimBridge.StoreyHeight;
+            float perched = LadderPerch.Height(p);
+            if (perched > 0f)
+            {
+                return perched * storey;   // up a ladder, clearing its top (stage 3)
+            }
             StepKind k = Kind(p, out VLink link);
             if (k == StepKind.LadderUp || k == StepKind.LadderDown)
             {
