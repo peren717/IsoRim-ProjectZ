@@ -429,7 +429,12 @@ namespace ProjectZ
                 return Vector3.zero;
             }
             float rise = Links.Rise(p);
-            return rise == 0f ? Vector3.zero : new Vector3(0f, rise, 0f);
+            Vector3 o = rise == 0f ? Vector3.zero : new Vector3(0f, rise, 0f);
+            if (Links.LadderPose(p, out _, out Vector3 sway))
+            {
+                o += sway;   // swaying a little as it climbs a ladder
+            }
+            return o;
         }
     }
 }

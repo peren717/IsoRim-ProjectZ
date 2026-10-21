@@ -34,7 +34,8 @@ namespace ProjectZ.Dev
     //   R16 a base out of the 50-cell (3D) radius from the ground: raiders wander (recorded)
     //   MT  (-projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt) a base on a natural
     //       mountain top: the raiders climb
-    // Screenshots (3D on): raiders on a ladder (R1), on the second ladder of the moat (R8), a mechanoid on a lift (R12).
+    // Screenshots (3D on): raiders on a ladder (R1), on the second ladder of the moat (R8), a mechanoid on a lift (R12);
+    // with -projectzposeshots each also from two camera turns, every pawn facing as a frame would turn it.
     public static partial class TestRunner
     {
         private sealed class RlCase
@@ -197,13 +198,46 @@ namespace ProjectZ.Dev
             IntVec3 g = p != null && p.Spawned ? Levels.Ground(p.Position, map) : rlBase.CenterCell;
             Info($"{rlShot}: {p} at {p?.Position} (level {(p != null ? Levels.LevelOf(p.Position, map) : -1)}) -> {p?.pather?.nextCell}, {p?.pather?.MovePercentage:P0}, kind {(p != null ? Links.Kind(p).ToString() : "-")}");
             Find.WindowStack.TryRemove(typeof(LudeonTK.EditWindow_Log), doCloseSound: false);
+            if (RlPoseShots)
+            {
+                // (no ticks of the game's own over the camera turns' frames: the raid goes on as without the shots)
+                Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+                // (the facing is the game's per-frame visual, not run by the test's ticks: as a frame would)
+                foreach (Pawn q in map.mapPawns.AllPawnsSpawned)
+                {
+                    q.rotationTracker?.UpdateRotation();
+                }
+            }
             ShotAt(map, rlShotFloor, g + IntVec3.East, 7f);
             Wait(3, "rl_shot");
         }
 
+        // -projectzposeshots: each climb shot also from two camera turns (90, 270).
+        private static bool RlPoseShots => GenCommandLine.CommandLineArgPassed("projectzposeshots");
+
+        private static readonly float[] rlShotYaws = { 0f, 90f, 270f };
+        private static int rlShotView;
+        private static object rlShotOldYaw;
+
         private static void RlShotTake(Map map)
         {
-            Capture(rlShot);
+            Capture(rlShotView == 0 ? rlShot : rlShot + "_turn" + Mathf.RoundToInt(rlShotYaws[rlShotView]));
+            if (RlPoseShots && rlShotView + 1 < rlShotYaws.Length)
+            {
+                if (rlShotView == 0)
+                {
+                    rlShotOldYaw = IsoRimBridge.SetOption("freeYaw", 0f);
+                }
+                rlShotView++;
+                IsoRimBridge.SetOption("freeYaw", rlShotYaws[rlShotView]);
+                Wait(120, "rl_shot");   // (the camera turns over some frames)
+                return;
+            }
+            if (rlShotView > 0)
+            {
+                IsoRimBridge.SetOption("freeYaw", rlShotOldYaw ?? 0f);
+                rlShotView = 0;
+            }
             rlShotsTaken.Add(rlShot);
             rlShot = null;
             Wait(3, "rl_shot_done");

@@ -39,13 +39,15 @@ namespace ProjectZ.Dev
     //                                   ladders: siege ladders, stage 1 (the generic vertical link, climbing, falls, the place-ladder
     //                                   job, claim, countdown, deconstruct, hauling, the last way down, shots, save mid-climb;
     //                                   TestLadders; with the column kept open, the climber first at the end, no melee over 2+
-    //                                   floors: TestLadders2), -projectzfloors=5 -projectzseed=7
+    //                                   floors: TestLadders2; the climbing pose: TestLadderPose), -projectzfloors=5 -projectzseed=7;
+    //                                   ladderpose: only the climbing-pose checks and their screenshot strips (TestLadderPose)
     //                                   raidladders: siege ladders, stage 2: raiders use ladders where the game's last resort
     //                                   finds no way (real raids against bases on floors, a moat, exits, kidnap, mechanoids,
     //                                   animals and shamblers excluded; TestRaidLadders), -projectzfloors=5 -projectzseed=7
     //                                   -projectzmapsize=120 (-projectznoraidladders: the feature off; -projectzraidonly=<ids>;
     //                                   -projectzraidref=<tag>: compare RA's end state; -projectzraidtiming: every plan made twice,
-    //                                   timed; the mountain-top case "mt" with
+    //                                   timed; -projectzposeshots: each
+    //                                   climb shot also from two camera turns; the mountain-top case "mt" with
     //                                   -projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt)
     //                                   elevator: the player elevator (rides and timings, route choice, several riders, hauling,
     //                                   a tame animal, visitors, raiders and prisoners kept out, power cut and the emergency
@@ -1046,7 +1048,7 @@ namespace ProjectZ.Dev
                     {
                         stage = "rl_setup";
                     }
-                    else if (mode == "ladders")
+                    else if (mode == "ladders" || mode == "ladderpose")
                     {
                         stage = "ld_setup";
                     }

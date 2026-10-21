@@ -75,7 +75,7 @@ namespace ProjectZ.Dev
                     Ld2MeleeCheck(map, 1);
                     return true;
             }
-            return false;
+            return StepLadderPoseInner(map);
         }
 
         private static IntVec3 Ld2Col(int L, Map map) => LdL(19, 13, L, map);
@@ -337,7 +337,7 @@ namespace ProjectZ.Dev
                 return;
             }
             Info($"ladder follow-ups: ends cleared {LinkSteps.EndsCleared}, column kills {LadderColumnWatch.Destroyed}");
-            Finish();
+            stage = "ld_po";
         }
     }
 }

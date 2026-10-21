@@ -229,6 +229,63 @@ namespace ProjectZ
             return l.span * (1f - Mathf.Clamp01((pct - LadderAcross) / (1f - LadderAcross)));
         }
 
+        // A pawn on a ladder faces it, its back to the open air (user 2026-10-21), from taking hold of it until it steps off
+        // (a pawn waiting for its turn does not), and sways a little from side to side, one way per rung (RungsPerFloor),
+        // as it climbs (a draw offset only: IsoRimBridge.ThingOffset). The ladder: the side of the foot's column toward the
+        // top (its model's north, LiftModels). The mechanoids' lift: faced, no sway (a platform). An elevator without power
+        // (ElevatorLadder): the shaft's back wall up and down the shaft, its door side on the way out; powered: unchanged.
+        public const float SwayCells = 0.03f;
+        public const float RungsPerFloor = 4f;
+
+        // The facing (Pawn_UpdateRotation_Patch) and the sway (true space, across the facing) of a pawn on a ladder step
+        // it holds; false otherwise.
+        public static bool LadderPose(Pawn p, out Rot4 face, out Vector3 sway)
+        {
+            face = Rot4.Invalid;
+            sway = Vector3.zero;
+            if (p?.pather == null || !p.pather.Moving || !p.Spawned)
+            {
+                return false;
+            }
+            Map map = p.Map;
+            LinkSteps s = LinkSteps.For(map);
+            if (s == null || s.steps.Count == 0)
+            {
+                return false;
+            }
+            LinkSteps.Step st = s.Of(p);
+            if (st == null || !st.climbing || !st.link.IsLadder || p.Position != st.from || p.pather.nextCell != st.to || st.link.thing == null)
+            {
+                return false;
+            }
+            VLink l = st.link;
+            float pct = Mathf.Clamp01(p.pather.MovePercentage);
+            float h;
+            if (l.kind == LinkKind.ElevatorLadder)
+            {
+                Rot4 door = l.thing.Rotation;
+                face = pct > 1f - ElevatorDoor(l) ? door : door.Opposite;
+                h = ElevatorHeight(st.up, l, pct);
+            }
+            else
+            {
+                IntVec3 d = Levels.Ground(l.top, map) - Levels.Ground(l.bottom, map);
+                if (Mathf.Abs(d.x) + Mathf.Abs(d.z) != 1)
+                {
+                    return false;
+                }
+                face = Rot4.FromIntVec3(d);
+                h = LadderHeight(st.up ? StepKind.LadderUp : StepKind.LadderDown, l, pct);
+            }
+            if (l.kind != LinkKind.Lift)
+            {
+                float w = SwayCells * Mathf.Sin(Mathf.PI * RungsPerFloor * h);
+                IntVec3 side = face.Rotated(RotationDirection.Clockwise).FacingCell;
+                sway = new Vector3(side.x * w, 0f, side.z * w);
+            }
+            return true;
+        }
+
         // An elevator ride is drawn as: from the exit into the shaft, up (or down) the shaft, out onto the other exit. The
         // way in and the way out take ElevatorDoorTicks each (a part of the step at most ElevatorDoorMax).
         public const int ElevatorDoorTicks = 15;

@@ -295,7 +295,7 @@ namespace ProjectZ.Dev
             R2Park(map);
             Info($"ladders: area {r2Area}, walker {r2P}, second {r2Q}, levels {Levels.Min(map)}..{Levels.Max(map)}");
             ldIdx = 0;
-            stage = "ld_c";
+            stage = mode == "ladderpose" ? "ld_po" : "ld_c";
         }
 
         // A clear area, a platform on level n (ground x 20..29, z 8..19), its west edge cell (20, 13) the top; the column at

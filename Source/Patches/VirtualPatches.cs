@@ -14,7 +14,7 @@ namespace ProjectZ.Patches
     // (the stance's focus), and standing on a job that faces its target (the game's FaceTarget). A drafted pawn waiting
     // on an attack order (AttackStatic, no line of sight yet) keeps facing its target instead of the game's turn south
     // (user decision 2026-10-18); other drafted jobs turn south as in the game. Face/FaceCell are small enough to be
-    // inlined into UpdateRotation, so the branches are taken here.
+    // inlined into UpdateRotation, so the branches are taken here. A pawn on a ladder or a lift faces it (Links.LadderPose).
     [HarmonyPatch(typeof(Pawn_RotationTracker), nameof(Pawn_RotationTracker.UpdateRotation))]
     public static class Pawn_UpdateRotation_Patch
     {
@@ -24,6 +24,11 @@ namespace ProjectZ.Patches
             if (pawn == null || !pawn.Spawned || pawn.Destroyed || pawn.kindDef.useFixedRotation || pawn.jobs == null || pawn.stances == null)
             {
                 return true;
+            }
+            if (Links.LadderPose(pawn, out Rot4 face, out _))
+            {
+                pawn.Rotation = face;   // on a ladder or a lift: facing it (the game would face the next cell, on another floor's rows)
+                return false;
             }
             if (pawn.jobs.HandlingFacing || pawn.stances.stunner.Stunned && pawn.stances.stunner.DisableRotation)
             {
