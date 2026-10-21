@@ -156,6 +156,10 @@ namespace ProjectZ
                 SlabPeel.Dirty(map);
                 ShownLevels.FloorChanged(c, map, oldTerr == PZDefOf.PZ_OpenAir);
                 ReachFogMap.ColumnChanged(c, map);   // (what is seen from the edges round it)
+                if (oldTerr == PZDefOf.PZ_OpenAir)
+                {
+                    LadderColumn.Changed(c, map, false);   // (a floor in a ladder's column: the safety net)
+                }
             }
         }
     }
@@ -230,6 +234,10 @@ namespace ProjectZ
             {
                 JumpGrid.ColumnChanged(c, map);
                 ReachFogMap.ColumnChanged(c, map);
+                if (__instance.Roofed(c))
+                {
+                    LadderColumn.Changed(c, map, true);   // (a roof over a ladder's column: the safety net)
+                }
             }
         }
     }

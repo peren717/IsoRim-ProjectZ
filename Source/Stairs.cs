@@ -653,6 +653,11 @@ namespace ProjectZ
                 // the exit over another stairwell (its floor is about to go, or already open air)
                 return "PZ_LandingBlocked".Translate();
             }
+            if (LadderColumn.Reserved(top, map))
+            {
+                // (no landing laid in a ladder's open column)
+                return "PZ_LadderColumnOpen".Translate();
+            }
             if (top.GetTerrain(map) == PZDefOf.PZ_OpenAir)
             {
                 // The landing is made with the stairs and held up by them (§7: stairs build anywhere): the cell under it

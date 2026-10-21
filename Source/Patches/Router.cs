@@ -223,15 +223,16 @@ namespace ProjectZ.Patches
         }
 
         // A link step's cost: its time (stairs Climb.StepTicks, ladders 180 per floor: VLink.stepTicks), plus fog on the cell
-        // stepped onto and a pawn in the way there.
-        internal static int StepCost(Map map, int stepTicks, IntVec3 onto, TraverseParms tp)
+        // stepped onto and a pawn in the way there (not at a ladder's end: the climber has priority there, the pawn steps
+        // aside, LinkSteps.ClearEnd).
+        internal static int StepCost(Map map, int stepTicks, IntVec3 onto, TraverseParms tp, bool ladder = false)
         {
             int c = stepTicks;
             if (tp.avoidFog && onto.Fogged(map))
             {
                 c += FogCost;
             }
-            if (tp.pawn != null && PawnUtility.AnyPawnBlockingPathAt(onto, tp.pawn))
+            if (!ladder && tp.pawn != null && PawnUtility.AnyPawnBlockingPathAt(onto, tp.pawn))
             {
                 c += BlockedCost;
             }
@@ -542,7 +543,7 @@ namespace ProjectZ.Patches
                 if (!c.dig ? g.Passable(link, c.tp) : g.Usable(link))
                 {
                     IntVec3 top = g.links[link].top;
-                    nbrs.Add((u + 1, Exact(c, u, u + 1, KindStep, StepCost(c.map, g.links[link].stepTicks, top, c.tp), new List<IntVec3> { top })));
+                    nbrs.Add((u + 1, Exact(c, u, u + 1, KindStep, StepCost(c.map, g.links[link].stepTicks, top, c.tp, g.links[link].IsLadder), new List<IntVec3> { top })));
                 }
                 if (g.links[link].HasRamp)
                 {
@@ -631,7 +632,7 @@ namespace ProjectZ.Patches
             else if (!c.dig ? g.Passable(lk, c.tp) : g.Usable(lk))
             {
                 IntVec3 hc = g.links[lk].bottom;
-                nbrs.Add((h, Exact(c, u, h, KindStep, StepCost(c.map, g.links[lk].stepTicks, hc, c.tp), new List<IntVec3> { hc })));
+                nbrs.Add((h, Exact(c, u, h, KindStep, StepCost(c.map, g.links[lk].stepTicks, hc, c.tp, g.links[lk].IsLadder), new List<IntVec3> { hc })));
             }
             if (Immediate(c, at))
             {
@@ -1189,7 +1190,7 @@ namespace ProjectZ.Patches
                             if (a < float.MaxValue)
                             {
                                 names.Add("up" + i);
-                                Go(l.top, sofar + a + StepCost(map, l.stepTicks, l.top, tp), depth + 1);
+                                Go(l.top, sofar + a + StepCost(map, l.stepTicks, l.top, tp, l.IsLadder), depth + 1);
                                 names.RemoveAt(names.Count - 1);
                             }
                         }
@@ -1198,7 +1199,7 @@ namespace ProjectZ.Patches
                             float a = Leg(at, l.top, PathEndMode.OnCell);
                             if (a < float.MaxValue)
                             {
-                                float st = sofar + a + StepCost(map, l.stepTicks, l.bottom, tp);
+                                float st = sofar + a + StepCost(map, l.stepTicks, l.bottom, tp, l.IsLadder);
                                 names.Add("down" + i);
                                 // the goal from H (the stairs or their ramp, or a touch across the step)
                                 if (dest.Cell == l.bottom || dest.Cell == mid || dest.HasThing && dest.Thing == l.thing || ReachabilityImmediate.CanReachImmediate(l.bottom, dest, map, peMode, tp.pawn))

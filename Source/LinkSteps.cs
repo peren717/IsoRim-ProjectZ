@@ -117,6 +117,7 @@ namespace ProjectZ
             st.climbing = !l.IsLadder;
             st.height = st.up ? 0 : l.span;
             st.carried = p.carryTracker?.CarriedThing as Pawn;
+            ClearEnd(st, p);   // (at once: before the path follower sees the pawn there and looks for another way)
         }
 
         // The time a step pays this tick (CostToPayThisTick): a ladder step 1 when the pawn holds the ladder (taking it when
@@ -176,6 +177,7 @@ namespace ProjectZ
                     {
                         st.height = Height(st, p.pather.MovePercentage);
                     }
+                    ClearEnd(st, p);
                     continue;
                 }
                 steps.RemoveAt(i);
@@ -189,6 +191,43 @@ namespace ProjectZ
                 }
             }
         }
+
+        // The climber has priority at the end of its ladder (user 2026-10-20): a pawn on that end cell that would stop it
+        // (the game's collision: a hostile, or a pawn on a collide-with-pawns job) steps aside to a free neighbour, as a
+        // pawn on a top that opens does (Shaft.StepAside). Only for the pawn that holds the ladder or may take it now (a
+        // pawn waiting for it pushes no one); otherwise both would wait for each other at its two ends.
+        private void ClearEnd(Step st, Pawn p)
+        {
+            if (!st.link.IsLadder || !st.to.InBounds(map) || !PawnUtility.ShouldCollideWithPawns(p))
+            {
+                return;
+            }
+            if (!st.climbing)
+            {
+                Pawn h = Holder(st.link.thing);
+                if (h != null && h != p)
+                {
+                    return;
+                }
+            }
+            for (int n = 0; n < 4; n++)
+            {
+                Pawn b = PawnUtility.PawnBlockingPathAt(st.to, p);
+                if (b == null || b == p)
+                {
+                    return;
+                }
+                IntVec3 was = b.Position;
+                Shaft.StepAside(b, st.to, map);
+                if (b.Position == was)
+                {
+                    return;   // nowhere free to step to
+                }
+                EndsCleared++;
+            }
+        }
+
+        public static int EndsCleared;
 
         private static float Height(Step st, float pct)
         {

@@ -128,10 +128,19 @@ namespace ProjectZ
                 broken.Clear();
                 return false;
             }
-            if (!land.Standable(map) || land.GetEdifice(map) != null || Stairwell.StairThingAt(land, map))
+            if (!land.Standable(map) || land.GetEdifice(map) != null || Stairwell.StairCellAt(land, map))
             {
                 why = "foot not free";
                 return false;
+            }
+            // the column itself: nothing planned, being built or standing in it (it is kept open from then on: LadderColumn)
+            for (int lv = L - fallen + 1; lv <= L; lv++)
+            {
+                if (LadderColumn.Busy(Levels.Cell(g, lv, map), map))
+                {
+                    why = "column not clear";
+                    return false;
+                }
             }
             StairGrid sg = StairGrid.For(map);
             if (sg != null)
@@ -394,7 +403,7 @@ namespace ProjectZ
             }
             if (!LadderSite.Find(loc, rot, map, out _, out _, out string why, allowBlocker: true))
             {
-                return why == "another link there" ? "PZ_LandingBlocked".Translate() : "PZ_LadderNoDrop".Translate();
+                return why == "another link there" ? "PZ_LandingBlocked".Translate() : why == "column not clear" ? "PZ_LadderColumnBlocked".Translate() : "PZ_LadderNoDrop".Translate();
             }
             return AcceptanceReport.WasAccepted;
         }
@@ -405,6 +414,265 @@ namespace ProjectZ
             if (map != null && LadderSite.Find(center, rot, map, out IntVec3 foot, out _, out _, allowBlocker: true))
             {
                 GenDraw.DrawFieldEdges(new List<IntVec3> { foot }, Color.white);
+            }
+        }
+    }
+
+    // The open-air column a ladder uses (user 2026-10-20): over ground cell g = the foot's, the open cells on the levels
+    // above the foot up to the top's level (beside the top), and the roof cells under them (levels foot .. top - 1). It is
+    // kept open as the stairwell over stairs is, for every faction: no floor, wall, building, blueprint or frame placed in
+    // it (CanPlaceBlueprintAt_LadderColumn_Patch, the slab and deck rules: SlabSupport.CoverOk, ShipDeck.Check, the stairs'
+    // landing), no roof built over it (the roof area designator, the build-roof work giver and its job: auto-roof only adds
+    // area). Built ladders (their link) and the player's emergency ladder not built yet (blueprint or frame: the column
+    // LadderSite finds for it) reserve it. If it still fills up (a gravship landing, dev spawning, another mod: a floor or
+    // building in it, a roof over it), the ladder is destroyed as if shot down: climbers fall (LadderColumnWatch).
+    public static class LadderColumn
+    {
+        // c is an open cell of a ladder's column.
+        public static bool Reserved(IntVec3 c, Map map) => Owner(c, map, false) != null;
+
+        // c is a roof cell under a ladder's column (a roof there would close it).
+        public static bool Plane(IntVec3 c, Map map) => Owner(c, map, true) != null;
+
+        // The ladder (or its site) whose column holds c (plane: as a roof cell), or null.
+        public static Thing Owner(IntVec3 c, Map map, bool plane)
+        {
+            if (map == null || !c.IsValid || !c.InBounds(map) || ProjectZ.Annex(map) == null)
+            {
+                return null;
+            }
+            StairGrid sg = StairGrid.For(map);
+            List<Thing> bps = Sites(map, PZDefOf.PZ_EmergencyLadder?.blueprintDef);
+            List<Thing> frames = Sites(map, PZDefOf.PZ_EmergencyLadder?.frameDef);
+            if (sg == null && bps.NullOrEmpty() && frames.NullOrEmpty())
+            {
+                return null;
+            }
+            int L = Levels.LevelOf(c, map);
+            IntVec3 g = Levels.Ground(c, map);
+            if (L == Levels.None || !g.IsValid)
+            {
+                return null;
+            }
+            if (sg != null)
+            {
+                for (int i = 0; i < sg.links.Count; i++)
+                {
+                    VLink l = sg.links[i];
+                    if (l.IsLadder && Levels.Ground(l.bottom, map) == g && Holds(L, Levels.LevelOf(l.bottom, map), Levels.LevelOf(l.top, map), plane))
+                    {
+                        return l.thing;
+                    }
+                }
+            }
+            Thing t = PendingOwner(bps, g, L, plane, map) ?? PendingOwner(frames, g, L, plane, map);
+            return t;
+        }
+
+        private static readonly List<Thing> none = new List<Thing>();
+
+        private static List<Thing> Sites(Map map, ThingDef def) => def == null ? none : map.listerThings.ThingsOfDef(def);
+
+        private static Thing PendingOwner(List<Thing> sites, IntVec3 g, int L, bool plane, Map map)
+        {
+            for (int i = 0; i < sites.Count; i++)
+            {
+                Thing t = sites[i];
+                if (EmergencyLadder.PendingFoot(t, out IntVec3 foot) && Levels.Ground(foot, map) == g && Holds(L, Levels.LevelOf(foot, map), Levels.LevelOf(t.Position, map), plane))
+                {
+                    return t;
+                }
+            }
+            return null;
+        }
+
+        private static bool Holds(int L, int footL, int topL, bool plane) => plane ? L >= footL && L < topL : L > footL && L <= topL;
+
+        // Something in a column cell that a ladder may not be placed through: a blueprint, frame, building or item (or
+        // a floor there).
+        public static bool Busy(IntVec3 c, Map map)
+        {
+            if (!c.IsValid || !c.InBounds(map))
+            {
+                return true;
+            }
+            if (ProjectZ.HasFloor(c, map))
+            {
+                return true;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Thing t = list[i];
+                if (t is Blueprint || t is Frame || t is Building || t.def.category == ThingCategory.Item)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // A built ladder's column is still open: no floor or building in its cells, no roof under them.
+        public static bool Open(VLink l, Map map)
+        {
+            IntVec3 g = Levels.Ground(l.bottom, map);
+            int footL = Levels.LevelOf(l.bottom, map), topL = Levels.LevelOf(l.top, map);
+            for (int L = footL; L <= topL; L++)
+            {
+                IntVec3 c = Levels.Cell(g, L, map);
+                if (!c.IsValid || !c.InBounds(map))
+                {
+                    return false;
+                }
+                if (L > footL && (ProjectZ.HasFloor(c, map) || c.GetFirstBuilding(map) != null))
+                {
+                    return false;
+                }
+                if (L < topL && map.roofGrid.Roofed(c))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // A column cell (or a roof cell under one) may have filled: checked on the next tick (LadderColumnWatch).
+        public static void Changed(IntVec3 c, Map map, bool plane)
+        {
+            if (Owner(c, map, plane) is Building)
+            {
+                map.GetComponent<LadderColumnWatch>()?.Add(c);
+            }
+        }
+    }
+
+    // The safety net: ladders whose column filled are destroyed (as if shot down: Kill, so climbers fall, LinkSteps).
+    // Checked a tick later, never inside the terrain, roof or spawn code that reported it.
+    public class LadderColumnWatch : MapComponent
+    {
+        private readonly HashSet<IntVec3> cells = new HashSet<IntVec3>();
+
+        public static int Destroyed;
+
+        public LadderColumnWatch(Map map) : base(map)
+        {
+        }
+
+        public void Add(IntVec3 c) => cells.Add(c);
+
+        public override void MapComponentTick()
+        {
+            if (cells.Count == 0)
+            {
+                return;
+            }
+            List<Building> doomed = null;
+            foreach (IntVec3 c in cells)
+            {
+                foreach (bool plane in new[] { false, true })
+                {
+                    if (LadderColumn.Owner(c, map, plane) is Building b && !b.Destroyed)
+                    {
+                        StairGrid sg = StairGrid.For(map);
+                        int i = sg == null ? -1 : sg.IndexOf(b);
+                        if (i >= 0 && !LadderColumn.Open(sg.links[i], map))
+                        {
+                            (doomed ??= new List<Building>()).Add(b);
+                        }
+                    }
+                }
+            }
+            cells.Clear();
+            if (doomed == null)
+            {
+                return;
+            }
+            foreach (Building b in doomed)
+            {
+                if (!b.Destroyed && b.Spawned)
+                {
+                    ProjectZ.DebugLog($"{b} at {b.Position}: its column filled, it comes down");
+                    Destroyed++;
+                    b.Kill();
+                }
+            }
+        }
+    }
+
+    // No floor, wall, building, blueprint or frame in a ladder's column, for anyone (after the other placement rules: a
+    // column cell is open air, so the game and the floor rules have mostly refused already; this gives the reason).
+    [HarmonyLib.HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanPlaceBlueprintAt_NewTemp))]
+    public static class CanPlaceBlueprintAt_LadderColumn_Patch
+    {
+        [HarmonyLib.HarmonyPriority(HarmonyLib.Priority.Low)]
+        public static void Postfix(BuildableDef entDef, IntVec3 center, Rot4 rot, Map map, ref AcceptanceReport __result)
+        {
+            if (entDef == null || map == null || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            foreach (IntVec3 c in GenAdj.OccupiedRect(center, rot, entDef.Size))
+            {
+                if (LadderColumn.Reserved(c, map))
+                {
+                    __result = "PZ_LadderColumnOpen".Translate();
+                    return;
+                }
+            }
+        }
+    }
+
+    // No roof over a ladder's column: not designated (the roof area), not built (the work giver; its job stops if the
+    // column is reserved meanwhile).
+    [HarmonyLib.HarmonyPatch(typeof(Designator_AreaBuildRoof), nameof(Designator_AreaBuildRoof.CanDesignateCell))]
+    public static class BuildRoofArea_LadderColumn_Patch
+    {
+        public static void Postfix(Designator_AreaBuildRoof __instance, IntVec3 c, ref AcceptanceReport __result)
+        {
+            if (__result.Accepted && LadderColumn.Plane(c, __instance.Map))
+            {
+                __result = "PZ_LadderColumnOpen".Translate();
+            }
+        }
+    }
+
+    [HarmonyLib.HarmonyPatch(typeof(WorkGiver_BuildRoof), nameof(WorkGiver_BuildRoof.HasJobOnCell))]
+    public static class BuildRoofWork_LadderColumn_Patch
+    {
+        public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
+        {
+            if (__result && LadderColumn.Plane(c, pawn.Map))
+            {
+                __result = false;
+            }
+        }
+    }
+
+    [HarmonyLib.HarmonyPatch(typeof(JobDriver_BuildRoof), "DoWorkFailOn")]
+    public static class BuildRoofJob_LadderColumn_Patch
+    {
+        public static void Postfix(JobDriver_BuildRoof __instance, ref bool __result)
+        {
+            if (!__result && __instance.pawn?.Map != null && LadderColumn.Plane(__instance.job.targetA.Cell, __instance.pawn.Map))
+            {
+                __result = true;
+            }
+        }
+    }
+
+    // A building spawned into a ladder's column (dev spawn, a gravship landing, another mod): the safety net checks it.
+    [HarmonyLib.HarmonyPatch(typeof(Thing), nameof(Thing.SpawnSetup))]
+    public static class LadderColumn_Spawn_Patch
+    {
+        public static void Postfix(Thing __instance, bool respawningAfterLoad)
+        {
+            if (respawningAfterLoad || !(__instance is Building) || __instance is Building_SiegeLadder || StairGrid.For(__instance.Map) == null)
+            {
+                return;
+            }
+            foreach (IntVec3 c in __instance.OccupiedRect())
+            {
+                LadderColumn.Changed(c, __instance.Map, false);
             }
         }
     }

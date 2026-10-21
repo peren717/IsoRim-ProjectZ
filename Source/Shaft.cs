@@ -125,9 +125,10 @@ namespace ProjectZ
 
         private static readonly AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> peModeRef = AccessTools.FieldRefAccess<Pawn_PathFollower, PathEndMode>("peMode");
 
-        // A pawn on a top that opens steps to the free neighbour (8-way, same level, not open air or about to open) nearest
+        // A pawn on a top that opens (or on a ladder end a climber is stepping onto: LinkSteps) steps to the free neighbour
+        // (8-way, same level, not open air or about to open) nearest
         // where it was heading (its path, else its job's cell on this level), else nearest its spot. Its job goes on.
-        private static void StepAside(Pawn p, IntVec3 u, Map map)
+        public static void StepAside(Pawn p, IntVec3 u, Map map)
         {
             IntVec3 goal = IntVec3.Invalid;
             if (p.pather != null && p.pather.Moving && p.pather.Destination.IsValid)
@@ -176,7 +177,7 @@ namespace ProjectZ
                 p.pather.StartPath(dest, pe);   // (the teleport stops the pather: on its way again)
             }
             SteppedAside++;
-            ProjectZ.DebugLog($"{p} stepped aside from opening top {u} to {best}");
+            ProjectZ.DebugLog($"{p} stepped aside from {u} to {best}");
         }
 
         // A cell whose own top is set to open: marked Mine below, or a Remove roof hole or a Mine above mark under it.

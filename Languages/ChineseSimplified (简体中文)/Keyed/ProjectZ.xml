@@ -78,4 +78,6 @@
   <PZ_StairsPart1>中间一级</PZ_StairsPart1>
   <PZ_StairsPart2>最高一级</PZ_StairsPart2>
   <PZ_StairsPart3>末端实心格</PZ_StairsPart3>
+  <PZ_LadderColumnOpen>梯子经过的空间要留空</PZ_LadderColumnOpen>
+  <PZ_LadderColumnBlocked>下方的路被挡住了</PZ_LadderColumnBlocked>
 </LanguageData>

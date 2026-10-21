@@ -262,7 +262,7 @@ namespace ProjectZ.Dev
                     LdEmergencyEndCheck(map);
                     return true;
             }
-            return false;
+            return StepLadders2Inner(map);
         }
 
         // ------------------------------------------------------------------------------------------------ fixtures
@@ -1082,7 +1082,7 @@ namespace ProjectZ.Dev
             Result("ECD the emergency ladder disappears a day after it was built (60000 ticks), its link gone", ldLadder.Destroyed && took >= 59750 && took <= 60500 && StairGrid.For(map)?.IndexOf(ldLadder) is null or < 0,
                 $"destroyed {ldLadder.Destroyed} {took} ticks after completion");
             Info($"ladder counters: falls {LinkSteps.Falls} ({LinkSteps.FallFloors} floors), wait ticks {LinkSteps.Waits}, corpses lowered {LinkSteps.CorpsesLowered}, paths stopped {LinkSteps.Stopped}, overrides held {PZStats.climbOverridesHeld}");
-            Finish();
+            stage = "ld_col";   // (the follow-ups: TestLadders2)
         }
 
         // ------------------------------------------------------------------------------------------------ S: shots

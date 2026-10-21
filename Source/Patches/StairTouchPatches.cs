@@ -97,11 +97,17 @@ namespace ProjectZ.Patches
             {
                 return false;
             }
-            if (target.HasThing && target.Thing.Spawned)
-            {
-                return target.Thing.OccupiedRect().Contains(other);
-            }
-            return target.Cell == other;
+            bool hit = target.HasThing && target.Thing.Spawned ? target.Thing.OccupiedRect().Contains(other) : target.Cell == other;
+            return hit && !(MeleeTouch.Now(target) && NoMeleeAcross(root, other, map));
+        }
+
+        // Melee across a link step only over one floor (stairs, a 1-floor ladder; user 2026-10-20): a ladder spanning 2 or
+        // more floors carries work (build, deconstruct, repair, haul) but no blows between its foot and its top.
+        public static bool NoMeleeAcross(IntVec3 a, IntVec3 b, Map map)
+        {
+            StairGrid sg = StairGrid.For(map);
+            int i = sg == null ? -1 : sg.StepLink(a, b);
+            return i >= 0 && sg.links[i].IsLadder && sg.links[i].span >= 2;
         }
 
         // K2: stairs being taken up (deconstruct or uninstall designated): +1 when their top side would be cut off from
@@ -215,6 +221,10 @@ namespace ProjectZ.Patches
                 if (stairs)
                 {
                     IntVec3 o = StairTouch.PairCell(c, map);
+                    if (o.IsValid && MeleeTouch.On(traverseParams.pawn, dest) && StairTouch.NoMeleeAcross(c, o, map))
+                    {
+                        o = IntVec3.Invalid;   // (a melee attacker climbs up to its target)
+                    }
                     Region ro = o.IsValid && o.InBounds(map) ? o.GetRegion(map) : null;
                     if (ro != null && ro.Allows(traverseParams, isDestination: true) && !regions.Contains(ro))
                     {
@@ -456,6 +466,79 @@ namespace ProjectZ.Patches
             {
                 result = c;
                 __result = true;
+            }
+        }
+    }
+}
+
+namespace ProjectZ.Patches
+{
+    // Melee across a link step (StairTouch.NoMeleeAcross): which touch questions are a blow. Two ways in:
+    //   - the reacher: ReachabilityImmediate's core remembers whose question it is (pawn arrivals, the melee toil's "can
+    //     I hit it", the router's goal test all pass the pawn); a pawn whose job is a melee attack on that target asks as
+    //     a fighter (JobDriver_AttackMelee, social fights and berserk included; predator hunts; Anomaly's melee attackers);
+    //   - a melee verb's line (Verb.TryFindShootLineFromTo for a melee verb: CanHitTarget, TryStartCastOn) asks without a
+    //     pawn, so it is marked while it runs.
+    public static class MeleeTouch
+    {
+        [System.ThreadStatic] private static int verbDepth;
+        [System.ThreadStatic] private static Pawn reacher;
+
+        // The touch question asked now is a blow at target.
+        public static bool Now(LocalTargetInfo target) => verbDepth > 0 || On(reacher, target);
+
+        // p's job is a melee attack on target.
+        public static bool On(Pawn p, LocalTargetInfo target)
+        {
+            JobDriver d = p?.jobs?.curDriver;
+            Job job = p?.CurJob;
+            if (d == null || job == null || !target.IsValid)
+            {
+                return false;
+            }
+            if (!(d is JobDriver_AttackMelee || d is JobDriver_PredatorHunt || d is JobDriver_RevenantAttack || d is JobDriver_UnnaturalCorpseAttack))
+            {
+                return false;
+            }
+            LocalTargetInfo a = job.targetA;
+            return a.HasThing ? target.HasThing && a.Thing == target.Thing : !target.HasThing && a.Cell == target.Cell;
+        }
+
+        [HarmonyPatch(typeof(ReachabilityImmediate), nameof(ReachabilityImmediate.CanReachImmediate), new[] { typeof(IntVec3), typeof(LocalTargetInfo), typeof(Map), typeof(PathEndMode), typeof(Pawn) })]
+        [PatchGroup(FailSoft.StairRouting)]
+        public static class CanReachImmediate_Reacher_Patch
+        {
+            public static void Prefix(Pawn pawn, out Pawn __state)
+            {
+                __state = reacher;
+                reacher = pawn;
+            }
+
+            public static void Finalizer(Pawn __state)
+            {
+                reacher = __state;
+            }
+        }
+
+        [HarmonyPatch(typeof(Verb), nameof(Verb.TryFindShootLineFromTo))]
+        [PatchGroup(FailSoft.StairRouting)]
+        public static class TryFindShootLineFromTo_Melee_Patch
+        {
+            public static void Prefix(Verb __instance, out bool __state)
+            {
+                __state = __instance.verbProps != null && (__instance.verbProps.IsMeleeAttack || __instance.EffectiveRange <= 1.42f);
+                if (__state)
+                {
+                    verbDepth++;
+                }
+            }
+
+            public static void Finalizer(bool __state)
+            {
+                if (__state)
+                {
+                    verbDepth--;
+                }
             }
         }
     }

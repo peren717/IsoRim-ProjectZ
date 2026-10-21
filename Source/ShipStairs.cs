@@ -84,6 +84,10 @@ namespace ProjectZ
                 // the exit over another stairwell
                 return "PZ_LandingBlocked".Translate();
             }
+            if (LadderColumn.Reserved(top, map))
+            {
+                return "PZ_LadderColumnOpen".Translate();
+            }
             if (!ShipDeck.At(top, map))
             {
                 // The landing (as ordinary stairs): a ship upper deck laid with the stairs (LayLanding; or one planned

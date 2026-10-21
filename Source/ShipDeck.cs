@@ -119,6 +119,10 @@ namespace ProjectZ
             {
                 return "PZ_StairwellBelow".Translate();
             }
+            if (LadderColumn.Plane(below, map))
+            {
+                return "PZ_LadderColumnOpen".Translate();
+            }
             Thing tall = HeightRule.TallThingAt(below, map);
             if (tall != null)
             {

@@ -78,4 +78,6 @@
   <PZ_StairsPart1>middle step</PZ_StairsPart1>
   <PZ_StairsPart2>top step</PZ_StairsPart2>
   <PZ_StairsPart3>end block</PZ_StairsPart3>
+  <PZ_LadderColumnOpen>Keep the space along the ladder open</PZ_LadderColumnOpen>
+  <PZ_LadderColumnBlocked>Something is in the way down</PZ_LadderColumnBlocked>
 </LanguageData>
