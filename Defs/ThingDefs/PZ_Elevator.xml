@@ -3,7 +3,8 @@
 
   <!-- The player elevator (Source/Elevator.cs, user 2026-10-20): 1x1, its rotation is its door side; the shaft over it is
        kept open through every floor above; a stop on the door side of each floor; 0.5 s + 0.65 s per floor, any number
-       of riders; without power a ladder (3 s per floor). Placeholder sprite (a shaft frame open on the door side). -->
+       of riders; without power a ladder (3 s per floor). Placeholder sprite (a shaft frame open on the door side). Menu icon:
+       the 3D model at 45 degrees like the stairs icon (tools/projectz/elevator_icon.py). -->
   <ThingDef ParentName="BuildingBase">
     <defName>PZ_Elevator</defName>
     <label>elevator</label>
@@ -14,6 +15,7 @@
       <graphicClass>Graphic_Multi</graphicClass>
       <drawSize>(1,1)</drawSize>
     </graphicData>
+    <uiIconPath>ProjectZ/Elevator_MenuIcon</uiIconPath>
     <altitudeLayer>Building</altitudeLayer>
     <passability>Impassable</passability>
     <fillPercent>0.5</fillPercent>
