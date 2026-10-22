@@ -643,13 +643,29 @@ namespace ProjectZ
     // impassable on it.
     public class PlaceWorker_Stairs : PlaceWorker
     {
+        // Why stairs can't start on floor k (the bottom step's), or null; ship stairs ask it too. A footprint cell off
+        // that floor is "TooCloseToMapEdge" as well (asked by the callers): past a floor's edge are the gap rows.
+        public static string FloorRefusal(AnnexMapComponent a, int k)
+        {
+            if (a == null)
+            {
+                return "PZ_StairsNoFloors";
+            }
+            if (k < 0)
+            {
+                return "TooCloseToMapEdge";   // (a gap row: shown as past the map edge)
+            }
+            return k + 1 > a.MaxLevel ? "PZ_StairsTopFloor" : null;
+        }
+
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int k = ProjectZ.FloorOf(loc, map);
-            if (a == null || k < 0 || k + 1 > a.MaxLevel)
+            string floorWhy = FloorRefusal(a, k);
+            if (floorWhy != null)
             {
-                return "PZ_NoFloorAbove".Translate();
+                return floorWhy.Translate();
             }
             // no landing in fog (vanilla: nothing is placed in undiscovered cells; the game checks only the ramp's
             // centre); asked first, so no other reason tells what the fog hides
@@ -667,7 +683,7 @@ namespace ProjectZ
             {
                 if (ProjectZ.FloorOf(c, map) != k)
                 {
-                    return "PZ_NoFloorAbove".Translate();
+                    return "TooCloseToMapEdge".Translate();
                 }
             }
             foreach (IntVec3 c in StairShape.Ramp(loc, rot))

@@ -14,6 +14,7 @@
   <PZ_DebugTip>额外的日志和开发工具。</PZ_DebugTip>
   <PZ_FloorLabel>{0} 楼</PZ_FloorLabel>
   <PZ_FloorHudTip>{0}\n\n点击查看。按键 {1}、{2}，或 {3} + 鼠标滚轮。Alt + 拖动可移动。</PZ_FloorHudTip>
+  <PZ_FloorScrollHint>提示：按住 Shift 滚动鼠标滚轮可以切换楼层</PZ_FloorScrollHint>
   <PZ_HideFloorHud>隐藏楼层面板</PZ_HideFloorHud>
   <PZ_ResetFloorHud>重置楼层面板位置</PZ_ResetFloorHud>
   <PZ_GroundOnly>必须建在地面上</PZ_GroundOnly>
@@ -21,7 +22,8 @@
   <PZ_OverGravship>逆重飞船上方不能铺楼板</PZ_OverGravship>
   <PZ_GravshipGroundOnly>只能降落在地面上</PZ_GravshipGroundOnly>
   <PZ_StairsLeadTo>通往 {0} 楼</PZ_StairsLeadTo>
-  <PZ_NoFloorAbove>楼梯放在下层，通往上一层</PZ_NoFloorAbove>
+  <PZ_StairsNoFloors>这张地图没有上层</PZ_StairsNoFloors>
+  <PZ_StairsTopFloor>上面没有楼层</PZ_StairsTopFloor>
   <PZ_LandingBlocked>楼梯顶端出口那格被挡住了</PZ_LandingBlocked>
   <PZ_ViewFloorAbove>先切换到上一层（{0}）</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>这里已有楼板</PZ_AlreadyFloor>

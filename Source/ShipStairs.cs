@@ -33,15 +33,16 @@ namespace ProjectZ
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int k = ProjectZ.FloorOf(loc, map);
-            if (a == null || k < 0 || k + 1 > a.MaxLevel)
+            string floorWhy = PlaceWorker_Stairs.FloorRefusal(a, k);
+            if (floorWhy != null)
             {
-                return "PZ_NoFloorAbove".Translate();
+                return floorWhy.Translate();
             }
             foreach (IntVec3 c in StairShape.Footprint(loc, rot))
             {
                 if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) != k)
                 {
-                    return "PZ_NoFloorAbove".Translate();
+                    return "TooCloseToMapEdge".Translate();
                 }
                 if (!SlabSupport.Gravship(c, map))
                 {

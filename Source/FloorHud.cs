@@ -241,9 +241,13 @@ namespace ProjectZ
                             S.floorHudRight = UI.screenWidth - r.xMax;
                             S.floorHudBottom = UI.screenHeight - r.yMax;
                         }
-                        else if (k != cur)
+                        else
                         {
-                            FloorView.Set(k);
+                            if (k != cur)
+                            {
+                                FloorView.Set(k);
+                            }
+                            ScrollHintOnce();
                         }
                         e.Use();
                         break;
@@ -272,6 +276,18 @@ namespace ProjectZ
 
         private static string Tip(int k) => "PZ_FloorHudTip".Translate(FloorView.Label(k), FloorView.KeyName(PZKeyDefOf.PZ_FloorUp),
             FloorView.KeyName(PZKeyDefOf.PZ_FloorDown), FloorView.KeyName(PZKeyDefOf.PZ_FloorScrollHold));
+
+        // The first click on a floor bar ever (per install, kept in the mod settings): one message about Shift + wheel.
+        private static void ScrollHintOnce()
+        {
+            if (S.floorScrollHintShown)
+            {
+                return;
+            }
+            S.floorScrollHintShown = true;
+            LoadedModManager.GetMod<ProjectZMod>()?.WriteSettings();
+            Messages.Message("PZ_FloorScrollHint".Translate(), MessageTypeDefOf.NeutralEvent, historical: false);
+        }
 
         private static void EndDrag()
         {

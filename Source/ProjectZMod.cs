@@ -21,6 +21,8 @@ namespace ProjectZ
         public bool floorHudMoved = false;
         public float floorHudRight;
         public float floorHudBottom;
+        // The one-time floor scroll hint was shown (the first click on a floor HUD bar, per install).
+        public bool floorScrollHintShown = false;
 
         public override void ExposeData()
         {
@@ -32,6 +34,7 @@ namespace ProjectZ
             Scribe_Values.Look(ref floorHudMoved, "floorHudMoved", false);
             Scribe_Values.Look(ref floorHudRight, "floorHudRight", 0f);
             Scribe_Values.Look(ref floorHudBottom, "floorHudBottom", 0f);
+            Scribe_Values.Look(ref floorScrollHintShown, "floorScrollHintShown", false);
             floors = Mathf.Clamp(floors, 1, MaxFloors);
         }
     }

@@ -14,6 +14,7 @@
   <PZ_DebugTip>Extra log lines and dev tools.</PZ_DebugTip>
   <PZ_FloorLabel>Floor {0}</PZ_FloorLabel>
   <PZ_FloorHudTip>{0}\n\nClick to view. Keys {1} and {2}, or {3} + mouse wheel. Alt + drag to move.</PZ_FloorHudTip>
+  <PZ_FloorScrollHint>Tip: hold Shift and scroll the mouse wheel to change floors.</PZ_FloorScrollHint>
   <PZ_HideFloorHud>Hide floor HUD</PZ_HideFloorHud>
   <PZ_ResetFloorHud>Reset floor HUD position</PZ_ResetFloorHud>
   <PZ_GroundOnly>Must be built on the ground</PZ_GroundOnly>
@@ -21,7 +22,8 @@
   <PZ_OverGravship>Can't build an upper floor over a gravship</PZ_OverGravship>
   <PZ_GravshipGroundOnly>Must land on the ground</PZ_GravshipGroundOnly>
   <PZ_StairsLeadTo>Leads up to floor {0}</PZ_StairsLeadTo>
-  <PZ_NoFloorAbove>Place stairs on the lower floor, they lead up to the next one</PZ_NoFloorAbove>
+  <PZ_StairsNoFloors>This map has no upper floors</PZ_StairsNoFloors>
+  <PZ_StairsTopFloor>No floor above</PZ_StairsTopFloor>
   <PZ_LandingBlocked>The exit cell past the top of the stairs is blocked</PZ_LandingBlocked>
   <PZ_ViewFloorAbove>Switch to the floor above first ({0})</PZ_ViewFloorAbove>
   <PZ_AlreadyFloor>Already has a floor</PZ_AlreadyFloor>
