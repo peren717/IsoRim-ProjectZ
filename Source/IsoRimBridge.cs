@@ -52,8 +52,20 @@ namespace ProjectZ
             if (Combat.CombatGate.Enabled)
             {
                 IsoRim.Api.ProjectileCard = Combat.ProjectilePitch.Card;   // shots between floors pitched (ProjectilePitch)
+                if (ApiVersion >= 20)
+                {
+                    ShotArcs();   // a shot between floors drawn on the arc only when it flies as a lobbed one
+                }
             }
         }
+
+        // IsoRim Api 20 (only called when IsoRim has it): IsoRim draws a shot between floors (Flights.cross) as ProjectZ
+        // flies it (Api.IsLobbed: declared lobbed or direct, else its def's flyOverhead), so one declared direct (a war bow's
+        // arrow) is drawn straight. Shots on one floor: no answer, IsoRim decides as before.
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void ShotArcs() => IsoRim.Api.AddProjectileArc(new System.Func<Projectile, bool?>(ArcOf));
+
+        private static bool? ArcOf(Projectile p) => Combat.Flights.cross.TryGetValue(p, out _) ? Api.IsLobbed(p) : (bool?)null;
 
         // IsoRim Api 19 (only called when IsoRim has it).
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
