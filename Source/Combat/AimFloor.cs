@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -88,7 +89,16 @@ namespace ProjectZ.Combat
             public int k;   // the target's floor
         }
 
-        private static readonly List<Scope> stack = new List<Scope>();
+        // One scope stack per thread. The aim getters (Verb_ShootBeam / Verb_Spray get_AimAngleOverride) are read while
+        // pawns and turrets are drawn (the game's PawnRenderUtility and TurretTop, IsoRim's figures, muzzles and turret
+        // guns), and pawns are drawn on the game's parallel render workers, at the same time as each other and as the
+        // game thread's ticks. With one shared list two threads pushed and popped it together (an out-of-range
+        // RemoveAt in Leave, harness 3 2026-10-22) and a thread could read another thread's scope. Per thread, every
+        // listed method sees only the scope its own call opened, on whatever thread it runs.
+        [ThreadStatic]
+        private static List<Scope> stackOfThread;
+
+        private static List<Scope> stack => stackOfThread ?? (stackOfThread = new List<Scope>());
 
         // ---- the scope
 
@@ -125,7 +135,7 @@ namespace ProjectZ.Combat
                 if (virt.IsValid && virt != caster.Position)
                 {
                     s = new Scope { on = true, caster = caster, map = map, real = caster.Position, virt = virt, k = ProjectZ.FloorOf(t, map) };
-                    Scopes++;
+                    Interlocked.Increment(ref Scopes);
                 }
             }
             // a same-floor call inside a cross-floor one (another verb) closes the scope for its run
@@ -165,7 +175,7 @@ namespace ProjectZ.Combat
         // only a cell with a floor (open air holds nothing to burn, as for explosions).
         private static bool Visible(Scope s, IntVec3 c)
         {
-            Checks++;
+            Interlocked.Increment(ref Checks);
             return c.InBounds(s.map) && ProjectZ.FloorOf(c, s.map) == s.k && (s.k <= 0 || ProjectZ.HasFloor(c, s.map)) && Los3D.CanSee(s.real, c, s.map);
         }
 
@@ -269,7 +279,7 @@ namespace ProjectZ.Combat
         {
             if (Top(out Scope s) && c == s.virt)
             {
-                SinksMoved++;
+                Interlocked.Increment(ref SinksMoved);
                 return s.real;
             }
             return c;
@@ -296,7 +306,7 @@ namespace ProjectZ.Combat
                 if ((origin - (s.caster.DrawPos + shift)).sqrMagnitude < 0.01f)
                 {
                     origin -= shift;
-                    SinksMoved++;
+                    Interlocked.Increment(ref SinksMoved);
                 }
                 aimed = usedTarget.IsValid && ProjectZ.FloorOf(usedTarget.Cell, s.map) == s.k;
             }
@@ -345,7 +355,7 @@ namespace ProjectZ.Combat
             if (stack.Count > 0 && Top(out Scope s))
             {
                 proj.worldSource -= (s.virt - s.real).ToVector3();
-                SinksMoved++;
+                Interlocked.Increment(ref SinksMoved);
             }
             spray.Add(proj);
         }

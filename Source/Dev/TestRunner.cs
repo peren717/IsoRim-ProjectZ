@@ -222,6 +222,8 @@ namespace ProjectZ.Dev
     //                                   roofed, stairs, same floor, down, manhunter, buttons; TestLocustJump), -projectzfloors=3
     //                                   -projectzseed=7; -projectzfloors=1: the map without floors (-projectznojumpacross: off)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
+    //   (mode beamaim: a long seeded fight of beam-graser users on one floor and between floors, the beam's aim read on
+    //   the render workers; -projectzfloors=3 -projectzseed=7; TestBeamAim)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
     //   -projectzseed=N     a fixed random seed: the same world, tile and colonists every run, and in los3d each check's
@@ -670,6 +672,11 @@ namespace ProjectZ.Dev
                 StepAimPie(map);
                 return;
             }
+            if (stage.StartsWith("bm_"))
+            {
+                StepBeamAim(map);
+                return;
+            }
             if (stage.StartsWith("ld_"))
             {
                 StepLadders(map);
@@ -1068,6 +1075,10 @@ namespace ProjectZ.Dev
                     else if (mode == "aimpie")
                     {
                         stage = "ap_setup";
+                    }
+                    else if (mode == "beamaim")
+                    {
+                        stage = "bm_setup";
                     }
                     else if (mode == "ladders" || mode == "ladderpose")
                     {
