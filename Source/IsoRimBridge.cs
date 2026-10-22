@@ -45,11 +45,19 @@ namespace ProjectZ
             IsoRim.Api.LockView("IsoRim ProjectZ", LockedWall);
             IsoRim.Api.HiddenRoof = r => r == PZDefOf.PZ_StairwellRoof;
             IsoRim.Api.Floors = new FloorLayout();
+            if (ApiVersion >= 19)
+            {
+                HoldFacing();   // a climber's figure faces its ladder (Links.LadderPose), also going down
+            }
             if (Combat.CombatGate.Enabled)
             {
                 IsoRim.Api.ProjectileCard = Combat.ProjectilePitch.Card;   // shots between floors pitched (ProjectilePitch)
             }
         }
+
+        // IsoRim Api 19 (only called when IsoRim has it).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void HoldFacing() => IsoRim.Api.AddFacingHold(p => Links.LadderPose(p, out _, out _));
 
         // The wall height under ProjectZ (IsoRim's option is locked to it).
         public static readonly float LockedWall = DevWallHeight(1.65f);
@@ -386,6 +394,34 @@ namespace ProjectZ
             Color32? v = IsoRim.Api.Dev.GlowCorner(map, c);
             return v.HasValue ? v.Value.ToString() : "?";
         }
+
+        // IsoRim Api 19 (tests): the yaw a figure was last drawn facing and how many frames ago (null: never drawn as one,
+        // or an older IsoRim), and the aim pies IsoRim drew at a muzzle.
+        public static bool HasDrawnYaw => Present && ApiVersion >= 19;
+
+        public static float? DrawnYaw(Pawn p, out int age)
+        {
+            age = -1;
+            return HasDrawnYaw ? DrawnYawInner(p, out age) : null;
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static float? DrawnYawInner(Pawn p, out int age) => IsoRim.Api.Dev.DrawnYaw(p, out age);
+
+        public static int MuzzlePieCount => HasDrawnYaw ? MuzzlePieCountInner() : 0;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int MuzzlePieCountInner() => IsoRim.Api.Dev.MuzzlePieCount;
+
+        public static float MuzzlePieAngle => HasDrawnYaw ? MuzzlePieAngleInner() : float.NaN;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static float MuzzlePieAngleInner() => IsoRim.Api.Dev.MuzzlePieAngle;
+
+        public static float MuzzlePieDegrees => HasDrawnYaw ? MuzzlePieDegreesInner() : 0f;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static float MuzzlePieDegreesInner() => IsoRim.Api.Dev.MuzzlePieDegrees;
     }
 
     public class FloorLayout : IsoRim.IFloorLayout

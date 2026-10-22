@@ -390,8 +390,46 @@ namespace ProjectZ.Combat
                     patched++;
                 }
             }
+            // the aim pie (after IsoRim's prefix, which draws a 3D figure's pie at its muzzle itself)
+            bool pie = FailSoft.Entry("AimFloor:GenDraw.DrawAimPie", AccessTools.Method(typeof(GenDraw), nameof(GenDraw.DrawAimPie)),
+                prefix: new HarmonyMethod(typeof(AimFloor), nameof(AimPie)) { priority = Priority.Low }, group: FailSoft.Combat);
             FailSoft.EndList();
-            Log.Message($"[ProjectZ] aim on the target's floor: {patched} of {Rows.Length} methods patched, {Rows.Sum(r => r.swaps)} calls swapped");
+            Log.Message($"[ProjectZ] aim on the target's floor: {patched} of {Rows.Length} methods patched, {Rows.Sum(r => r.swaps)} calls swapped, aim pie {(pie ? "on" : "off")}");
+        }
+
+        // tests: aim pies turned toward another floor, the last one's facing
+        public static int Pies;
+        public static float LastPieFacing;
+
+        // The aim pie of a selected pawn warming up (GenDraw.DrawAimPie, on the ground by the shooter) toward a target on
+        // another floor: its direction from the shooter's column on the target's floor (the game's would be a whole band
+        // of rows north or south), so it points at the target as seen. Same floor: the game's own.
+        public static bool AimPie(Thing shooter, LocalTargetInfo target, int degreesWide, float offsetDist, bool __runOriginal)
+        {
+            if (!__runOriginal || shooter == null || !shooter.Spawned || !target.IsValid)
+            {
+                return __runOriginal;
+            }
+            Map map = shooter.Map;
+            IntVec3 t = target.Cell;
+            if (!t.InBounds(map) || !ProjectZ.HasAnnex(map) || !Heights.CrossFloor(shooter.Position, t, map))
+            {
+                return true;
+            }
+            IntVec3 virt = Heights.OnFloorOf(shooter.Position, t, map);
+            if (!virt.IsValid || virt == shooter.Position)
+            {
+                return true;
+            }
+            float facing = 0f;
+            if (t != virt)
+            {
+                facing = target.Thing == null ? (t - virt).AngleFlat : (target.Thing.DrawPos - virt.ToVector3Shifted()).AngleFlat();
+            }
+            Pies++;
+            LastPieFacing = facing;
+            GenDraw.DrawAimPieRaw(shooter.DrawPos + new Vector3(0f, offsetDist, 0f), facing, degreesWide);
+            return false;
         }
 
         private static MethodBase Resolve(Assembly game, Row r)
