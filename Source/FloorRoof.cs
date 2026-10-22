@@ -160,6 +160,7 @@ namespace ProjectZ
                 {
                     LadderColumn.Changed(c, map, false);   // (a floor in a ladder's column: the safety net)
                 }
+                ApiEvents.FireFloorChanged(map, c, oldTerr == PZDefOf.PZ_OpenAir);   // (Api.FloorChanged, last)
             }
         }
     }

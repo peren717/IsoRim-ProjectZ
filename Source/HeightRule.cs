@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
@@ -5,15 +6,36 @@ using Verse;
 
 namespace ProjectZ
 {
+    // XML for other mods (Api 2): this building fits under a floor whatever its model height (ProjectZ's height rule
+    // never counts it as too tall): <modExtensions><li Class="ProjectZ.FitsUnderFloor" /></modExtensions>
+    public class FitsUnderFloor : DefModExtension
+    {
+    }
+
     // The slab height rule (user decision 2026-10-15, both directions): a building drawn taller than a storey's clearance
     // can't have a floor over any of its cells, and a floor over a cell keeps such a building from being placed under
     // it. Models are not squashed. "Drawn taller" is IsoRim's own model height (OBJ top x scale x footprint fit,
     // IsoRim.Api.ModelHeight); walls, doors and other shapes follow the wall height and never count. Blueprints and
     // frames count as what they will become.
+    // Other mods (Api 2): a def with the FitsUnderFloor extension never counts; rules registered through
+    // Api.RegisterHeightRule are asked next (first answer wins); then the model height. Every use of the rule (placement
+    // both ways, ship decks, ship stairs, tall mountains over tall things) asks TooTall, so this is the one place.
     public static class HeightRule
     {
         // Head room under a floor, in cells: the wall height less a little (everyday buildings up to 1.60 at walls of 1.65).
         public static float Clearance => IsoRimBridge.WallHeight - 0.05f + 0.005f;
+
+        private static readonly List<Func<BuildableDef, bool?>> rules = new List<Func<BuildableDef, bool?>>();
+
+        public static void Register(Func<BuildableDef, bool?> rule)
+        {
+            if (rule != null && !rules.Contains(rule))
+            {
+                rules.Add(rule);
+            }
+        }
+
+        public static void Unregister(Func<BuildableDef, bool?> rule) => rules.Remove(rule);
 
         public static bool TooTall(BuildableDef def)
         {
@@ -22,6 +44,27 @@ namespace ProjectZ
             if (t == null || t.category != ThingCategory.Building || StairDefs.Is(t) || t == ElevatorDefOf.PZ_Elevator || typeof(Building_Door).IsAssignableFrom(t.thingClass))
             {
                 return false;
+            }
+            if (t.HasModExtension<FitsUnderFloor>())
+            {
+                return false;
+            }
+            for (int i = 0; i < rules.Count; i++)
+            {
+                bool? r;
+                try
+                {
+                    r = rules[i](t);
+                }
+                catch (Exception e)
+                {
+                    Log.ErrorOnce($"[ProjectZ] height rule {rules[i].Method.DeclaringType}.{rules[i].Method.Name} threw: {e}", rules[i].Method.GetHashCode() ^ 0x5a2004);
+                    continue;
+                }
+                if (r.HasValue)
+                {
+                    return r.Value;
+                }
             }
             return IsoRimBridge.ModelHeight(t) > Clearance;
         }

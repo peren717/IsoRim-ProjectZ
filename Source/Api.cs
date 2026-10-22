@@ -9,8 +9,137 @@ namespace ProjectZ
     public static class Api
     {
         // The API version, raised whenever something is added here, so an addon can check for what it needs
-        // (1: lobbed shots between floors, OnDifferentFloors, CanSeeBetweenFloors, OpenSkyOver).
-        public static int Version => 1;
+        // (1: lobbed shots between floors, OnDifferentFloors, CanSeeBetweenFloors, OpenSkyOver;
+        //  2: floor queries, the height rule (FitsUnderFloor, RegisterHeightRule, TooTallUnderFloor), events (FloorChanged,
+        //     PawnChangedFloor, AddStepHook), combat queries (Distance3D, RangeDistance, HeightAccuracyBonus)).
+        // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
+        // own (a missing member fails the whole method that names it, when that method is first run).
+        public static int Version => 2;
+
+        // ---- floors (2)
+        // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
+        // (ProjectZ off for that map, or a world made with one floor) every cell is on floor 0. In the map's cell grid each
+        // floor is a block of rows north of the ground (a "band", the same width and the ground's height), with a few void
+        // rows between two bands that are on no floor (FloorOf -1). Cells of the floors are ordinary map cells: things,
+        // terrain, roofs and pawns on them use the game's usual calls.
+
+        // The map has floors above the ground.
+        public static bool HasFloors(Map map) => map != null && ProjectZ.HasAnnex(map);
+
+        // How many floors the map has, the ground counted (1 without floors).
+        public static int FloorCount(Map map) => map == null ? 1 : Levels.Count(map);
+
+        // The floor of a cell: 0 the ground, k floor k; -1 for a void row between two floors. Cheap (a row compare).
+        public static int FloorOf(IntVec3 c, Map map) => map == null ? 0 : ProjectZ.FloorOf(c, map);
+
+        // The floor a thing is on (where it is held: a carried or stored thing, its holder's); -1 when it is on no map.
+        public static int FloorOf(Thing t)
+        {
+            Map map = t?.MapHeld;
+            return map == null ? -1 : ProjectZ.FloorOf(t.PositionHeld, map);
+        }
+
+        // The ground cell under (or at) c: the same x and z over the ground. Invalid for a void row cell.
+        public static IntVec3 GroundCellOf(IntVec3 c, Map map) => map == null ? c : ProjectZ.GroundCellOf(c, map);
+
+        // Ground cell g lifted to floor k (k = 0 gives g). Invalid when the map has no floor k or g is no ground cell.
+        public static IntVec3 CellOnFloor(IntVec3 ground, int floor, Map map) => map == null ? (floor == 0 ? ground : IntVec3.Invalid) : ProjectZ.CellOnFloor(ground, floor, map);
+
+        // The two cells are on the same floor (always on a map without floors; a void row cell is on none).
+        public static bool SameFloor(IntVec3 a, IntVec3 b, Map map) => map == null || ProjectZ.SameBand(a, b, map);
+
+        // The ground's cells (the whole map without floors): ground cell g is on every floor k at CellOnFloor(g, k, map).
+        public static CellRect GroundRect(Map map) => ProjectZ.GroundRect(map);
+
+        // One floor's height in cells, as drawn and as used for 3D distances (a little over IsoRim's wall height).
+        public static float StoreyHeight => IsoRimBridge.StoreyHeight;
+
+        // The floor the player views and works on in the current map (the floor HUD; 0 without floors). Not saved.
+        public static int ViewedFloor => FloorView.Current;
+
+        // Views floor k of the current map (clamped to the map's floors), as the floor keys do.
+        public static void SetViewedFloor(int floor) => FloorView.Set(floor);
+
+        // ---- the height rule under floors (2)
+        // A building drawn taller than a storey's head room can't have a floor over it, and can't be placed under one
+        // (refused with a message). ProjectZ measures IsoRim's model height; walls, doors, stairs and its elevator never
+        // count. A tall model that should fit anyway (glass, a sign that reaches into the floor above):
+        //   XML: <modExtensions><li Class="ProjectZ.FitsUnderFloor" /></modExtensions> on the ThingDef (never too tall), or
+        //   code: a rule, below.
+
+        // Registers a rule for the height rule: rule(def) returns true (too tall: no floor over it), false (fits) or null (no
+        // say: the next rule, then the model height). Asked for buildings only, after FitsUnderFloor and ProjectZ's own
+        // exceptions; the first answer wins. Asked on every placement and floor check: keep it cheap. Register once.
+        public static void RegisterHeightRule(Func<BuildableDef, bool?> rule) => HeightRule.Register(rule);
+
+        public static void UnregisterHeightRule(Func<BuildableDef, bool?> rule) => HeightRule.Unregister(rule);
+
+        // ProjectZ's answer for a def: too tall for a floor over it (with the extension and the rules applied).
+        public static bool TooTallUnderFloor(BuildableDef def) => HeightRule.TooTall(def);
+
+        // ---- events (2)
+        // Subscribe once (e.g. from a StaticConstructorOnStartup); handlers run on the main thread, in the middle of the
+        // game's own work: keep them short, and don't spawn, despawn or move things from them. A handler that throws is
+        // logged once and skipped. With nobody subscribed they cost nothing worth measuring.
+
+        // A floor was built or removed on a cell of an upper floor: (map, cell, built). built = true: the cell turned from
+        // open air into a floor (a slab built, a ship deck landed, stairs' landing laid); false: back to open air (taken up,
+        // collapsed, a ship took off). Not fired while the map is being generated, nor for a floor covering changed on a
+        // floor (a carpet on a slab).
+        public static event Action<Map, IntVec3, bool> FloorChanged
+        {
+            add => ApiEvents.FloorChanged += value;
+            remove => ApiEvents.FloorChanged -= value;
+        }
+
+        // A spawned pawn moved to another floor of its map: (pawn, from floor, to floor). Fired right after its position
+        // changed, for every cause (stairs, ladders and elevators at the end of the step, jumps, falls, teleports). Not
+        // fired when a pawn spawns or despawns (a carried pawn set down on another floor: it spawns there).
+        public static event Action<Pawn, int, int> PawnChangedFloor
+        {
+            add => ApiEvents.PawnChangedFloor += value;
+            remove => ApiEvents.PawnChangedFloor -= value;
+        }
+
+        // Adds a hook asked right before a pawn starts a stair, ladder or elevator step: hook(pawn, kind, link): kind
+        // (ProjectZ.StepKind) says which: StairUp/Down (also ship stairs), LadderUp/Down (the emergency ladder, the
+        // raiders' ladders, the mechanoids' lift), ElevatorUp/Down (the elevator; without power it is climbed like a
+        // ladder); link is the
+        // stairs, ladder or elevator building; the pawn stands on the step's start (pawn.Position), its end is
+        // pawn.pather.nextCell. Return true to let the step go on; the hook may act first (a rider gets off its mount).
+        // Return false to refuse it: the pawn stops where it is and its path fails (its job ends and it thinks again, as
+        // when a ladder is gone). Refuse only for a reason that goes away, or the pawn keeps trying. Every hook is asked;
+        // one false refuses. Asked each time a step starts: once per step, again when a step is started over (the pawn's
+        // path renewed mid-step), and also for a pawn that then waits for a ladder held by another.
+        public static void AddStepHook(Func<Pawn, StepKind, Building, bool> hook) => ApiEvents.AddStepHook(hook);
+
+        public static void RemoveStepHook(Func<Pawn, StepKind, Building, bool> hook) => ApiEvents.RemoveStepHook(hook);
+
+        // ---- combat between floors (2)
+        // ProjectZ's own rules (off with Combat Extended loaded: it has its own heights). On one floor they are the game's.
+
+        // True 3D distance between two cells, each on its floor: over the ground, and StoreyHeight per floor between.
+        public static float Distance3D(IntVec3 a, IntVec3 b, Map map) => map == null ? (a - b).LengthHorizontal : Range3D.Distance(a, b, map);
+
+        // The distance ProjectZ compares with a weapon's range for a shot from shooter to target: Distance3D less 1 cell
+        // per floor the shooter stands above the target (shooting down reaches farther); Distance3D otherwise. A shot is in
+        // range when this is at most the verb's range (and Distance3D at least its minimum range).
+        public static float RangeDistance(IntVec3 shooter, IntVec3 target, Map map) => map == null ? (shooter - target).LengthHorizontal : Range3D.RangeDistance(shooter, target, map);
+
+        // The accuracy the height gives this shot: what ProjectZ adds to the hit chance's shooter factor (the hit report's
+        // "shooter" line; the bonus setting, less what the 100 % cap cuts off) when the caster stands on a higher floor than
+        // the target. 0 on one floor, shooting up, for a verb that can't miss (canGoWild false), or with combat off.
+        public static float HeightAccuracyBonus(Verb verb, LocalTargetInfo target)
+        {
+            Thing caster = verb?.caster;
+            Map map = caster?.Map;
+            if (map == null || !target.IsValid || !CombatGate.Enabled || !Heights.CrossFloor(caster.Position, target.Cell, map))
+            {
+                return 0f;
+            }
+            CombatGate.ShooterFactor(caster, verb, target.Cell, Heights.GroundDistance(caster.Position, target.Cell, map), map, out float bonus);
+            return bonus;
+        }
 
         // ---- lobbed shots (indirect fire) between floors
 

@@ -40,6 +40,26 @@ namespace ProjectZ.Combat
 
         // Accuracy bonus for shooting down at a lower floor (decision D7, a setting).
         public static float HeightBonus => ProjectZMod.Settings == null ? 0.2f : ProjectZMod.Settings.heightAccuracy;
+
+        // The hit report's shooter factor for a shot between floors over ground distance d (ShotReport_Patch), and the part
+        // of it the height bonus gave (after the 100 % cap; 0 unless the shooter stands on a higher floor). Api 2's
+        // HeightAccuracyBonus reads the same, so what it says is what the shot gets.
+        public static float ShooterFactor(Thing caster, Verb verb, IntVec3 targetCell, float d, Map map, out float bonus)
+        {
+            bonus = 0f;
+            if (!verb.verbProps.canGoWild)
+            {
+                return 1f;
+            }
+            float shooter = ShotReport.HitFactorFromShooter(caster, d);
+            if (ProjectZ.FloorOf(caster.Position, map) > ProjectZ.FloorOf(targetCell, map))
+            {
+                float raised = Mathf.Min(1f, shooter + HeightBonus);
+                bonus = raised - shooter;
+                shooter = raised;
+            }
+            return shooter;
+        }
     }
 
     // Cover between floors: the game's cover givers next to the target, seen from the shooter's spot moved onto the
@@ -247,16 +267,7 @@ namespace ProjectZ.Combat
             }
             float d = Heights.GroundDistance(caster.Position, target.Cell, map);
             distance(ref __result) = d;
-            float shooter = 1f;
-            if (verb.verbProps.canGoWild)
-            {
-                shooter = ShotReport.HitFactorFromShooter(caster, d);
-                if (ProjectZ.FloorOf(caster.Position, map) > ProjectZ.FloorOf(target.Cell, map))
-                {
-                    shooter = Mathf.Min(1f, shooter + CombatGate.HeightBonus);
-                }
-            }
-            shooterFactor(ref __result) = shooter;
+            shooterFactor(ref __result) = CombatGate.ShooterFactor(caster, verb, target.Cell, d, map, out _);
             equipmentFactor(ref __result) = verb.verbProps.GetHitChanceFactor(verb.EquipmentSource, d);
             gasFactor(ref __result) = SmokeFactor(verb, line(ref __result), map);
             if (target.HasThing && !target.Thing.def.CanBenefitFromCover)

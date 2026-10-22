@@ -233,7 +233,8 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            if (Links.Kind(pawn, out VLink link) == StepKind.None)
+            StepKind kind = Links.Kind(pawn, out VLink link);
+            if (kind == StepKind.None)
             {
                 // a path made over a link that is gone since: its step is no neighbour, so the path fails (asked again)
                 IntVec3 n = __instance.nextCell, pos = pawn.Position;
@@ -242,6 +243,13 @@ namespace ProjectZ.Patches
                     ProjectZ.DebugLog($"{pawn}: path step {pos} -> {n} over a link that is gone: path failed");
                     LinkSteps.FailPath(pawn);
                 }
+                return;
+            }
+            // (Api step hooks: one may refuse the step; the path fails as over a link that is gone, the job asks again)
+            if (!ApiEvents.AllowStep(pawn, kind, link.thing))
+            {
+                ProjectZ.DebugLog($"{pawn}: {kind} step {pawn.Position} -> {__instance.nextCell} refused by an Api step hook: path failed");
+                LinkSteps.FailPath(pawn);
                 return;
             }
             __instance.nextCellCostTotal = link.stepTicks;

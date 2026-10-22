@@ -75,6 +75,11 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 `ProjectZ.Api` (in `IsoRimProjectZ.dll`) holds the public calls, each documented in [`Source/Api.cs`](Source/Api.cs). Check `ProjectZ.Api.Version` for what is there:
 
 - 1: lobbed-shot rules between floors (`RegisterLobbedShot`, `SetLobbed`, `IsLobbed`), `OnDifferentFloors`, `CanSeeBetweenFloors`, `OpenSkyOver`.
+- 2:
+  - Floors: `HasFloors`, `FloorCount`, `FloorOf` (cell or thing), `GroundCellOf`, `CellOnFloor`, `SameFloor`, `GroundRect`, `StoreyHeight`, `ViewedFloor`, `SetViewedFloor`.
+  - Height rule: the XML extension `ProjectZ.FitsUnderFloor` (a tall model that still fits under a floor), `RegisterHeightRule`, `TooTallUnderFloor`.
+  - Events: `FloorChanged` (floor built or removed), `PawnChangedFloor`, `AddStepHook` (before a stair, ladder or elevator step; can refuse it).
+  - Combat: `Distance3D`, `RangeDistance`, `HeightAccuracyBonus`.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 
