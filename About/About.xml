@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>IsoRim ProjectZ</name>
+  <name>IsoRimZ</name>
   <author>Lin</author>
   <packageId>Peren.IsoRimProjectZ</packageId>
   <supportedVersions>
@@ -23,16 +23,22 @@
     <li>brrainz.harmony</li>
     <li>Peren.IsoRim17</li>
   </loadAfter>
-  <description>Work-in-progress prototype. Not for normal play yet.
+  <description>Build upward. Upper floors, stairs and tall mountains for IsoRim Waylith.
 
-Stacked floors for IsoRim Waylith, all on one map.
+- Upper floors of wood, stone or metal; pawns live, work and fight on every floor.
+- Stairs, ladders and elevators; hold Shift and scroll to switch floors.
+- Raiders climb, mine up and blast through floors.
+- Tall mountains and multi-deck gravships.
+- Once a save has used IsoRimZ, removing the mod breaks that save.
 
-- Changes gameplay: new maps get extra space for upper floors.
-- Build stairs on a roofed cell and upper floors over roofed rooms; pick the floor you work on with the button in the bottom-right corner or the = and - keys.
-- An upper floor is the roof of the room below, and heat passes between floors.
-- Shooting between floors: only from the edge of a floor, with an accuracy bonus when shooting down. Off with Combat Extended.
-- Not safe to remove from a save that has floors.
+往上盖。给 IsoRim Waylith 加上楼层、楼梯和高山。
+
+- 用木头、石头或金属盖楼层；小人在每一层生活、干活、打仗。
+- 楼梯、梯子和电梯；按住 Shift 滚动鼠标滚轮切换楼层。
+- 敌人会爬上来、挖进山里、炸穿楼板。
+- 高山和多层飞船。
+- 存档一旦用过 IsoRimZ，去掉这个 mod 就会坏档。
 
 Path splicing idea from MigCorp - Skiptech (TheMiggiestMig).
-路径拼接思路参考 MigCorp - Skiptech（TheMiggiestMig）</description>
+路径拼接思路参考 MigCorp - Skiptech（TheMiggiestMig）。</description>
 </ModMetaData>
