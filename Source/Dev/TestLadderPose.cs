@@ -21,8 +21,9 @@ namespace ProjectZ.Dev
     //   POM a mechanoid on a lift: faces it, no sway
     //   POE an elevator: a powered ride is unchanged (no pose, no offset across, the game's own facing); without power
     //       (the emergency ladder) the climber faces the shaft's back wall (east), sways, faces the door side on the way out
-    // Mode ladderpose, then: strips of a colonist up and down a 2-floor emergency ladder (5 frames each way, each from
-    // the camera's three yaws 0, 90, 270; 3D on). Raiders and a mechanoid in real raids: raidladders -projectzposeshots.
+    // Mode ladderpose, then: the drawn figure in real time (PW, PWR: TestLadderDrawn.cs), then strips of a colonist up
+    // and down a 2-floor emergency ladder (5 frames each way, each from the camera's three yaws 0, 90, 270; 3D on).
+    // Raiders and a mechanoid in real raids: raidladders -projectzposeshots.
     public static partial class TestRunner
     {
         private sealed class PoTrack
@@ -44,6 +45,10 @@ namespace ProjectZ.Dev
 
         private static bool StepLadderPoseInner(Map map)
         {
+            if (stage.StartsWith("ld_pw"))
+            {
+                return StepLadderDrawn(map);
+            }
             switch (stage)
             {
                 case "ld_po":
@@ -410,7 +415,7 @@ namespace ProjectZ.Dev
                 r2P.Position == elDest && !elE.LinkedPowered && t.hold >= VLink.LadderTicksPerFloor * 2 - 5 && t.missed == 0 && t.wrongFace == 0 && t.leaked == 0 && PoSwayOk(t, 3), PoStr(t));
             if (mode == "ladderpose")
             {
-                stage = "ld_ps";
+                stage = "ld_pw";   // the drawn figure in real time (TestLadderDrawn), then the strips
                 return;
             }
             Finish();

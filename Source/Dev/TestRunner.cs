@@ -665,6 +665,11 @@ namespace ProjectZ.Dev
                 StepRaidLadders(map);
                 return;
             }
+            if (stage.StartsWith("ap_"))
+            {
+                StepAimPie(map);
+                return;
+            }
             if (stage.StartsWith("ld_"))
             {
                 StepLadders(map);
@@ -1059,6 +1064,10 @@ namespace ProjectZ.Dev
                     else if (mode == "raidladders")
                     {
                         stage = "rl_setup";
+                    }
+                    else if (mode == "aimpie")
+                    {
+                        stage = "ap_setup";
                     }
                     else if (mode == "ladders" || mode == "ladderpose")
                     {
