@@ -16,6 +16,8 @@ Not for normal play yet, and not safe to remove from a save that has floors.
 
 Requires Harmony and IsoRim Waylith.
 
+For modders: `ProjectZ.Api` (in IsoRimProjectZ.dll) has the public calls, each documented in `Source/Api.cs`. Check `ProjectZ.Api.Version` for what is there (1: lobbed shots between floors, floor and line-of-sight helpers).
+
 Path splicing idea from MigCorp - Skiptech (TheMiggiestMig). No code from it is used.
 
 MIT License.

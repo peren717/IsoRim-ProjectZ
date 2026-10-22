@@ -8,6 +8,10 @@ namespace ProjectZ
     // references IsoRimProjectZ.dll; the names below are stable).
     public static class Api
     {
+        // The API version, raised whenever something is added here, so an addon can check for what it needs
+        // (1: lobbed shots between floors, OnDifferentFloors, CanSeeBetweenFloors, OpenSkyOver).
+        public static int Version => 1;
+
         // ---- lobbed shots (indirect fire) between floors
 
         // Registers a rule that declares how a shot between two floors flies:
