@@ -178,20 +178,25 @@ namespace ProjectZ
     // blueprint's blocking rock, sappers, god mode) opens the boundary the mark names (Shaft.Open on the lower cell: the
     // marked cell under the rock, or the rock's own cell under the marked top). The mark is read before the rock goes (the
     // despawn takes it, DesignationManager_MineMarks_Patch). Rock destroyed any other way (explosions) opens nothing.
+    // The same place opens a bare top over any mined rock (BareTop, user rule 2026-10-23): what stands right above the rock
+    // is a bare natural rock top (no rock above, nothing built, placed or standing on it) -> the top goes too, the rock's
+    // cell opens to the sky (a lone ore vein or outcrop no longer leaves its top hanging). Rock above (a mountain's inside)
+    // keeps its roof; a top with something on it stays.
     [HarmonyPatch(typeof(Mineable), nameof(Mineable.DestroyMined))]
     public static class Mineable_MinedMarked_Patch
     {
         public static int Opened;
 
-        public static void Prefix(Mineable __instance, Pawn pawn, out (Map map, IntVec3 lower) __state)
+        public static void Prefix(Mineable __instance, Pawn pawn, out (Map map, IntVec3 lower, IntVec3 own) __state)
         {
-            __state = (null, IntVec3.Invalid);
+            __state = (null, IntVec3.Invalid, IntVec3.Invalid);
             Map map = __instance.Map;
             if (map == null || !Mountains.On(map))
             {
                 return;
             }
             IntVec3 u = __instance.Position;
+            __state = (map, IntVec3.Invalid, u);
             MineDir dir = MineSide.Get(u, map);
             IntVec3 lower = dir == MineDir.FromBelow ? FloorRoof.Below(u, map) : dir == MineDir.FromAbove ? u : IntVec3.Invalid;
             // a raider mining up without the player's mark (RaidVertical: the Mine above job, ignoreDesignations)
@@ -203,26 +208,67 @@ namespace ProjectZ
             }
             if (lower.IsValid)
             {
-                __state = (map, lower);
+                __state = (map, lower, u);
             }
         }
 
-        public static void Postfix(Pawn pawn, (Map map, IntVec3 lower) __state)
+        public static void Postfix(Pawn pawn, (Map map, IntVec3 lower, IntVec3 own) __state)
         {
-            if (__state.map == null || !__state.lower.IsValid)
+            Map map = __state.map;
+            if (map == null)
             {
                 return;
             }
-            Opened++;
             int depth = MineUp.YieldPause();   // (only the rock's yield goes to the miner, not what falls)
             try
             {
-                Shaft.Open(__state.lower, __state.map, pawn);
+                if (__state.lower.IsValid)
+                {
+                    Opened++;
+                    Shaft.Open(__state.lower, map, pawn);
+                }
+                if (__state.own.IsValid && __state.own != __state.lower && BareTop.Opens(__state.own, map))
+                {
+                    BareTop.Opened++;
+                    Shaft.Open(__state.own, map, pawn);
+                }
             }
             finally
             {
                 MineUp.YieldResume(depth);
             }
+        }
+    }
+
+    // The bare top over a mined rock (Mineable_MinedMarked_Patch): the cell right above the rock's cell is a bare natural
+    // rock top (Hole.TopBlocked: natural rock floor, no rock, nothing built, no blueprint or frame, no stairs exit) with
+    // nothing placed or standing on it (no item, corpse or pawn; plants and filth go with it, as Remove roof's hole).
+    public static class BareTop
+    {
+        public static int Opened;
+        public static bool Off;   // (tests: the rule off, as before 2026-10-23)
+
+        public static bool Opens(IntVec3 c, Map map)
+        {
+            if (Off || map == null || !Mountains.On(map) || !c.IsValid || !c.InBounds(map))
+            {
+                return false;
+            }
+            IntVec3 u = FloorRoof.Above(c, map);
+            if (!u.IsValid || !u.InBounds(map) || Hole.TopBlocked(u, map) != null)
+            {
+                return false;
+            }
+            List<Thing> list = u.GetThingList(map);
+            for (int i = 0; i < list.Count; i++)
+            {
+                Thing t = list[i];
+                if (t is Pawn || t.def.category == ThingCategory.Item || t.def.category == ThingCategory.Building)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
