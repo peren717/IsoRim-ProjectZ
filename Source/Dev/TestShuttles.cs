@@ -789,6 +789,15 @@ namespace ProjectZ.Dev
             ThingDef imp = ThingDefOf.Shuttle;
             ThingDef ps = DefDatabase<ThingDef>.GetNamedSilentFail("PassengerShuttle");
             IntVec3 voidCell = new IntVec3(ShP(18, 0).x, 0, ProjectZ.GroundZ(map) + 1);
+            // the open-ground case is about the slab, not the map's soil: firm ground there (the field may hold marsh or
+            // mud, which no shuttle can land on)
+            foreach (IntVec3 c in CellRect.CenteredOn(ShP(18, -9), 4).ClipInsideMap(map))
+            {
+                if (!c.GetTerrain(map).affordances.Contains(TerrainAffordanceDefOf.Heavy))
+                {
+                    map.terrainGrid.SetTerrain(c, TerrainDefOf.Soil);
+                }
+            }
             var cases = new (string name, IntVec3 c, bool want)[]
             {
                 ("floor-2 slab with room for it (T1)", ShU(18, 5, map), true),
