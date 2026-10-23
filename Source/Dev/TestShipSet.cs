@@ -462,6 +462,13 @@ namespace ProjectZ.Dev
                 }
             }
             DebugSettings.enableRandomMentalStates = false;
+            // no incidents and no hostiles: a raid (seed 7 sends mechs) keeps the builders from S3-S5's work
+            Find.Storyteller.storytellerComps.Clear();
+            Find.Storyteller.incidentQueue.Clear();
+            foreach (Pawn hostile in map.mapPawns.AllPawnsSpawned.Where(p => p.HostileTo(Faction.OfPlayer)).ToList())
+            {
+                hostile.Destroy(DestroyMode.Vanish);
+            }
             Find.PlaySettings.autoRebuild = false;
             Find.ResearchManager.gravEngineInspected = true;
             map.weatherManager.curWeather = WeatherDefOf.Clear;
