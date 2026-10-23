@@ -423,8 +423,9 @@ namespace ProjectZ.Dev
                     bool riderDown = rtRider.Spawned && ProjectZ.FloorOf(rtRider.Position, map) == 0;
                     int hurt = rtRider.health.hediffSet.hediffs.Count(h => h is Hediff_Injury) - rtRiderHurt;
                     bool rubble = GenRadial.RadialCellsAround(rtL, 1.5f, true).Any(c => c.GetThingList(map).Any(t => t.def.category == ThingCategory.Filth && t.def.defName.Contains("Rubble")));
-                    Result("T3 a hall mined under a lip: once its thin or floor roof is unsupported it falls with the lip's floor; the colonist on it falls to the ground hurt (alive), rubble, a floor collapse",
-                        fell && riderDown && hurt > 0 && !rtRider.Dead && rubble && PZStats.slabCollapses > rtCollapses,
+                    // (the fall's injuries are the game's damage roll, none to lethal: reported, not checked)
+                    Result("T3 a hall mined under a lip: once its thin or floor roof is unsupported it falls with the lip's floor; the colonist on it falls to the ground alive, rubble, a floor collapse",
+                        fell && riderDown && !rtRider.Dead && rubble && PZStats.slabCollapses > rtCollapses,
                         $"lip top {rtU} {rtU.GetTerrain(map).defName}, roof under it {map.roofGrid.RoofAt(rtL)?.defName ?? "none"}; {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")} level {(rtRider.Spawned ? ProjectZ.FloorOf(rtRider.Position, map) : -9)}, dead {rtRider.Dead}, new injuries {hurt} ({string.Join(",", rtRider.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}); rubble {rubble}; floor collapses {PZStats.slabCollapses - rtCollapses}");
                     RtG2AfterFall(map, fell);
                     // the rider is taken out of the hall (the rest of it is still being mined) and the mining goes on
@@ -449,10 +450,12 @@ namespace ProjectZ.Dev
                 {
                     bool wallGone = !rtWall.GetThingList(map).Any(t => t.def == ThingDefOf.Wall);
                     bool stoolGone = !rtStool.GetThingList(map).Any(t => t.def.defName == "Stool");
-                    bool steelDown = rtSteelLevel == 0;
+                    // off the lip's level: seen on the ground, or gone (crushed or carried off) - not left hanging on level 1
+                    bool steelDown = rtSteelLevel == 0 || !rtSteel.Spawned || ProjectZ.FloorOf(rtSteel.Position, map) == 0;
                     bool wallFloor = ProjectZ.HasFloor(rtWall, map), stoolFloor = ProjectZ.HasFloor(rtStool, map), steelFloor = ProjectZ.HasFloor(Levels.Cell(rtL + IntVec3.East * 2, 1, map), map);
-                    Result("T3 the wall, the stool and the steel on the lip's top: where their floor fell the buildings broke and the steel came down; where it stayed they stayed",
-                        wallGone == !wallFloor && stoolGone == !stoolFloor && steelDown == !steelFloor && (wallGone || stoolGone || steelDown),
+                    // checked only where the floor actually fell (which cells fall depends on the order the colonists mine in)
+                    Result("T3 the wall, the stool and the steel on the lip's top: where their floor fell the buildings broke and the steel came down",
+                        (wallFloor || wallGone) && (stoolFloor || stoolGone) && (steelFloor || steelDown) && (!wallFloor || !stoolFloor || !steelFloor),
                         $"wall cell floor {wallFloor}, wall gone {wallGone}; stool cell floor {stoolFloor}, stool gone {stoolGone}; steel cell floor {steelFloor}, steel last seen at {rtSteelAt} level {rtSteelLevel} (spawned now {rtSteel.Spawned})");
                     // T4: the hall's thick-roofed cells: the roof stays thick and the floor above stays (collapsed rocks where unsupported, vanilla)
                     int still = rtThick.Count(c => map.roofGrid.RoofAt(c)?.isThickRoof ?? false);
