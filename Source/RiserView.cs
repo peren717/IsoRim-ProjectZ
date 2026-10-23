@@ -132,7 +132,7 @@ namespace ProjectZ
             }
             catch (System.Exception e)
             {
-                Log.ErrorOnce($"[ProjectZ] Riser source {source.GetType().FullName} failed to list its links: {e}", source.GetHashCode() ^ 0x5157e1);
+                Log.ErrorOnce($"[ProjectZ] Riser source {source.Owner} failed to list its links: {e}", source.GetHashCode() ^ 0x5157e1);
                 collectBuffer.Clear();
             }
             for (int i = 0; i < collectBuffer.Count; i++)
@@ -198,7 +198,7 @@ namespace ProjectZ
                     }
                     catch (System.Exception e)
                     {
-                        Log.ErrorOnce($"[ProjectZ] Riser source {src.GetType().FullName} failed in OverlayShown: {e}", src.GetHashCode() ^ 0x5157e2);
+                        Log.ErrorOnce($"[ProjectZ] Riser source {src.Owner} failed in OverlayShown: {e}", src.GetHashCode() ^ 0x5157e2);
                         overlay = false;
                     }
                     if (overlay && !faceSet)
@@ -337,13 +337,13 @@ namespace ProjectZ
 
     // The power risers (the first source): a conduit with a conduit stacked directly over it (PowerRisers.Riser).
     [StaticConstructorOnStartup]
-    internal sealed class PowerRiserSource : RiserSource
+    internal static class PowerRiserSource
     {
-        public static readonly PowerRiserSource Instance = new PowerRiserSource();
+        public static readonly RiserSource Instance = new RiserSource(Collect, OverlayShown);
 
         private static Material riserLine;
 
-        public override void Collect(Map map, List<RiserLink> into)
+        private static void Collect(Map map, List<RiserLink> into)
         {
             List<Thing> things = map.listerThings.ThingsInGroup(ThingRequestGroup.BuildingArtificial);
             for (int i = 0; i < things.Count; i++)
@@ -372,7 +372,7 @@ namespace ProjectZ
             }
         }
 
-        public override bool OverlayShown(Map map) => OverlayDrawHandler.ShouldDrawPowerGrid;
+        private static bool OverlayShown(Map map) => OverlayDrawHandler.ShouldDrawPowerGrid;
 
         // The game draws the conduit at all (a hidden conduit's colour is fully transparent).
         private static bool Drawn(Building b) => b != null && b.def.drawerType != DrawerType.None && b.DrawColor.a > 0.01f;

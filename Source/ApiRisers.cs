@@ -1,21 +1,37 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Verse;
 
 namespace ProjectZ
 {
-    // Api 3: one kind of vertical link (one net kind) for ProjectZ to draw like power risers (Api.AddRiserSource). Subclass
-    // it in the addon, add one instance once, and call MarkDirty(map) whenever the links of a map may have changed (a
-    // transmitter spawned, despawned or switched): ProjectZ asks Collect again only then, not every frame.
-    public abstract class RiserSource
+    // Api 3: one kind of vertical link (one net kind) for ProjectZ to draw like power risers (Api.AddRiserSource). Made from
+    // the addon's own methods (no subclassing: an addon that never names this type at class level still loads on an older
+    // ProjectZ and can check Api.Version first). Add one instance once, and call MarkDirty(map) whenever the links of a map
+    // may have changed (a transmitter spawned, despawned or switched): ProjectZ asks collect again only then, not per frame.
+    public sealed class RiserSource
     {
-        // Fill 'into' with this map's links (only on a map with floors; asked again only after MarkDirty). A link is named by
-        // its lower cell; ProjectZ takes the upper one as Api.StackedCell(low, map, true) and drops a link without one.
-        public abstract void Collect(Map map, List<RiserLink> into);
+        private readonly Action<Map, List<RiserLink>> collect;
+        private readonly Func<Map, bool> overlayShown;
 
-        // Asked each frame while drawing (the current map): is this source's overlay shown now? Only then are the links'
-        // overlay lines drawn.
-        public virtual bool OverlayShown(Map map) => false;
+        // collect(map, into): fill 'into' with the map's links (asked only on a map with floors, again only after MarkDirty).
+        //   A link is named by its lower cell; ProjectZ takes the upper one as Api.StackedCell(low, map, true) and drops a
+        //   link without one.
+        // overlayShown(map): asked each frame while drawing (the current map): is this source's overlay shown now? Only then
+        //   are the links' overlay lines drawn. Null: never.
+        public RiserSource(Action<Map, List<RiserLink>> collect, Func<Map, bool> overlayShown = null)
+        {
+            this.collect = collect ?? throw new ArgumentNullException(nameof(collect));
+            this.overlayShown = overlayShown;
+        }
+
+        // Whose source this is (log lines).
+        internal string Owner => collect.Method.DeclaringType?.FullName ?? "?";
+
+        // The links of a map, as collect lists them.
+        public void Collect(Map map, List<RiserLink> into) => collect(map, into);
+
+        public bool OverlayShown(Map map) => overlayShown != null && overlayShown(map);
 
         // This source's links on the map are stale.
         public void MarkDirty(Map map) => RiserView.MarkDirty(map, this);

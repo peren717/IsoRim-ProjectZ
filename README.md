@@ -82,7 +82,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - Combat: `Distance3D`, `RangeDistance`, `HeightAccuracyBonus`.
 - 3:
   - Stacked cells: `StackedCell` (the cell directly above or below, the rule power conduits use to join floors), `StackedCells`.
-  - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` subclass that lists `RiserLink`s (colour, visible ends, overlay line and end mark). Used by the VE Framework Pack for pipes.
+  - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` made from the addon's own methods: one lists the `RiserLink`s (lower cell, colour, visible ends, overlay line and end mark), one says whether the overlay is shown. Used by the VE Framework Pack for pipes.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 
