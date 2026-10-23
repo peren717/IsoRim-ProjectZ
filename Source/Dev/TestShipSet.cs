@@ -150,6 +150,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     // S3 colonists build an extender on a floor-2 deck
+                    SsCrew(map);
                     ThingDef extDef = DefDatabase<ThingDef>.GetNamed("GravFieldExtender");
                     ssExt = SSF(13, 3, 1, map);
                     FloorView.Set(1);
@@ -344,6 +345,35 @@ namespace ProjectZ.Dev
             // (the install designator works on the selected minified thing, as when the player clicks "install")
             Find.Selector.ClearSelection();
             Find.Selector.Select(mini, playSound: false, forceDesignatorDeselect: false);
+        }
+
+        // S3-S5 need builders (the extender asks construction 4; deconstructing it and uninstalling the engine are
+        // construction work too): every colonist able to build gets construction 10, and if the map's seed gave none that
+        // can, two such colonists are made next to the first one. Whichever colonists the seed gives.
+        private static void SsCrew(Map map)
+        {
+            List<Pawn> cols = Colonists(map).ToList();
+            int able = cols.Count(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction));
+            IntVec3 at = cols.Count > 0 ? cols[0].Position : map.Center;
+            for (int guard = 0; able < 2 && guard < 50; guard++)
+            {
+                Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                if (p.WorkTypeIsDisabled(WorkTypeDefOf.Construction) || p.WorkTypeIsDisabled(WorkTypeDefOf.Hauling))
+                {
+                    continue;
+                }
+                GenSpawn.Spawn(p, CellFinder.StandableCellNear(at, map, 4f), map);
+                able++;
+            }
+            foreach (Pawn p in Colonists(map))
+            {
+                if (!p.WorkTypeIsDisabled(WorkTypeDefOf.Construction))
+                {
+                    SkillRecord s = p.skills.GetSkill(SkillDefOf.Construction);
+                    s.Level = Mathf.Max(s.Level, 10);
+                }
+            }
+            Info($"S3 builders: {string.Join(", ", Colonists(map).Where(p => !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction)).Select(p => p.LabelShort + " " + p.skills.GetSkill(SkillDefOf.Construction).Level))}");
         }
 
         private static void SsHaul(Map map)

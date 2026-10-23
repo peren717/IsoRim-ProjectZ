@@ -1501,7 +1501,16 @@ namespace ProjectZ.Dev
             double seeFlat = LMicro(n / 4, () => mB.CanSee(flatG));
             Info($"perf (µs per call): Los3D.CanSee 19 cells clear {losClear:0.000}, blocked at the edge {losBlocked:0.000}; GenSight.LineOfSight 19 cells {gen:0.000}; "
                 + $"CanHitTarget cross-floor clear {hitCross:0.000}, blocked {hitCrossBlocked:0.000}, same floor {hitFlat:0.000}; AttackTargetFinder.CanSee cross-floor {seeCross:0.000}, same floor {seeFlat:0.000}");
-            Result("perf: Los3D.CanSee within about 1 µs per check (target 0.4 to 1)", losClear < 1.0 && losBlocked < 1.0, $"clear {losClear:0.000}, blocked {losBlocked:0.000} µs");
+            // Timings depend on the machine and on what else runs (harness runs share it): reported, checked only with
+            // -projectzperfcheck
+            if (GenCommandLine.CommandLineArgPassed("projectzperfcheck"))
+            {
+                Result("perf: Los3D.CanSee within about 1 µs per check (target 0.4 to 1)", losClear < 1.0 && losBlocked < 1.0, $"clear {losClear:0.000}, blocked {losBlocked:0.000} µs");
+            }
+            else
+            {
+                Info($"perf: Los3D.CanSee clear {losClear:0.000}, blocked {losBlocked:0.000} µs per check (target 0.4 to 1; checked with -projectzperfcheck)");
+            }
         }
 
         // A fight between floors (or all on the ground): 20 raiders with rifles vs 6 colonists firing at will, timed per

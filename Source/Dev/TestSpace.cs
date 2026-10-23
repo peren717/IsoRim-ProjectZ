@@ -11,7 +11,8 @@ namespace ProjectZ.Dev
     // Mode space (Odyssey orbit maps, user bug 2026-10-16: on the orbital start no landing came with the stairs and no
     // upper floor could be laid). The orbital relay map of "The Gravship" start is generated with its annex on a free orbit
     // tile and made the colony's map; the colonists (in vacsuits) are moved there. On a platform laid over space:
-    //   E1 stairs placed with the designator and built by colonists: the landing comes with its roof;
+    //   E1 stairs placed with the designator and built by colonists: the landing comes with its roof (the stairwell over
+    //      the ramp; the solid end under the exit keeps the landing's floor roof);
     //   E2 a steel column built by colonists; upper floors dragged out from the landing (held by the stairs) and around
     //      the column, refused far from any support; built by colonists;
     //   E3 a colonist walks up the stairs onto the new floor;
@@ -155,7 +156,9 @@ namespace ProjectZ.Dev
                     IntVec3 top = st?.TopCell ?? IntVec3.Invalid;
                     IntVec3 below = top.IsValid ? FloorRoof.Below(top, map) : IntVec3.Invalid;
                     Result("E1 colonists built the stairs; the landing came with them, its roof under it", st != null && SlabDefs.Is(top.GetTerrain(map)) && map.roofGrid.RoofAt(below) == PZDefOf.PZ_FloorRoof
-                        && StairShape.Footprint(st.Position, st.Rotation).Cells.All(f => map.roofGrid.RoofAt(f) == null || map.roofGrid.RoofAt(f) == PZDefOf.PZ_StairwellRoof),
+                        // (the stairwell is over the ramp only: the solid end, under the exit, has the landing's floor roof)
+                        && StairShape.Footprint(st.Position, st.Rotation).Cells.Where(f => f != StairShape.Solid(st.Position, st.Rotation))
+                            .All(f => map.roofGrid.RoofAt(f) == null || map.roofGrid.RoofAt(f) == PZDefOf.PZ_StairwellRoof),
                         st == null ? $"no stairs after {ticksTotal} ticks" : $"landing {top} {top.GetTerrain(map)?.defName}; under it {below} {map.roofGrid.RoofAt(below)?.defName ?? "no roof"} on {below.GetTerrain(map)?.defName}; well roofs {string.Join(",", StairShape.Footprint(st.Position, st.Rotation).Cells.Select(f => map.roofGrid.RoofAt(f)?.defName ?? "none"))}");
                     Result("E2 colonists built the column", EColumnBuilt(map), $"{eColumn}: {eColumn.GetEdifice(map)}");
                     if (st == null)

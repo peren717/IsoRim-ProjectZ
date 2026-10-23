@@ -16,7 +16,8 @@ namespace ProjectZ.Dev
     //   G1 generation: an independent recount per band (sky unfogged, rim = tops with sky among their 8 neighbours,
     //      faces = rock next to sky or rim, holes and everything else fogged, void rows open), the fill's counters; the
     //      floor HUD offers only the ground and level 1 (no level reached); save + load keeps the fog and the reached list
-    //   G2 colonists build stairs from the ground onto a lip on the rim: on completion (nobody walked up) the plateau
+    //   G2 colonists build stairs from the ground onto a lip on the rim (the blueprint first, then the rock in its solid
+    //      end mined: the planned exit keeps its top under the bare-top rule): on completion (nobody walked up) the plateau
     //      behind opens with the rock faces next to it, inner rock and ore stay fogged, nothing else changes; level 1 now
     //      counts as reached (HUD)
     //   G2b colonists put on one plateau bridge a gap of open air to another with slabs: the other plateau opens when
@@ -636,7 +637,16 @@ namespace ProjectZ.Dev
                         pendingLoad = "pz_tallfog";
                         return true;
                     }
-                    // the solid end's rock first (vanilla Mine on the ground), before the fog watch starts
+                    // the player's order: the stairs' blueprint first, then the rock in its solid end mined (vanilla Mine on
+                    // the ground) before the fog watch starts. The planned exit keeps its top (the bare-top rule spares a
+                    // stairs exit, built or planned).
+                    for (int i = 0; i < 4; i++)
+                    {
+                        Thing wood = ThingMaker.MakeThing(ThingDefOf.WoodLog);
+                        wood.stackCount = 75;
+                        GenPlace.TryPlaceThing(wood, fgStairs - fgRot.FacingCell * 3, map, ThingPlaceMode.Near);
+                    }
+                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, fgStairs, map, fgRot, Faction.OfPlayer, ThingDefOf.WoodLog);
                     IntVec3 fgSolid = StairShape.Solid(fgStairs, fgRot);
                     if (fgSolid.GetFirstMineable(map) != null)
                     {
@@ -655,13 +665,6 @@ namespace ProjectZ.Dev
                     tickWatch = null;
                     fgE = FgExpected(map, fgExit, out _);
                     FgStart(map, fgE);
-                    for (int i = 0; i < 4; i++)
-                    {
-                        Thing wood = ThingMaker.MakeThing(ThingDefOf.WoodLog);
-                        wood.stackCount = 75;
-                        GenPlace.TryPlaceThing(wood, fgStairs - fgRot.FacingCell * 3, map, ThingPlaceMode.Near);
-                    }
-                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, fgStairs, map, fgRot, Faction.OfPlayer, ThingDefOf.WoodLog);
                     FgWork(map, Colonists(map), WorkTypeDefOf.Construction);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
                     int fogBefore = FgFoggedIn(map, fgE);

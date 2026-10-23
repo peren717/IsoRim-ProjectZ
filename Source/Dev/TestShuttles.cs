@@ -1006,6 +1006,27 @@ namespace ProjectZ.Dev
                 GenSpawn.Spawn(p, ShP(14, -4), map);
                 cols.Add(p);
             }
+            // The caller also pilots the passenger shuttle (part 5): piloting ability comes from Intellectual (Odyssey: at
+            // least 10% to launch), so the caller is a colonist able to do intellectual work (one is made if none is), at
+            // level 8 - whichever colonists the map's seed gave.
+            int ci = cols.FindIndex(p => p != cols[0] && !p.skills.GetSkill(SkillDefOf.Intellectual).TotallyDisabled);
+            while (ci < 0)
+            {
+                Pawn p = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
+                if (!p.skills.GetSkill(SkillDefOf.Intellectual).TotallyDisabled)
+                {
+                    GenSpawn.Spawn(p, ShP(14, -4), map);
+                    cols.Add(p);
+                    ci = cols.Count - 1;
+                }
+            }
+            if (ci != 1)
+            {
+                Pawn t = cols[1];
+                cols[1] = cols[ci];
+                cols[ci] = t;
+            }
+            cols[1].skills.GetSkill(SkillDefOf.Intellectual).Level = 8;
             shGroundId = cols[0].ThingID;
             shCallerId = cols[1].ThingID;
             shB2Id = cols[2].ThingID;

@@ -21,7 +21,8 @@ namespace ProjectZ.Dev
     //      revealed when the rock goes, not before
     //   E4 a colonist arrives on a slab over a wall: the walled pen under its edge is revealed; the pen beside it behind a
     //      closed door, under no edge, stays fogged (and both stay fogged before anyone is on the slab)
-    //   R3 colonists build stairs from the ground onto a fogged plateau's rim: it opens on completion
+    //   R3 colonists build stairs from the ground onto a fogged plateau's rim: it opens on completion (the blueprint first,
+    //      then the rock in its solid end mined: the planned exit keeps its top under the bare-top rule)
     //   R4 a plateau nobody can reach or see stays fogged after runs
     //   R5 a cave sealed by rock stays fogged while colonists mine towards it; it opens when they break through
     //   R6 a room behind a closed door stays fogged; a drafted colonist ordered into the doorway opens it and the room
@@ -1006,7 +1007,10 @@ namespace ProjectZ.Dev
                     rfArea.Clear();
                     rfArea.AddRange(RfFlat(rfExit, map, 4000));
                     rfBefore = RfSnap(map);
-                    // the solid end's rock first (vanilla Mine on the ground: the exit's top stays)
+                    // the player's order: the stairs' blueprint first, then the rock in its solid end mined (vanilla Mine on
+                    // the ground). The planned exit keeps its top (BareTop spares a stairs exit, built or planned).
+                    MuWood(map, rfStairs - rfRot.FacingCell * 3);
+                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, rfStairs, map, rfRot, Faction.OfPlayer, ThingDefOf.WoodLog);
                     IntVec3 solid = StairShape.Solid(rfStairs, rfRot);
                     if (solid.GetFirstMineable(map) != null)
                     {
@@ -1023,10 +1027,8 @@ namespace ProjectZ.Dev
                 case "rf_r3_place":
                 {
                     IntVec3 solid = StairShape.Solid(rfStairs, rfRot);
-                    Result("R3 the stairs' solid end dug on the ground (vanilla Mine), the exit above it still the plateau's rim top", solid.GetFirstMineable(map) == null && TmTop(rfExit, map),
+                    Result("R3 the stairs' blueprint placed, its solid end dug on the ground (vanilla Mine): the exit above it still the plateau's rim top", solid.GetFirstMineable(map) == null && TmTop(rfExit, map),
                         $"solid {solid} rock {solid.GetFirstMineable(map)?.def.defName ?? "none"}, exit {rfExit} {rfExit.GetTerrain(map)?.defName}");
-                    MuWood(map, rfStairs - rfRot.FacingCell * 3);
-                    GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, rfStairs, map, rfRot, Faction.OfPlayer, ThingDefOf.WoodLog);
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
                     Info($"R3 stairs {rfStairs} facing {rfRot}, exit {rfExit}; plateau {rfArea.Count} cells, fogged {RfFogged(rfArea, map)}");
                     MuRun(400, 71730, () => MuStairs(map, rfStairs) != null, "rf_r3_built");
