@@ -423,10 +423,13 @@ namespace ProjectZ.Dev
                     bool riderDown = rtRider.Spawned && ProjectZ.FloorOf(rtRider.Position, map) == 0;
                     int hurt = rtRider.health.hediffSet.hediffs.Count(h => h is Hediff_Injury) - rtRiderHurt;
                     bool rubble = GenRadial.RadialCellsAround(rtL, 1.5f, true).Any(c => c.GetThingList(map).Any(t => t.def.category == ThingCategory.Filth && t.def.defName.Contains("Rubble")));
-                    // (the fall's injuries are the game's damage roll, none to lethal: reported, not checked)
-                    Result("T3 a hall mined under a lip: once its thin or floor roof is unsupported it falls with the lip's floor; the colonist on it falls to the ground alive, rubble, a floor collapse",
-                        fell && riderDown && !rtRider.Dead && rubble && PZStats.slabCollapses > rtCollapses,
-                        $"lip top {rtU} {rtU.GetTerrain(map).defName}, roof under it {map.roofGrid.RoofAt(rtL)?.defName ?? "none"}; {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")} level {(rtRider.Spawned ? ProjectZ.FloorOf(rtRider.Position, map) : -9)}, dead {rtRider.Dead}, new injuries {hurt} ({string.Join(",", rtRider.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}); rubble {rubble}; floor collapses {PZStats.slabCollapses - rtCollapses}");
+                    // (what the fall does to the rider is the game's collapse roll, as under any falling roof: unhurt, hurt or
+                    // crushed to death. Reported, not checked; the check is that the rider left the lip's level.)
+                    Corpse riderCorpse = rtRider.Dead ? rtRider.Corpse : null;
+                    bool riderOff = riderDown || (rtRider.Dead && (riderCorpse == null || !riderCorpse.Spawned || ProjectZ.FloorOf(riderCorpse.Position, map) == 0));
+                    Result("T3 a hall mined under a lip: once its thin or floor roof is unsupported it falls with the lip's floor; the colonist on it ends on the ground (alive or crushed), rubble, a floor collapse",
+                        fell && riderOff && rubble && PZStats.slabCollapses > rtCollapses,
+                        $"lip top {rtU} {rtU.GetTerrain(map).defName}, roof under it {map.roofGrid.RoofAt(rtL)?.defName ?? "none"}; {rtRider} at {(rtRider.Spawned ? rtRider.Position.ToString() : "-")} level {(rtRider.Spawned ? ProjectZ.FloorOf(rtRider.Position, map) : -9)}, dead {rtRider.Dead}{(riderCorpse != null && riderCorpse.Spawned ? " (corpse at " + riderCorpse.Position + " level " + ProjectZ.FloorOf(riderCorpse.Position, map) + ")" : "")}, new injuries {hurt} ({string.Join(",", rtRider.health.hediffSet.hediffs.OfType<Hediff_Injury>().Select(h => h.def.defName))}); rubble {rubble}; floor collapses {PZStats.slabCollapses - rtCollapses}");
                     RtG2AfterFall(map, fell);
                     // the rider is taken out of the hall (the rest of it is still being mined) and the mining goes on
                     if (rtRider.Spawned)
