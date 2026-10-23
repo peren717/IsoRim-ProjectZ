@@ -58,7 +58,7 @@ namespace ProjectZ.Patches
         // conduit, and RiserView only from a conduit cell.
         public static IntVec3 Riser(IntVec3 c, Map map, bool up)
         {
-            IntVec3 s = up ? StairShape.Above(c, map) : FloorRoof.Below(c, map);
+            IntVec3 s = Api.StackedCell(c, map, up);   // (the column rule, public since Api 3)
             return ConduitAt(s, map) != null ? s : IntVec3.Invalid;
         }
 

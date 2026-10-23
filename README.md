@@ -80,6 +80,9 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - Height rule: the XML extension `ProjectZ.FitsUnderFloor` (a tall model that still fits under a floor), `RegisterHeightRule`, `TooTallUnderFloor`.
   - Events: `FloorChanged` (floor built or removed), `PawnChangedFloor`, `AddStepHook` (before a stair, ladder or elevator step; can refuse it).
   - Combat: `Distance3D`, `RangeDistance`, `HeightAccuracyBonus`.
+- 3:
+  - Stacked cells: `StackedCell` (the cell directly above or below, the rule power conduits use to join floors), `StackedCells`.
+  - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` subclass that lists `RiserLink`s (colour, visible ends, overlay line and end mark). Used by the VE Framework Pack for pipes.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 

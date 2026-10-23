@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ProjectZ.Combat;
 using Verse;
 
@@ -11,10 +12,12 @@ namespace ProjectZ
         // The API version, raised whenever something is added here, so an addon can check for what it needs
         // (1: lobbed shots between floors, OnDifferentFloors, CanSeeBetweenFloors, OpenSkyOver;
         //  2: floor queries, the height rule (FitsUnderFloor, RegisterHeightRule, TooTallUnderFloor), events (FloorChanged,
-        //     PawnChangedFloor, AddStepHook), combat queries (Distance3D, RangeDistance, HeightAccuracyBonus)).
+        //     PawnChangedFloor, AddStepHook), combat queries (Distance3D, RangeDistance, HeightAccuracyBonus);
+        //  3: stacked cells (StackedCell, StackedCells) and vertical links drawn like power risers (AddRiserSource,
+        //     RemoveRiserSource, RiserSource, RiserLink)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 2;
+        public static int Version => 3;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -59,6 +62,52 @@ namespace ProjectZ
 
         // Views floor k of the current map (clamped to the map's floors), as the floor keys do.
         public static void SetViewedFloor(int floor) => FloorView.Set(floor);
+
+        // ---- stacked cells (3)
+        // The column rule other mods' nets can use to join across floors (the rule power conduits use: a conduit touches a
+        // conduit in the stacked cell directly above or below it).
+
+        // The cell directly above (up) or below c, in the same column on the next floor; IntVec3.Invalid when there is no
+        // such floor, for a void-row cell, and on a map without floors.
+        public static IntVec3 StackedCell(IntVec3 c, Map map, bool up)
+        {
+            if (map == null || !c.IsValid || !c.InBounds(map) || !ProjectZ.HasAnnex(map))
+            {
+                return IntVec3.Invalid;
+            }
+            IntVec3 s = up ? StairShape.Above(c, map) : FloorRoof.Below(c, map);
+            return s.IsValid && s.InBounds(map) ? s : IntVec3.Invalid;
+        }
+
+        // Adds the valid stacked cells of c to 'into' (above first, then below), allocation free; returns how many it added.
+        public static int StackedCells(IntVec3 c, Map map, List<IntVec3> into)
+        {
+            int n = 0;
+            IntVec3 up = StackedCell(c, map, true);
+            if (up.IsValid)
+            {
+                into.Add(up);
+                n++;
+            }
+            IntVec3 down = StackedCell(c, map, false);
+            if (down.IsValid)
+            {
+                into.Add(down);
+                n++;
+            }
+            return n;
+        }
+
+        // ---- vertical links drawn like power risers (3)
+        // An addon that joins its own net across floors lists the vertical links (RiserSource, RiserLink in ApiRisers.cs)
+        // and ProjectZ draws each one like a power riser in IsoRim's 3D view: a short upright piece in the link's colour
+        // from the lower cell up through the ceiling, lit like IsoRim's models (none on an end the game draws invisible);
+        // while the source's overlay is shown, its overlay line stood up between the two ends and its end mark at each
+        // end. Hidden floors are handled as for power (a half-storey stub while the upper floor is hidden). Nothing is
+        // drawn in the 2D view. Power is the first source, built in. Add once (e.g. from a StaticConstructorOnStartup).
+        public static void AddRiserSource(RiserSource source) => RiserView.Add(source);
+
+        public static void RemoveRiserSource(RiserSource source) => RiserView.Remove(source);
 
         // ---- the height rule under floors (2)
         // A building drawn taller than a storey's head room can't have a floor over it, and can't be placed under one
