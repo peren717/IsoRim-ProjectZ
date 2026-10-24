@@ -14,10 +14,11 @@ namespace ProjectZ
         //  2: floor queries, the height rule (FitsUnderFloor, RegisterHeightRule, TooTallUnderFloor), events (FloorChanged,
         //     PawnChangedFloor, AddStepHook), combat queries (Distance3D, RangeDistance, HeightAccuracyBonus);
         //  3: stacked cells (StackedCell, StackedCells) and vertical links drawn like power risers (AddRiserSource,
-        //     RemoveRiserSource, RiserSource, RiserLink)).
+        //     RemoveRiserSource, RiserSource, RiserLink);
+        //  4: AimPoint (turrets that turn themselves)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 3;
+        public static int Version => 4;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -247,5 +248,14 @@ namespace ProjectZ
             IntVec3 top = Column.Top(c, map);
             return !top.IsValid || ProjectZ.FloorOf(top, map) <= k;
         }
+
+        // ---- turrets that turn themselves (4)
+
+        // Where a shooter should aim, in its own floor's frame: the flat angle from shooter.DrawPos to this point
+        // (Vector3.AngleFlat of the difference) is the true direction to the target, also on another floor. On the same
+        // floor, or on a map without floors, it is the target cell's centre (the game's own aim). For a turret that turns
+        // itself (another mod skipped TurretTop.TurretTopTick for it, so ProjectZ leaves its gun alone): turn toward this
+        // point instead of the target cell, at your own speed.
+        public static UnityEngine.Vector3 AimPoint(Thing shooter, LocalTargetInfo target) => Patches.TurretTop_Aim_Patch.AimPoint(shooter, target);
     }
 }

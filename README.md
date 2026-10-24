@@ -84,6 +84,8 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - 3:
   - Stacked cells: `StackedCell` (the cell directly above or below, the rule power conduits use to join floors), `StackedCells`.
   - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` made from the addon's own methods: one lists the `RiserLink`s (lower cell, colour, visible ends, overlay line and end mark), one says whether the overlay is shown. Used by the VE Framework Pack for pipes.
+- 4:
+  - Turrets that turn themselves: `AimPoint` (where to aim, in the shooter's own floor frame, at a target on another floor). When another mod skips `TurretTop.TurretTopTick` for its turret, ProjectZ leaves that gun alone; turn it toward `AimPoint` at your own speed.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 

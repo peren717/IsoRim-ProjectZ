@@ -106,7 +106,8 @@ namespace ProjectZ
                 hasExtra = eg.IsValid && ek >= 0;
             }
             Color color = GravshipUtility.ConnectedSubstructureColor;
-            foreach (Thing t in map.listerThings.ThingsOfDef(ThingDefOf.GravEngine))
+            // Every grav engine (other mods' engine defs too), not only the game's own def.
+            foreach (Thing t in map.listerThings.ThingsInGroup(ThingRequestGroup.SubstructureFootprint))
             {
                 if (!(t is Building_GravEngine engine))
                 {
