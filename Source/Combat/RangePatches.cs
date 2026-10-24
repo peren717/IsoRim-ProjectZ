@@ -259,11 +259,11 @@ namespace ProjectZ.Combat
 
         public static bool Prepare() => CombatGate.Enabled;
 
-        public static void Postfix(AvoidGrid __instance, Building_TurretGun tur)
+        public static void Postfix(AvoidGrid __instance, Building_TurretGun tur, bool __runOriginal)
         {
             Map map = tur?.Map;
             AnnexMapComponent a = ProjectZ.Annex(map);
-            if (a == null)
+            if (a == null || !__runOriginal)   // another mod left this turret's avoid grid out: none upstairs either
             {
                 return;
             }

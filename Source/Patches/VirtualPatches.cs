@@ -91,6 +91,8 @@ namespace ProjectZ.Patches
     }
 
     // A turret's gun turns toward its target where it really is (TurretTopTick and ForceFaceTarget aim from the raw cell).
+    // When another mod skipped the game's turning (a turret that turns itself, at its own speed), the gun is left alone:
+    // that mod brings it round, and Api.AimPoint gives it the point to turn toward across floors.
     [HarmonyPatch]
     public static class TurretTop_Aim_Patch
     {
@@ -100,10 +102,10 @@ namespace ProjectZ.Patches
             yield return AccessTools.Method(typeof(TurretTop), nameof(TurretTop.ForceFaceTarget));
         }
 
-        public static void Postfix(TurretTop __instance, Building_Turret ___parentTurret, System.Reflection.MethodBase __originalMethod, object[] __args)
+        public static void Postfix(TurretTop __instance, Building_Turret ___parentTurret, System.Reflection.MethodBase __originalMethod, object[] __args, bool __runOriginal)
         {
             Building_Turret t = ___parentTurret;
-            if (t == null || !t.Spawned || !ProjectZ.HasAnnex(t.Map))
+            if (!__runOriginal || t == null || !t.Spawned || !ProjectZ.HasAnnex(t.Map))
             {
                 return;
             }
@@ -112,11 +114,28 @@ namespace ProjectZ.Patches
             {
                 return;
             }
-            Vector3 d = ProjectZ.Virtual(targ.Cell.ToVector3Shifted(), t.Map) - ProjectZ.Virtual(t.DrawPos, t.Map);
+            Vector3 d = AimPoint(t, targ) - t.DrawPos;
             if (d.x * d.x + d.z * d.z > 0.0001f)
             {
                 __instance.CurRotation = d.AngleFlat();
             }
+        }
+
+        // Api.AimPoint: the target's cell centre expressed in the shooter's own floor frame (both through the virtual,
+        // stacked position), so the flat angle from the shooter's drawn position to it is the true direction; on the same
+        // floor, or on a map without floors, the cell centre itself.
+        internal static Vector3 AimPoint(Thing shooter, LocalTargetInfo target)
+        {
+            Vector3 cell = target.Cell.ToVector3Shifted();
+            Map map = shooter?.Map;
+            if (shooter == null || !shooter.Spawned || !target.IsValid || !ProjectZ.HasAnnex(map) || !Combat.Heights.CrossFloor(shooter.Position, target.Cell, map))
+            {
+                return cell;
+            }
+            Vector3 from = shooter.DrawPos;
+            Vector3 p = from + (ProjectZ.Virtual(cell, map) - ProjectZ.Virtual(from, map));
+            p.y = cell.y;
+            return p;
         }
     }
 

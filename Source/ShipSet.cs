@@ -199,6 +199,9 @@ namespace ProjectZ
     [HarmonyPatch(typeof(GravshipUtility), nameof(GravshipUtility.GetConnectedSubstructure))]
     public static class GetConnectedSubstructure_ShipSet_Patch
     {
+        // Low priority: another mod's prefix that adjusts the arguments (raises maxCells, say) runs first and the ship set
+        // takes its values; at the default priority a mod registered after ProjectZ would be skipped once this returns false.
+        [HarmonyPriority(Priority.Low)]
         public static bool Prefix(Building_GravEngine engine, HashSet<IntVec3> cells, int maxCells, bool requireInsideFootprint)
         {
             if (ShipSet.Off || !ModsConfig.OdysseyActive || engine == null || !engine.Spawned || ProjectZ.Annex(engine.Map) == null)
