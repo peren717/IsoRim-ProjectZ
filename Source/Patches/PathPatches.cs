@@ -245,6 +245,14 @@ namespace ProjectZ.Patches
                 }
                 return;
             }
+            // the one rule at the step too (StairGrid.MayTake: an animal never climbs a ladder), for a path made before a
+            // link changed kind or by a search that could not tell its traveller
+            if (link.IsLadder && StairGrid.NoLadders(pawn))
+            {
+                ProjectZ.DebugLog($"{pawn}: {kind} step {pawn.Position} -> {__instance.nextCell}: animals take stairs only, path failed");
+                LinkSteps.FailPath(pawn);
+                return;
+            }
             // (Api step hooks: one may refuse the step; the path fails as over a link that is gone, the job asks again)
             if (!ApiEvents.AllowStep(pawn, kind, link.thing))
             {

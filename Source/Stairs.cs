@@ -323,13 +323,29 @@ namespace ProjectZ
 
         // THE rule for which links a traveller may take, asked by everything that joins floors for a traveller:
         // reachability (StairReach), the router, the dig components and the game's region searches (BFSWorker_Patch).
-        // Stairs, ladders, lifts: anyone. An elevator (powered, or its emergency ladder): never for traversal modes that
-        // break walls (raiders and the like), else whoever may open its owner's doors (ElevatorRule.MayUse; no traveller:
-        // yes, as an open door).
-        public static bool MayTake(VLink l, TraverseParms tp) => !AsksTraveller(l) || !Patches.RouteGraph.DigMode(tp.mode) && ElevatorRule.MayUse(l.thing, tp.pawn);
+        // Stairs: anyone. A ladder of any kind (the player's, an improvised or siege ladder or lift, an unpowered elevator
+        // climbed as a ladder): anyone but an animal (user rule 2026-10-23: animals take stairs only, up or down; one
+        // stranded upstairs stays there). An elevator (powered, or its emergency ladder): never for traversal modes that
+        // break walls (raiders and the like), else whoever may open its owner's doors (ElevatorRule.MayUse). No traveller:
+        // yes, as an open door. A pawn carried up a ladder is not the traveller (its carrier is).
+        public static bool MayTake(VLink l, TraverseParms tp)
+        {
+            if (!AsksTraveller(l))
+            {
+                return true;
+            }
+            if (l.IsLadder && NoLadders(tp.pawn))
+            {
+                return false;
+            }
+            return !l.IsElevator || !Patches.RouteGraph.DigMode(tp.mode) && ElevatorRule.MayUse(l.thing, tp.pawn);
+        }
 
         // MayTake depends on the traveller for this link (else: true for anyone).
-        public static bool AsksTraveller(VLink l) => l.IsElevator;
+        public static bool AsksTraveller(VLink l) => l.IsElevator || l.IsLadder;
+
+        // Who never climbs a ladder: animals (not humanlikes, mechanoids, mutants or entities).
+        public static bool NoLadders(Pawn p) => p != null && p.RaceProps != null && p.RaceProps.Animal;
 
         // Usable, and taken by this traveller (MayTake): the router's test on dig parts, where regions are not asked.
         public static bool UsableFor(VLink l, TraverseParms tp, Map map) => UsableIn(l, map) && MayTake(l, tp);

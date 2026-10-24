@@ -41,6 +41,8 @@ namespace ProjectZ.Dev
     //                                   TestLadders; with the column kept open, the climber first at the end, no melee over 2+
     //                                   floors: TestLadders2; the climbing pose: TestLadderPose), -projectzfloors=5 -projectzseed=7;
     //                                   ladderpose: only the climbing-pose checks and their screenshot strips (TestLadderPose)
+    //                                   animalladders: animals never climb a ladder of any kind, stairs only (follow master,
+    //                                   sent up, manhunters, stranded, carried, mechanoid; TestAnimalLadders), -projectzfloors=3
     //                                   raidladders: siege ladders, stage 2: raiders use ladders where the game's last resort
     //                                   finds no way (real raids against bases on floors, a moat, exits, kidnap, mechanoids,
     //                                   animals and shamblers excluded; TestRaidLadders), -projectzfloors=5 -projectzseed=7
@@ -682,6 +684,11 @@ namespace ProjectZ.Dev
                 StepBeamAim(map);
                 return;
             }
+            if (stage.StartsWith("al_"))
+            {
+                StepAnimalLadders(map);
+                return;
+            }
             if (stage.StartsWith("ld_"))
             {
                 StepLadders(map);
@@ -1089,6 +1096,10 @@ namespace ProjectZ.Dev
                     else if (mode == "beamaim")
                     {
                         stage = "bm_setup";
+                    }
+                    else if (mode == "animalladders")
+                    {
+                        stage = "al_setup";
                     }
                     else if (mode == "ladders" || mode == "ladderpose")
                     {
