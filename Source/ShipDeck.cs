@@ -44,7 +44,32 @@ namespace ProjectZ
 
     public static class ShipDeck
     {
-        public static bool Is(TerrainDef t) => t != null && t == PZDefOf.PZ_ShipDeck;
+        // Other foundations registered as decks (Api 4, RegisterDeckTerrain): copy on write, read from any thread.
+        private static volatile HashSet<TerrainDef> extra = new HashSet<TerrainDef>();
+
+        public static bool Is(TerrainDef t) => t != null && (t == PZDefOf.PZ_ShipDeck || extra.Contains(t));
+
+        // A registered deck foundation (not the deck itself).
+        public static bool IsExtra(BuildableDef d) => d is TerrainDef t && extra.Contains(t);
+
+        public static void Register(TerrainDef def)
+        {
+            if (def == null || def == PZDefOf.PZ_ShipDeck || extra.Contains(def))
+            {
+                return;
+            }
+            if (!def.isFoundation)
+            {
+                Log.Warning("[ProjectZ] RegisterDeckTerrain: " + def.defName + " is not a foundation; not registered.");
+                return;
+            }
+            lock (typeof(ShipDeck))
+            {
+                HashSet<TerrainDef> next = new HashSet<TerrainDef>(extra) { def };
+                extra = next;
+            }
+            ProjectZ.DebugLog("deck terrain registered: " + def.defName);
+        }
 
         public static bool Is(BuildableDef d) => d is TerrainDef t && Is(t);
 

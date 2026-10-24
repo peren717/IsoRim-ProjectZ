@@ -84,6 +84,10 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - 3:
   - Stacked cells: `StackedCell` (the cell directly above or below, the rule power conduits use to join floors), `StackedCells`.
   - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` made from the addon's own methods: one lists the `RiserLink`s (lower cell, colour, visible ends, overlay line and end mark), one says whether the overlay is shown. Used by the VE Framework Pack for pipes.
+- 4:
+  - Gravship cells: `MapToShip` / `ShipToMap` (a map cell to a ship offset and back; an offset keeps its floor, so data stored per ship cell lands on the right deck).
+  - `RequestFogRefresh`: runs the floors' fog rule again, after a mod re-fogged the map.
+  - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air (never over a deck), where a deck may go.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 
