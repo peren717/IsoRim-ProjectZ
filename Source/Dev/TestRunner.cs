@@ -148,6 +148,9 @@ namespace ProjectZ.Dev
     //                                   shiprange: the footprint range preview (multi-level gravships P3: cross-section rings
     //                                   on the ground and the viewed floor, the sphere shell of the selected or placed engine
     //                                   or extender, the facility ring cut on other floors; shots); -projectzfloors=3, Odyssey (TestShipRange)
+    //                                   othermods: ProjectZ next to other mods' patches (the other mod's defs from the command line:
+    //                                   -projectzsubscaffold, -projectzengine, -projectzturret, -projectzturretlink, -projectzselfturn);
+    //                                   -projectzfloors=3, Odyssey (TestOtherMods)
     //                                   shipfly: a 3-storey gravship flies (multi-level gravships P4: launched for real with
     //                                   colonists, a sleeper, items, a lamp on a riser and rooms upstairs, saved and reloaded
     //                                   in flight, landed turned on a new map and back home with the grav anchor; landing
@@ -377,6 +380,10 @@ namespace ProjectZ.Dev
             if (mode == "checks4b")
             {
                 K4bPatch(h);
+            }
+            if (mode == "othermods")
+            {
+                OtherModsInit(h);
             }
             if (mode == "range")
             {
@@ -821,6 +828,11 @@ namespace ProjectZ.Dev
                 StepShipRange(map);
                 return;
             }
+            if (stage.StartsWith("om_"))
+            {
+                StepOtherMods(map);
+                return;
+            }
             if (stage.StartsWith("sf_"))
             {
                 StepShipFly(map);
@@ -1221,6 +1233,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shiprange")
                     {
                         stage = "sr_setup";
+                    }
+                    else if (mode == "othermods")
+                    {
+                        stage = "om_setup";
                     }
                     else if (mode == "shipfly")
                     {
