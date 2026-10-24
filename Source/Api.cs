@@ -15,7 +15,8 @@ namespace ProjectZ
         //     PawnChangedFloor, AddStepHook), combat queries (Distance3D, RangeDistance, HeightAccuracyBonus);
         //  3: stacked cells (StackedCell, StackedCells) and vertical links drawn like power risers (AddRiserSource,
         //     RemoveRiserSource, RiserSource, RiserLink);
-        //  4: AimPoint (turrets that turn themselves)).
+        //  4: AimPoint (turrets that turn themselves), gravship cells relative to a ship (ShipToMap, MapToShip),
+        //     RequestFogRefresh, RegisterDeckTerrain).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
         public static int Version => 4;
@@ -109,6 +110,27 @@ namespace ProjectZ
         public static void AddRiserSource(RiserSource source) => RiserView.Add(source);
 
         public static void RemoveRiserSource(RiserSource source) => RiserView.Remove(source);
+
+        // ---- gravships, fog and deck foundations (4)
+        // A gravship stores its cells relative to the engine: the ground column offset in x and z, the floor in y (an upper
+        // deck's cell keeps its floor). Another mod that keeps its own per-cell gravship data (captured at take-off, written
+        // back at landing) uses these instead of "cell - origin" and "root + offset", which would land on the ground cell.
+        // The offset of map cell `cell` from the ship's origin cell (both raw map cells).
+        public static IntVec3 MapToShip(IntVec3 cell, IntVec3 origin, Map map) => ShipLocal.From(cell, origin, map);
+
+        // The map cell of a ship offset `local` placed at `root` (a ground cell): its column, lifted to the offset's floor.
+        public static IntVec3 ShipToMap(IntVec3 root, IntVec3 local, Map map) => ShipLocal.To(root, local, map);
+
+        // Re-run ProjectZ's fog rule (what player pawns reach or see on every floor is revealed) on the map soon, batched:
+        // for a mod that rewrote the fog over the whole map (fogged it again and unfogged from one spot).
+        public static void RequestFogRefresh(Map map) => ReachFog.Request(map);
+
+        // Another foundation that counts as a ship upper deck. On an upper floor it is built like the deck itself: directly
+        // on the floor support over open air, right above the ship (the deck's own placement rules), as an alternative to
+        // the deck, never over one; its terrain affordance need is met there by the floor support. ProjectZ then treats it as
+        // a deck: it carries what stands on it, flies with the ship, falls without the ship below it, is removed as a deck.
+        // On the ground nothing changes (its own rules). Register once at startup (e.g. a mod's subarmor, a damaged deck).
+        public static void RegisterDeckTerrain(TerrainDef def) => ShipDeck.Register(def);
 
         // ---- the height rule under floors (2)
         // A building drawn taller than a storey's head room can't have a floor over it, and can't be placed under one

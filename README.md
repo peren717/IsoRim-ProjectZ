@@ -86,6 +86,9 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - Vertical links drawn like power risers: `AddRiserSource` / `RemoveRiserSource` with a `RiserSource` made from the addon's own methods: one lists the `RiserLink`s (lower cell, colour, visible ends, overlay line and end mark), one says whether the overlay is shown. Used by the VE Framework Pack for pipes.
 - 4:
   - Turrets that turn themselves: `AimPoint` (where to aim, in the shooter's own floor frame, at a target on another floor). When another mod skips `TurretTop.TurretTopTick` for its turret, ProjectZ leaves that gun alone; turn it toward `AimPoint` at your own speed.
+  - Gravship cells: `MapToShip` / `ShipToMap` (a map cell to a ship offset and back; an offset keeps its floor, so data stored per ship cell lands on the right deck).
+  - `RequestFogRefresh`: runs the floors' fog rule again, after a mod re-fogged the map.
+  - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air (never over a deck), where a deck may go.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 
