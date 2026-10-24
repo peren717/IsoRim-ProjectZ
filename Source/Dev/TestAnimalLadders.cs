@@ -246,10 +246,15 @@ namespace ProjectZ.Dev
 
         private static void AlManhunters(Map map)
         {
-            AlFixture(map, false, r2P);
-            Heal(r2P);
+            List<Pawn> cols = Colonists(map);
+            AlFixture(map, false, cols.ToArray());
+            for (int i = 0; i < cols.Count; i++)
+            {
+                Heal(cols[i]);
+                Teleport(cols[i], i == 0 || cols[i] == r2P ? LdL(24, 13, 1, map) : LdL(22 + i % 6, 16 + i / 6, 1, map));
+                Draft(cols[i], true);
+            }
             Teleport(r2P, LdL(24, 13, 1, map));
-            Draft(r2P, true);
             alHurtAt = r2P.health.hediffSet.hediffs.Count(h => h is Hediff_Injury);
             for (int i = 0; i < 3; i++)
             {
@@ -257,6 +262,8 @@ namespace ProjectZ.Dev
                 w.mindState.mentalStateHandler.TryStartMentalState(MentalStateDefOf.ManhunterPermanent, null, true);
                 alPack.Add(w);
             }
+            alOnStairs = alPack.Any(w => map.reachability.CanReach(w.Position, r2P, PathEndMode.Touch, TraverseParms.For(w)));
+            Info($"A4 every colonist on the platform; a wolf can reach the colonist: {alOnStairs}");
             SeedTicks("al_manhunt");
             TickUntil(2500, () =>
             {
@@ -273,8 +280,8 @@ namespace ProjectZ.Dev
             tickWatch = null;
             int up = alPack.Count(w => w.Spawned && Levels.LevelOf(w.Position, map) >= 1);
             int hurt = r2P.health.hediffSet.hediffs.Count(h => h is Hediff_Injury) - alHurtAt;
-            Result("A4 a manhunter pack below a ladder-only platform: none comes up, never on the ladder, the colonist up there unhurt",
-                alPack.Count == 3 && up == 0 && !alOnLadder && hurt == 0, $"pack {string.Join(", ", alPack.Select(w => w.LabelShort + " " + AlWhere(w, map) + " " + (w.MentalStateDef?.defName ?? "-")))}; colonist {AlWhere(r2P, map)}, new injuries {hurt}");
+            Result("A4 a manhunter pack below a ladder-only platform: no reach, none comes up, never on the ladder, the colonist up there unhurt",
+                alPack.Count == 3 && !alOnStairs && up == 0 && !alOnLadder && hurt == 0, $"pack {string.Join(", ", alPack.Select(w => w.LabelShort + " " + AlWhere(w, map) + " " + (w.MentalStateDef?.defName ?? "-")))}; colonist {AlWhere(r2P, map)}, new injuries {hurt}");
             R2Park(map);
             stage = "al_a5";
         }

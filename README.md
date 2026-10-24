@@ -26,6 +26,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - **Elevator** (research Machining, 100 steel and 4 components, 150 W): a 1x1 lift that stops at every floor above. Without power it is climbed like a ladder.
 - **Ship stairs** for gravships.
 - Pawns path between floors over all of these; jumping down is never used as a path.
+- Animals never climb ladders; they need stairs.
 
 ## Viewing floors
 
