@@ -88,7 +88,8 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - Turrets that turn themselves: `AimPoint` (where to aim, in the shooter's own floor frame, at a target on another floor). When another mod skips `TurretTop.TurretTopTick` for its turret, ProjectZ leaves that gun alone; turn it toward `AimPoint` at your own speed.
   - Gravship cells: `MapToShip` / `ShipToMap` (a map cell to a ship offset and back; an offset keeps its floor, so data stored per ship cell lands on the right deck).
   - `RequestFogRefresh`: runs the floors' fog rule again, after a mod re-fogged the map.
-  - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air (never over a deck), where a deck may go.
+  - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air where a deck may go, or in place of a deck when its own rules allow replacing substructure on the ground.
+- 5: `ShipCells`: the ship's cells on every floor without the substructure limit (for a mod that leaves some of its own cells out of the count).
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
 

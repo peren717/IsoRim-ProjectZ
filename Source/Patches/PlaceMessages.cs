@@ -33,7 +33,8 @@ namespace ProjectZ.Patches
                 return;
             }
             // (a ship deck as a slab, with its own rules: ShipDeck.Check)
-            if (SlabDefs.Is(entDef) || ShipDeck.Is(entDef))
+            // (a registered deck foundation only upstairs: on the ground its own rules and messages stay)
+            if (SlabDefs.Is(entDef) || ShipDeck.Is(entDef) && (!ShipDeck.IsExtra(entDef) || ProjectZ.FloorOf(center, map) >= 1))
             {
                 if (ProjectZ.FloorOf(center, map) < 1)
                 {

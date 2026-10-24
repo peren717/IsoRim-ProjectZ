@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ProjectZ.Combat;
+using RimWorld;
 using Verse;
 
 namespace ProjectZ
@@ -16,10 +17,10 @@ namespace ProjectZ
         //  3: stacked cells (StackedCell, StackedCells) and vertical links drawn like power risers (AddRiserSource,
         //     RemoveRiserSource, RiserSource, RiserLink);
         //  4: AimPoint (turrets that turn themselves), gravship cells relative to a ship (ShipToMap, MapToShip),
-        //     RequestFogRefresh, RegisterDeckTerrain).
+        //     RequestFogRefresh, RegisterDeckTerrain; 5: ShipCells, the ship's cells on every floor without the substructure limit).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 4;
+        public static int Version => 5;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -127,7 +128,8 @@ namespace ProjectZ
 
         // Another foundation that counts as a ship upper deck. On an upper floor it is built like the deck itself: directly
         // on the floor support over open air, right above the ship (the deck's own placement rules), as an alternative to
-        // the deck, never over one; its terrain affordance need is met there by the floor support. ProjectZ then treats it as
+        // the deck (or in place of a deck when its own rules allow replacing substructure on the ground; never stacked); its
+        // terrain affordance need is met there by the floor support. ProjectZ then treats it as
         // a deck: it carries what stands on it, flies with the ship, falls without the ship below it, is removed as a deck.
         // On the ground nothing changes (its own rules). Register once at startup (e.g. a mod's subarmor, a damaged deck).
         public static void RegisterDeckTerrain(TerrainDef def) => ShipDeck.Register(def);
@@ -279,5 +281,26 @@ namespace ProjectZ
         // itself (another mod skipped TurretTop.TurretTopTick for it, so ProjectZ leaves its gun alone): turn toward this
         // point instead of the target cell, at your own speed.
         public static UnityEngine.Vector3 AimPoint(Thing shooter, LocalTargetInfo target) => Patches.TurretTop_Aim_Patch.AimPoint(shooter, target);
+
+        // ---- the ship's cells (5)
+
+        // Every substructure cell connected to the engine, on every floor (decks and stairs as ProjectZ joins them), with no
+        // substructure limit: what the engine's valid set would be with unlimited support. Into `into` (cleared first). For a
+        // mod that counts its own cells against the limit (e.g. a foundation it leaves out of the count) on upper decks too.
+        // On a map without floors: the game's own flood fill. Main thread.
+        public static void ShipCells(Building_GravEngine engine, HashSet<IntVec3> into, bool requireInsideFootprint = true)
+        {
+            into.Clear();
+            if (engine == null || !engine.Spawned)
+            {
+                return;
+            }
+            if (ProjectZ.Annex(engine.Map) == null || ShipSet.Off)
+            {
+                GravshipUtility.GetConnectedSubstructure(engine, into, int.MaxValue, requireInsideFootprint);
+                return;
+            }
+            ShipSet.Fill(engine, into, int.MaxValue, requireInsideFootprint);
+        }
     }
 }

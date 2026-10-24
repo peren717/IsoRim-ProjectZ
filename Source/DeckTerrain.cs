@@ -6,9 +6,10 @@ namespace ProjectZ
 {
     // Api 4, RegisterDeckTerrain: other foundations that count as ship upper decks (ShipDeck.Is). On an upper floor such a
     // foundation is built like the deck: directly on the floor support over open air (PZ_FloorSupport stands in for the
-    // ground affordance it needs, e.g. "Walkable"), only where a deck may go (ShipDeck.Check). Never over a deck or a floor:
-    // those cells give no floor support. On the ground its own rules stay. Its terrain def is not changed, so nothing
-    // else that needs the same affordance gains anything on upper floors.
+    // ground affordance it needs, e.g. "Walkable"), only where a deck may go (ShipDeck.Check). Over an existing deck it
+    // replaces that deck in place exactly when its own rules allow replacing substructure on the ground (decks follow the
+    // ground's substructure rules); it never stacks across floors. On the ground its own rules stay. Its terrain def is not
+    // changed, so nothing else that needs the same affordance gains anything on upper floors.
     public static class DeckTerrain
     {
         private static TerrainAffordanceDef floorSupport;
@@ -56,10 +57,15 @@ namespace ProjectZ
             {
                 return;
             }
-            // never over a deck or another foundation (another mod may let it replace foundations on the ground)
-            if (map.terrainGrid.FoundationAt(center) != null)
+            // over a deck: a swap in place, decided by the def's own rules as over substructure on the ground (the game's
+            // "foundation already here" check, which another mod may skip for it, already ran); over anything else: refused
+            TerrainDef existing = map.terrainGrid.FoundationAt(center);
+            if (existing != null)
             {
-                __result = "PZ_AlreadyFloor".Translate();
+                if (!ShipDeck.Is(existing))
+                {
+                    __result = "PZ_AlreadyFloor".Translate();
+                }
                 return;
             }
             AcceptanceReport r = ShipDeck.Check(center, map);

@@ -42,6 +42,40 @@ namespace ProjectZ
         }
     }
 
+    // A ship deck is the gravship's substructure on an upper floor: at startup (after every def and patch) it gets every
+    // terrain affordance vanilla Substructure has and it lacks, also those other mods add to Substructure, so whatever
+    // may stand on substructure may stand on a deck.
+    [StaticConstructorOnStartup]
+    public static class DeckAffordances
+    {
+        static DeckAffordances()
+        {
+            TerrainDef deck = PZDefOf.PZ_ShipDeck;
+            TerrainDef sub = DefDatabase<TerrainDef>.GetNamedSilentFail("Substructure");
+            if (deck == null || sub?.affordances == null)
+            {
+                return;
+            }
+            if (deck.affordances == null)
+            {
+                deck.affordances = new List<TerrainAffordanceDef>();
+            }
+            List<string> added = new List<string>();
+            foreach (TerrainAffordanceDef a in sub.affordances)
+            {
+                if (a != null && !deck.affordances.Contains(a))
+                {
+                    deck.affordances.Add(a);
+                    added.Add(a.defName);
+                }
+            }
+            if (added.Count > 0)
+            {
+                ProjectZ.DebugLog("ship deck affordances from Substructure: " + string.Join(", ", added));
+            }
+        }
+    }
+
     public static class ShipDeck
     {
         // Other foundations registered as decks (Api 4, RegisterDeckTerrain): copy on write, read from any thread.
@@ -406,7 +440,8 @@ namespace ProjectZ
     {
         public static bool Prefix(Thing t, ref bool __result)
         {
-            if (t == null || !t.Spawned || !ShipDeck.Is(t.def.entityDefToBuild) || ProjectZ.Annex(t.Map) == null)
+            // (upper floors only: on the ground a registered deck foundation keeps its own rules)
+            if (t == null || !t.Spawned || !ShipDeck.Is(t.def.entityDefToBuild) || ProjectZ.Annex(t.Map) == null || ProjectZ.FloorOf(t.Position, t.Map) < 1)
             {
                 return true;
             }
