@@ -1139,7 +1139,26 @@ namespace ProjectZ.Patches
                 Pending p = queue[pick];
                 queue.RemoveAt(pick);
                 long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
-                Answer(p);
+                try
+                {
+                    Answer(p);
+                }
+                catch (Exception e)
+                {
+                    // (routerfix) every request gets an answer: "no path" when answering it failed, the traveller's memo
+                    // set; the queue goes on with the others
+                    try
+                    {
+                        if (!p.req.Cancelled && !p.req.ResultIsReady)
+                        {
+                            StairRouter.Resolve(p.req, null);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                    RouterErrors.Handle(e, map, p.pawn, p.start, p.dest, p.mode, "RouteGraph.ProcessQueue");
+                }
                 spentMs += (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 done++;
                 int waited = now - p.tick;

@@ -45,9 +45,19 @@ namespace ProjectZ.Patches
                 return;
             }
             PathRequest pushed = __result;
-            PathRequest answered = map.pathFinder.CreateRequest(__instance.nextCell, dest, null, pawn, PathFinderCostTuning.For(pawn), mode);
+            PathRequest answered;
+            try
+            {
+                // (routerfix) the game's request is only given up once ours is queued: on a failure the follower keeps it
+                answered = map.pathFinder.CreateRequest(__instance.nextCell, dest, null, pawn, PathFinderCostTuning.For(pawn), mode);
+                g.Enqueue(new RouteGraph.Pending { pawn = pawn, req = answered, start = __instance.nextCell, dest = dest, mode = mode, tp = answered.TraverseParms, tuning = answered.Tuning });
+            }
+            catch (Exception e)
+            {
+                RouterErrors.Handle(e, map, pawn, __instance.nextCell, dest, mode, "GenerateNewPathRequest");
+                return;
+            }
             pushed.Dispose();
-            g.Enqueue(new RouteGraph.Pending { pawn = pawn, req = answered, start = __instance.nextCell, dest = dest, mode = mode, tp = answered.TraverseParms, tuning = answered.Tuning });
             __result = answered;
             Dev.PZStats.splices++;
             if (ProjectZ.DebugOn)
@@ -125,11 +135,21 @@ namespace ProjectZ.Patches
                 return;
             }
             // the game's path is kept for the comparison; the follower waits for the answer
+            PathRequest answered;
+            try
+            {
+                // (routerfix) queued before the follower is switched over: on a failure it keeps the game's own path
+                answered = map.pathFinder.CreateRequest(w.start, w.dest, null, pawn, PathFinderCostTuning.For(pawn), w.mode);
+                g.Enqueue(new RouteGraph.Pending { pawn = pawn, req = answered, start = w.start, dest = w.dest, mode = w.mode, tp = answered.TraverseParms, tuning = answered.Tuning, vanilla = path });
+            }
+            catch (Exception e)
+            {
+                RouterErrors.Handle(e, map, pawn, w.start, w.dest, w.mode, "PatherTick detour check");
+                return;
+            }
             req.ClaimCalculatedPath();
-            PathRequest answered = map.pathFinder.CreateRequest(w.start, w.dest, null, pawn, PathFinderCostTuning.For(pawn), w.mode);
             __instance.curPathRequest = answered;
             req.Dispose();
-            g.Enqueue(new RouteGraph.Pending { pawn = pawn, req = answered, start = w.start, dest = w.dest, mode = w.mode, tp = answered.TraverseParms, tuning = answered.Tuning, vanilla = path });
             Dev.PZStats.sameFloorRouted++;
         }
 

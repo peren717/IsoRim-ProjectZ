@@ -858,6 +858,10 @@ namespace ProjectZ.Patches
                     Dev.PZStats.routeMemoHits++;
                     return knownDirect;
                 }
+                if (RouterErrors.TestThrow != null && RouterErrors.TestThrow(tp.pawn))
+                {
+                    throw new InvalidOperationException("ProjectZ test: a forced router failure (Dev mode routerfix)");
+                }
                 // Nothing to search for where reachability says no (the same graph: components, then the traveller).
                 if (knownDirect == null && !ReachRefs.WorkingRef(map.reachability) && !map.reachability.CanReach(start, dest, peMode, tp))
                 {
@@ -882,7 +886,9 @@ namespace ProjectZ.Patches
             }
             catch (Exception e)
             {
-                Log.ErrorOnce("[ProjectZ] Finding a path over the stairs failed: " + e, 81512301);
+                // (routerfix) answered as the caller's own path or "no path"; the traveller's memo is set so its job is not
+                // handed out again at once; one full message a minute at most (RouterErrors)
+                RouterErrors.Handle(e, map, tp.pawn, start, dest, peMode, "StairRouter.Find");
                 return knownDirect;
             }
             finally
