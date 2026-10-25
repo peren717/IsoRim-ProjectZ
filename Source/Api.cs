@@ -218,8 +218,10 @@ namespace ProjectZ
         // ---- lobbed shots (indirect fire) between floors
 
         // Registers a rule that declares how a shot between two floors flies:
-        //   rule(verb, from, to): from = the shooter's cell (or the lean cell it shoots from), to = the target's cell; the
-        //   two are always on different floors of a map with floors (ProjectZ never asks about shots on one floor).
+        //   rule(verb, from, to): from = the shooter's cell (or the lean cell it shoots from), to = the target's cell. Sight
+        //   and hit checks ask only about shots between two floors of a map with floors; a projectile that flies overhead
+        //   (flyOverhead) is also asked about at launch and for its forced miss on one floor, so a rule can declare such a
+        //   weapon direct everywhere (its miss stays on the target's floor, it never comes down on a slab top).
         //   Return true: lobbed (indirect fire, like a mortar shell): no line of sight is needed to see, pick and hit the
         //     target, and the projectile ignores everything between, then comes down on the top of the target's column
         //     (a slab or floor over the target stops it there; a vanilla roof as the game does for shells).

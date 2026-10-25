@@ -16,7 +16,10 @@ namespace ProjectZ.Combat
     // A shot declared direct is the opposite, also for a projectile def that flies overhead (flyOverhead): it needs a
     // line of sight and flies as a direct shot between floors (ProjectZ's flight, interceptions, no fall onto a slab top).
     // Nothing declared: as before (the verb's requireLineOfSight, the projectile def's flyOverhead).
-    // Only shots between two floors are asked about; on one floor every mod and the game decide as before.
+    // Sight and CanHitCell ask only about shots between two floors (on one floor the game and every mod decide as before).
+    // A projectile that flies overhead is asked about at launch wherever it goes, on one floor too, and marked: a shot
+    // declared direct then keeps its forced miss on the target's floor (SkyStrikes.ForcedMiss_Patch) and does not come
+    // down on a slab top (Projectile_ImpactOnTop_Patch); IsoRim draws it straight (IsoRimBridge's arc rule).
     public static class Lobbed
     {
         private static readonly List<Func<Verb, IntVec3, IntVec3, bool?>> rules = new List<Func<Verb, IntVec3, IntVec3, bool?>>();

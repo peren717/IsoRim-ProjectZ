@@ -65,7 +65,10 @@ namespace ProjectZ
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static void ShotArcs() => IsoRim.Api.AddProjectileArc(new System.Func<Projectile, bool?>(ArcOf));
 
-        private static bool? ArcOf(Projectile p) => Combat.Flights.cross.TryGetValue(p, out _) ? Api.IsLobbed(p) : (bool?)null;
+        // A shot marked lobbed or direct (declared, Combat.Lobbed: on one floor too) or one between floors: drawn on the arc as
+        // ProjectZ flies it; else IsoRim's own rule.
+        private static bool? ArcOf(Projectile p) => Combat.Lobbed.Marked(p, out bool lobbed) ? lobbed
+            : Combat.Flights.cross.TryGetValue(p, out _) ? Api.IsLobbed(p) : (bool?)null;
 
         // IsoRim Api 19 (only called when IsoRim has it).
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

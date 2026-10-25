@@ -791,6 +791,16 @@ namespace ProjectZ.Combat
             IntVec3 spawn = __instance.Position;   // the shoot line's source
             IntVec3 oc = ___origin.ToIntVec3();
             IntVec3 dc = ___destination.ToIntVec3();
+            // A projectile that flies overhead: lobbed or direct as its verb's rule declares (Lobbed), on one floor too.
+            if (__instance.def.projectile.flyOverhead && Lobbed.Any && Lobbed.casting != null && !Lobbed.Marked(__instance, out _))
+            {
+                IntVec3 aimed = __instance.intendedTarget.IsValid ? __instance.intendedTarget.Cell : dc;
+                bool? said = Lobbed.Declared(Lobbed.casting, spawn, aimed);
+                if (said.HasValue)
+                {
+                    Lobbed.Mark(__instance, said.Value);
+                }
+            }
             int ko = ProjectZ.FloorOf(oc, map);
             int kd = ProjectZ.FloorOf(dc, map);
             if (ko < 0)

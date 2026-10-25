@@ -428,6 +428,10 @@ namespace ProjectZ.Combat
             g.x = Mathf.Clamp(g.x, 0, map.Size.x - 1);
             g.z = Mathf.Clamp(g.z, 0, an.groundZ - 1);
             bool overhead = (casting ?? __instance.Projectile)?.projectile?.flyOverhead ?? false;
+            if (overhead && Lobbed.Any && Lobbed.Declared(__instance, __instance.caster.Position, t) == false)
+            {
+                overhead = false;   // declared direct (Lobbed): the miss stays on the target's floor, as a bullet's
+            }
             int k = ProjectZ.FloorOf(t, map);
             IntVec3 res = overhead ? Column.Top(g, map) : ProjectZ.CellOnFloor(g, Mathf.Max(0, k), map);
             if (res.IsValid && res != __result)
