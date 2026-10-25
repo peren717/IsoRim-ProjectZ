@@ -26,6 +26,8 @@ namespace ProjectZ.Dev
         private static bool rxSawJob;
         private static int rxLongestWait;
         private static int rxWaitStart = -1;
+        private static int rxBillSamples, rxBillCarry;
+        private static string rxLastJob;
 
         private static bool StepRouterFix(Map map)
         {
@@ -45,6 +47,15 @@ namespace ProjectZ.Dev
                     return true;
                 case "rx_bill":
                     RxBill(map);
+                    return true;
+                case "rx_wait":
+                    if (Time.realtimeSinceStartup - rxFirstLogTime > RouterErrors.LogIntervalSeconds + 2f)
+                    {
+                        stage = "rx_bill2";
+                    }
+                    return true;
+                case "rx_bill2":
+                    RxBill2(map);
                     return true;
                 case "rx_bill_check":
                     RxBillCheck(map);
@@ -141,6 +152,7 @@ namespace ProjectZ.Dev
             tickWatch = null;
             rxFirstLogTime = Time.realtimeSinceStartup;
             string msg = RouterErrors.LastMessage ?? "";
+            rxSawJob |= msg.Contains("job: HaulToCell");   // the job can start and drop within one tick
             string expect = GenCommandLine.TryGetCommandLineArg("projectzexpectpatcher", out string pid) ? pid : null;
             bool content = msg.Contains(r2P.LabelShort) && msg.Contains("HaulToCell") && msg.Contains("work giver") && msg.Contains("WoodLog")
                 && msg.Contains("floor 1") && msg.Contains("may be involved") && msg.Contains("forced router failure");
@@ -183,24 +195,37 @@ namespace ProjectZ.Dev
             Result("RX3 failures within the minute are handled silently (no further message), the pawn still never waits",
                 RouterErrors.Handled > rxHandledAt && RouterErrors.Logged == rxLoggedAt && since < RouterErrors.LogIntervalSeconds && rxLongestWait <= 30,
                 $"handled {RouterErrors.Handled - rxHandledAt} more, messages {RouterErrors.Logged - rxLoggedAt} more, {since:0.0} s since the first, longest wait {rxLongestWait} ticks");
-            // RX4: a bill job up the stairs after the minute
+            // RX4: wait out the real-time minute (the wood gone, the pawn drafted), then a bill job up the stairs
             rxItem.Destroy();
+            Draft(r2P, true);
+            stage = "rx_wait";   // a real-time wait without game ticks (a minute of ticks would be days of game time)
+        }
+
+        private static void RxBill2(Map map)
+        {
+            tickWatch = null;
+            float since = Time.realtimeSinceStartup - rxFirstLogTime;
             rxBench = Place(DefDatabase<ThingDef>.GetNamed("TableStonecutter"), ThingDefOf.WoodLog, RL(20, 15, 1, map), map, Rot4.South);
             ((Building_WorkTable)rxBench).BillStack.AddBill(DefDatabase<RecipeDef>.GetNamed("Make_StoneBlocksAny").MakeNewBill());
             Thing chunk = GenSpawn.Spawn(ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed("ChunkGranite")), RG(18, 3), map);
             chunk.SetForbidden(false, false);
+            Draft(r2P, false);
             R2Work(r2P, WorkTypeDefOf.Crafting);
             Teleport(r2P, RG(16, 3));
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             rxLoggedAt = RouterErrors.Logged;
+            rxHandledAt = RouterErrors.Handled;
+            rxBillSamples = 0; rxBillCarry = 0; rxLastJob = null;
             rxSawJob = false;
-            Info($"routerfix: waiting for a real-time minute since the first message ({since:0.0} s so far); bench {rxBench} at {rxBench.Position}, chunk {chunk} at {chunk.Position}");
-            TickUntil(400000, () =>
+            Info($"routerfix: {since:0.0} s since the first message; bench {rxBench} at {rxBench.Position}, chunk {chunk} at {chunk.Position}");
+            TickUntil(20000, () =>   // ends on the second message
             {
                 RxWatchWait();
                 rxSawJob |= r2P.CurJobDef == JobDefOf.DoBill;
+                if (r2P.CurJobDef == JobDefOf.DoBill) { rxBillSamples++; if (r2P.carryTracker?.CarriedThing != null) rxBillCarry++; }
+                rxLastJob = r2P.CurJobDef?.defName + " at " + r2P.Position + (r2P.carryTracker?.CarriedThing != null ? " carrying " + r2P.carryTracker.CarriedThing : "");
                 return RouterErrors.Logged > rxLoggedAt;
-            }, "rx_bill_check", 10);
+            }, "rx_bill_check", 1);
         }
 
         private static void RxBillCheck(Map map)
@@ -209,10 +234,11 @@ namespace ProjectZ.Dev
             RouterErrors.TestThrow = null;
             float since = Time.realtimeSinceStartup - rxFirstLogTime;
             string msg = RouterErrors.LastMessage ?? "";
+            rxSawJob |= msg.Contains("job: DoBill");   // the job can start and drop within one tick
             bool content = msg.Contains("DoBill") && msg.Contains("bill:") && msg.Contains("bench") && msg.Contains("TableStonecutter") && msg.Contains(r2P.LabelShort);
             Result("RX4 after more than a real-time minute a bill job up the stairs fails: a second full message with the bill and its bench",
-                RouterErrors.Logged == rxLoggedAt + 1 && since >= RouterErrors.LogIntervalSeconds && content && rxLongestWait <= 30,
-                $"bill job seen {rxSawJob}, messages {RouterErrors.Logged - rxLoggedAt}, {since:0.0} s after the first, content {content}, longest wait {rxLongestWait} ticks");
+                RouterErrors.Logged == rxLoggedAt + 1 && since >= RouterErrors.LogIntervalSeconds && content && rxSawJob && rxLongestWait <= 30,
+                $"bill job seen {rxSawJob} (samples {rxBillSamples}, carrying {rxBillCarry}), handled {RouterErrors.Handled - rxHandledAt}, last {rxLastJob}, messages {RouterErrors.Logged - rxLoggedAt}, {since:0.0} s after the first, content {content}, longest wait {rxLongestWait} ticks");
             Info("routerfix message 2:\n" + msg);
             Finish();
         }
