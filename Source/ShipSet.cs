@@ -52,6 +52,8 @@ namespace ProjectZ
                     return false;
                 }
                 TerrainDef f = tg.FoundationAt(x);
+                // (the game's own test, the tag, as vanilla's GetConnectedSubstructure: not DeckFoundation, so a deck
+                // without the tag, e.g. another faction's ship, never flies with the player's ship)
                 return f != null && f.IsSubstructure && (!requireInsideFootprint || GravshipUtility.InsideFootprint(x, map, makers));
             }
 

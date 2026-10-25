@@ -215,8 +215,9 @@ namespace ProjectZ
         public static bool ThickRoof(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false);
 
         // No upper floor over a gravship, no stairs on one (user decision 2026-10-16): a launch takes only the ground floor
-        // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.)
-        public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.terrainGrid.FoundationAt(c)?.IsSubstructure ?? false);
+        // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.) Any gravship deck
+        // counts (DeckFoundation: the tag or the Substructure affordance, so another faction's ship deck too).
+        public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && DeckFoundation.Is(map.terrainGrid.FoundationAt(c));
 
         // Mountains foundation F4: "may build" and "may use" are two rules.
         //  - BUILD (BuildBlocked and its slab and stairs forms): a slab, a stairwell or a stairs landing to be made over

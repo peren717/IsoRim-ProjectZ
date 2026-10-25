@@ -35,6 +35,9 @@ namespace ProjectZ.Dev
     //                                   between floors (AimFloor), -projectzfloors=3 -projectzseed=7 (TestFlame)
     //                                   routerfix: the router's failure handling (a forced failure: answered, memo,
     //                                   one message a minute with the pawn, job and mods; Dev/TestRouterFix.cs)
+    //                                   deckkin: gravship decks without Substructure's tag but with its affordance (slab, stairs
+    //                                   and ship deck refusals, the ship set, a deck falling); -projectzfloors=2 -projectzseed=7,
+    //                                   Odyssey, optional -projectzdeckkin=<TerrainDef,...> (Dev/TestDeckKin.cs)
     //                                   router2: the two-level stair-end router (oracle on seeded layouts, bridge, turn-around,
     //                                   wasted work, fixtures; TestRouter2), -projectzfloors=3 -projectzseed=7; routerperf: router
     //                                   timings on a 9-floor 250-wide scene, -projectzfloors=9 -projectzmapsize=250 -projectzseed=7 (TestRouterPerf)
@@ -683,6 +686,11 @@ namespace ProjectZ.Dev
                 StepRouterFix(map);
                 return;
             }
+            if (stage.StartsWith("dk_"))
+            {
+                StepDeckKin(map);
+                return;
+            }
             if (stage.StartsWith("rl_"))
             {
                 StepRaidLadders(map);
@@ -1103,6 +1111,10 @@ namespace ProjectZ.Dev
                     else if (mode == "router2")
                     {
                         stage = "r2_setup";
+                    }
+                    else if (mode == "deckkin")
+                    {
+                        stage = "dk_setup";
                     }
                     else if (mode == "routerfix")
                     {

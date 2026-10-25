@@ -42,6 +42,35 @@ namespace ProjectZ
         }
     }
 
+    // A gravship deck foundation: Substructure's tag (TerrainDef.IsSubstructure), or the game's Substructure terrain
+    // affordance (only a gravship deck carries it; modded decks may have it without the tag). The same rule as IsoRim's
+    // ship roofs. ProjectZ's "is this a gravship deck" questions ask this (SlabSupport.Gravship, so ShipColumn too; a
+    // planned deck; a removed deck foundation), except the ship set (ShipSet.Fill), which keeps the game's own test (the
+    // tag) so the cells that fly are exactly vanilla's.
+    public static class DeckFoundation
+    {
+        private static TerrainAffordanceDef affordance;
+        private static bool looked;
+
+        public static bool Is(TerrainDef f)
+        {
+            if (f == null)
+            {
+                return false;
+            }
+            if (f.IsSubstructure)
+            {
+                return true;
+            }
+            if (!looked)
+            {
+                affordance = DefDatabase<TerrainAffordanceDef>.GetNamedSilentFail("Substructure");
+                looked = true;
+            }
+            return affordance != null && f.affordances != null && f.affordances.Contains(affordance);
+        }
+    }
+
     // A ship deck is the gravship's substructure on an upper floor: at startup (after every def and patch) it gets every
     // terrain affordance vanilla Substructure has and it lacks, also those other mods add to Substructure, so whatever
     // may stand on substructure may stand on a deck.
@@ -148,7 +177,7 @@ namespace ProjectZ
             List<Thing> list = map.thingGrid.ThingsListAtFast(c);
             for (int i = 0; i < list.Count; i++)
             {
-                if ((list[i] is Blueprint || list[i] is Frame) && list[i].def.entityDefToBuild is TerrainDef t && t.IsSubstructure)
+                if ((list[i] is Blueprint || list[i] is Frame) && list[i].def.entityDefToBuild is TerrainDef t && DeckFoundation.Is(t))
                 {
                     return true;
                 }
@@ -334,7 +363,7 @@ namespace ProjectZ
 
         public static void Postfix(TerrainGrid __instance, IntVec3 c, TerrainDef oldFoundation)
         {
-            if (oldFoundation == null || !oldFoundation.IsSubstructure || __instance.FoundationAt(c) != null)
+            if (!DeckFoundation.Is(oldFoundation) || __instance.FoundationAt(c) != null)
             {
                 return;
             }
