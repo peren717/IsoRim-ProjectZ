@@ -47,6 +47,7 @@
   <PZ_DamagedSlab>受损的{0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>开裂的楼板，不能在上面铺地板。用拆除工具拆掉后重铺。拆除时不返还材料。</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>楼板已受损：拆掉重铺</PZ_DamagedSlabNoFloor>
+  <PZ_ArmoredSlabDesc>可承受破片手雷和迫击炮弹。</PZ_ArmoredSlabDesc>
   <PZ_DeckNeedsShipBelow>必须建在逆重飞船基架或飞船上层甲板的正上方</PZ_DeckNeedsShipBelow>
   <PZ_DeckAboveFirst>先拆除上方的飞船上层甲板</PZ_DeckAboveFirst>
   <PZ_DeckBelowFirst>等待下方的甲板建好</PZ_DeckBelowFirst>

@@ -406,6 +406,10 @@ namespace ProjectZ.Dev
             {
                 PatchExplodeProbe(h);
             }
+            if (mode == "slabarmor")
+            {
+                PatchStrikesProbe(h);
+            }
             if (mode == "strikes")
             {
                 PatchStrikesProbe(h);
@@ -878,6 +882,11 @@ namespace ProjectZ.Dev
                 StepStrikes(map);
                 return;
             }
+            if (stage.StartsWith("ar_"))
+            {
+                StepSlabArmor(map);
+                return;
+            }
             if (stage.StartsWith("ex_"))
             {
                 StepExplode(map);
@@ -1304,6 +1313,10 @@ namespace ProjectZ.Dev
                     else if (mode == "strikes")
                     {
                         stage = "sx_setup";
+                    }
+                    else if (mode == "slabarmor")
+                    {
+                        stage = "ar_setup";
                     }
                     else if (mode == "facility")
                     {

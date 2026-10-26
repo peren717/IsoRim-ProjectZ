@@ -34,6 +34,7 @@ namespace ProjectZ.Dev
             public bool onTop;
             public int tick;
             public string dam;
+            public int amount;
         }
 
         private static readonly List<SxBlast> sxBlasts = new List<SxBlast>();
@@ -63,7 +64,8 @@ namespace ProjectZ.Dev
             {
                 return;
             }
-            sxBlasts.Add(new SxBlast { centre = __instance.Position, onTop = ProjectZ.ColumnTop(__instance.Position, map) == __instance.Position, tick = Find.TickManager.TicksGame, dam = __instance.damType?.defName });
+            sxBlasts.Add(new SxBlast { centre = __instance.Position, onTop = ProjectZ.ColumnTop(__instance.Position, map) == __instance.Position, tick = Find.TickManager.TicksGame, dam = __instance.damType?.defName,
+                amount = __instance.damAmount >= 0 ? __instance.damAmount : __instance.damType?.defaultDamage ?? -1 });
         }
 
         private static void SxLaunchPostfix(Projectile __instance, LocalTargetInfo usedTarget, LocalTargetInfo intendedTarget)
@@ -181,7 +183,7 @@ namespace ProjectZ.Dev
                     Result("defs: a damaged slab for every stone and metal slab, none for wood; all count as slabs; not buildable, nothing laid on them",
                         SlabDefs.DamagedOf(sxGranite) != null && SlabDefs.DamagedOf(SlabDefs.For(ThingDefOf.Steel)) != null && SlabDefs.DamagedOf(PZDefOf.PZ_UpperFloor) == null
                         && SlabDefs.AllDamaged.All(d => SlabDefs.Is(d) && !d.BuildableByPlayer && !d.changeable && d.texturePath == SlabDefs.DamagedTexture)
-                        && SlabDefs.All.All(s => s.destroyOnBombDamageThreshold == 35f),
+                        && SlabDefs.All.All(s => s.destroyOnBombDamageThreshold == (SaArmoredSpec(SlabDefs.StuffOf(s)) ? 55f : 35f)),
                         $"{SlabDefs.AllDamaged.Count()} damaged defs, e.g. {SlabDefs.DamagedOf(sxGranite)?.defName} \"{SlabDefs.DamagedOf(sxGranite)?.label}\"; threshold {sxGranite.destroyOnBombDamageThreshold}");
                     // House A: walls, door, roof, granite slabs over the inside except the stairwell, stairs north.
                     sxHouse = new CellRect(10, 20, 13, 10);

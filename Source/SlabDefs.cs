@@ -18,6 +18,12 @@ namespace ProjectZ
         public const int Cost = 4;
         public const float BaseWork = 300f;
 
+        // Armoured slabs (user 2026-10-25): a slab of a Metallic stuff whose MaxHitPoints stat factor is at least
+        // ArmoredHpFactor takes a heavy hit only from ArmoredBombThreshold damage, so frag grenades and mortar shells (50)
+        // leave it alone (vanilla: plasteel 2.8, uranium 2.5; steel 1.0). Its damaged slab keeps the wood slab's 35.
+        public const float ArmoredHpFactor = 2f;
+        public const float ArmoredBombThreshold = 55f;
+
         private static readonly HashSet<TerrainDef> slabs = new HashSet<TerrainDef>();
         private static readonly HashSet<TerrainDef> damaged = new HashSet<TerrainDef>();
         private static readonly Dictionary<TerrainDef, TerrainDef> damagedOf = new Dictionary<TerrainDef, TerrainDef>();
@@ -55,6 +61,22 @@ namespace ProjectZ
             foreach (StuffCategoryDef c in d.stuffProps.categories)
             {
                 if (c != null && c.defName == "Woody")
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool Armored(ThingDef d)
+        {
+            if (d?.stuffProps?.categories == null || d.stuffProps.statFactors.GetStatFactorFromList(StatDefOf.MaxHitPoints) < ArmoredHpFactor)
+            {
+                return false;
+            }
+            foreach (StuffCategoryDef c in d.stuffProps.categories)
+            {
+                if (c != null && c.defName == "Metallic")
                 {
                     return true;
                 }
@@ -195,7 +217,7 @@ namespace ProjectZ
             t.fileName = w.fileName;
         }
 
-        // What depends on the stuff: label, colour, icon colour, cost, work, build effect.
+        // What depends on the stuff: label, colour, icon colour, cost, work, build effect, heavy-hit threshold (Armored).
         private static void Fill(TerrainDef t, TerrainDef wood, ThingDef stuff, string baseLabel)
         {
             t.label = "ThingMadeOfStuffLabel".Translate(stuff.LabelAsStuff, baseLabel);
@@ -215,6 +237,11 @@ namespace ProjectZ
             }
             stats.Add(new StatModifier { stat = StatDefOf.WorkToBuild, value = UnityEngine.Mathf.Max(1f, UnityEngine.Mathf.Round(work)) });
             t.statBases = stats;
+            if (Armored(stuff))
+            {
+                t.destroyOnBombDamageThreshold = ArmoredBombThreshold;
+                t.description = wood.description + "\n\n" + "PZ_ArmoredSlabDesc".Translate();
+            }
             slabs.Add(t);
             byStuff[stuff] = t;
             stuffOf[t] = stuff;

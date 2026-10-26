@@ -72,7 +72,8 @@
     <canEverTerraform>false</canEverTerraform>
     <supportsRock>false</supportsRock>
     <!-- A heavy hit (SlabDamage): an explosion doing at least this much damage at the cell. Wood slabs break, stone and
-         metal ones become damaged slabs, damaged ones break. The vanilla bridge value: frag grenades and mortar shells reach it. -->
+         metal ones become damaged slabs, damaged ones break. The vanilla bridge value: frag grenades and mortar shells reach it.
+         Every generated slab inherits it, except armoured metal slabs (SlabDefs.Armored: 55). -->
     <destroyOnBombDamageThreshold>35</destroyOnBombDamageThreshold>
     <preventCraters>true</preventCraters>
     <statBases>

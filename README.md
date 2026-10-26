@@ -49,7 +49,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - Range, line of sight and explosions are measured in 3D: walls, floors and roofs in between block shots and blasts.
 - Lobbed shots (mortars, the medieval war bow) arc over walls and come down on the top of the target's column.
 - Shield bubbles are hemispheres: shots are stopped where they enter them in 3D.
-- Heavy hits (frag grenades, mortar and bombardment shells): a wooden upper floor breaks, a stone or metal one cracks and breaks on the next heavy hit. A broken floor collapses: buildings on it are destroyed, pawns and items fall, the roof below drops. Cracked floors are taken up and laid again.
+- Heavy hits (frag grenades, mortar and bombardment shells): a wooden upper floor breaks, a stone or metal one cracks and breaks on the next heavy hit. Plasteel and uranium floors (any metal with at least double hit points) withstand frag grenades and mortar shells; heavier blasts and sky strikes still crack them. A broken floor collapses: buildings on it are destroyed, pawns and items fall, the roof below drops. Cracked floors are taken up and laid again.
 - Pawns and items that end up over open air fall to the floor below.
 - Locusts (Odyssey) jump up to fights on another floor. Any jump ability can join the same rule.
 
