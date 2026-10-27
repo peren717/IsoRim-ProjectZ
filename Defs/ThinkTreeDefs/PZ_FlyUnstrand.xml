@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- A stranded flyer flies to another floor where it can do what it needs (Source/FloorUnstrand.cs): the Animal
+       tree's own hook after lord duties and mental states, before the needs, the tame behaviour and the wander. -->
+  <ThinkTreeDef>
+    <defName>PZ_FlyUnstrand</defName>
+    <insertTag>Animal_PreMain</insertTag>
+    <insertPriority>100</insertPriority>
+    <thinkRoot Class="ProjectZ.JobGiver_FlyUnstrand" />
+  </ThinkTreeDef>
+
+</Defs>

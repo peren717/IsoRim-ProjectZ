@@ -232,7 +232,8 @@ namespace ProjectZ.Dev
     //                                   roofed, stairs, same floor, down, manhunter, buttons; TestLocustJump), -projectzfloors=3
     //                                   -projectzseed=7; -projectzfloors=1: the map without floors (-projectznojumpacross: off)
     //                                   flyjump: flying animals fly between floors (FloorFlight: detection, up, back,
-    //                                   roofed room, stairs, ladder, opt-in, flee, strand; TestFlyJump), -projectzfloors=3
+    //                                   roofed room, stairs, ladder, opt-in, flee, strand; FloorUnstrand: calm,
+    //                                   food, tamed area, pen, no ping-pong; TestFlyJump), -projectzfloors=3
     //                                   -projectzseed=7 (-projectznoflight: off)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   (mode beamaim: a long seeded fight of beam-graser users on one floor and between floors, the beam's aim read on

@@ -52,7 +52,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - Heavy hits (frag grenades, mortar and bombardment shells): a wooden upper floor breaks, a stone or metal one cracks and breaks on the next heavy hit. Plasteel and uranium floors (any metal with at least double hit points) withstand frag grenades and mortar shells; heavier blasts and sky strikes still crack them. A broken floor collapses: buildings on it are destroyed, pawns and items fall, the roof below drops. Cracked floors are taken up and laid again.
 - Pawns and items that end up over open air fall to the floor below.
 - Locusts (Odyssey) jump up to fights on another floor. Any jump ability can join the same rule.
-- Flying animals fly up or down to fights on another floor, and away from danger when stairs lead back.
+- Flying animals fly up or down to fights on another floor, away from danger, and back to food, pen or home when stranded.
 
 ## Tall mountains
 

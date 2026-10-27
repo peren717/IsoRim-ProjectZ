@@ -24,7 +24,14 @@ namespace ProjectZ.Dev
     //   optin:  a manhunter rat listed in FloorFlyersDef.fly: it flies up and attacks;
     //   flee:   a duck of a hostile faction (flees from enemies), the colonist close by on the ground, stairs on the lane:
     //           it flies up onto the slab instead of running;
-    //   strand: the same without stairs (no walk back): no flight, it runs on the ground.
+    //   strand: the same without stairs: it still flies up (no walk back asked for);
+    //   calm:   then hungry, the colonist still near: no flight down while it calms down (FloorUnstrand);
+    //   food:   the colonist far away, hay on the ground: it flies down (goal food) after the calm-down and eats; then
+    //           6000 ticks without another flight (no ping-pong);
+    //   tamed:  a tamed macaw on a slab without stairs, its allowed area on the ground: it flies into the area; then 6000
+    //           ticks without another flight;
+    //   pen:    a tamed duck (a pen animal) on a slab without stairs, a fenced pen on the ground: it flies into the pen;
+    //           then 6000 ticks without another flight.
     // (A flight reaches 19.9 cells: the strand lane sits over two lanes away from every lane with stairs.)
     public static partial class TestRunner
     {
@@ -48,7 +55,12 @@ namespace ProjectZ.Dev
         private static int[] fjBase = new int[8];
         private static int fjAsked, fjMemo, fjNoLanding, fjGiven, fjFlights, fjFleeFlights, fjFleeNone, fjCooling;
 
-        private static readonly string[] FjNames = { "up", "roofed", "stairs", "flee", "ladder", "optin", "strand" };
+        private static readonly string[] FjNames = { "up", "roofed", "stairs", "flee", "ladder", "optin", "strand", "tamed", "pen" };
+
+        // unstrand flights (FloorUnstrand) in the current check
+        private static int fjUnBaseGiven, fjUnBaseCalming, fjUnGiven, fjUnCalming, fjFleeTakeoff, fjIngestTick, fjLongTakeoffs, fjLongGiven;
+        private static string fjLongName;
+        private static Area fjArea;
 
         private static IntVec3 FjG(int lane, int x, int z) => new IntVec3(fjO.x + lane * FjLaneWidth + x, 0, fjO.z + z);
 
@@ -75,6 +87,18 @@ namespace ProjectZ.Dev
                 case "fj_back_check":
                     tickWatch = null;
                     FjBackCheck(map);
+                    return true;
+                case "fj_calm_check":
+                    tickWatch = null;
+                    FjCalmCheck(map);
+                    return true;
+                case "fj_food_check":
+                    tickWatch = null;
+                    FjFoodCheck(map);
+                    return true;
+                case "fj_long_check":
+                    tickWatch = null;
+                    FjLongCheck(map);
                     return true;
             }
             return false;
@@ -190,6 +214,21 @@ namespace ProjectZ.Dev
                 Thing lad = can.Accepted ? Place(PZDefOf.PZ_EmergencyLadder, null, top, map, Rot4.West) : null;
                 Result("ladder: ladder placed (a link up)", lad != null && StairGrid.For(map)?.IndexOf(lad) >= 0, $"at {top} west: {can.Reason}");
             }
+            // pen: a fenced pen on the ground (fences x 2..8, z 1..7), its marker inside, open sky over it
+            {
+                int P = FjLane("pen");
+                ThingDef fence = DefDatabase<ThingDef>.GetNamedSilentFail("Fence"), marker = DefDatabase<ThingDef>.GetNamedSilentFail("PenMarker");
+                bool ok = fence != null && marker != null;
+                if (ok)
+                {
+                    foreach (IntVec3 g in new CellRect(FjG(P, 2, 0).x, fjO.z + 1, 7, 7).EdgeCells)
+                    {
+                        Place(fence, ThingDefOf.WoodLog, g, map);
+                    }
+                    Place(marker, null, FjG(P, 5, 4), map);
+                }
+                Result("pen: fences and pen marker placed", ok, $"fence {fence != null}, marker {marker != null}");
+            }
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             fjHostile = Find.FactionManager.AllFactionsListForReading.Where(f => !f.IsPlayer && !f.Hidden && !f.defeated && f.HostileTo(Faction.OfPlayer) && f.def.animalsFleeDanger && f.def.humanlikeFaction).OrderBy(f => f.loadID).FirstOrDefault();
             Info($"field {found}, origin {fjO}; colonist {fjCol}; {fjHidden.Count} colonist(s) off the map; flight range {FloorFlight.Range}, cooldown {FloorFlight.CooldownTicks}; hostile faction {fjHostile}");
@@ -293,6 +332,14 @@ namespace ProjectZ.Dev
                     f = fjHostile;
                     manhunter = false;
                     break;
+                case "tamed":
+                case "pen":
+                    colAt = FjG(0, 5, 3);
+                    aAt = FjUp(L, 5, 18, map);
+                    kind = name == "tamed" ? "Macaw" : "Duck";
+                    f = Faction.OfPlayer;
+                    manhunter = false;
+                    break;
             }
             if (name == "optin")
             {
@@ -304,9 +351,33 @@ namespace ProjectZ.Dev
             Draft(fjCol, true);
             FjMarkCounters();
             fjA = FjMake(map, kind, "fj_" + name, f, aAt);
+            if (fjA == null)
+            {
+                Result(name + ": animal made", false, kind + " missing");
+                Wait(2, "fj_case");
+                return;
+            }
             if (manhunter)
             {
                 fjA.mindState.mentalStateHandler.TryStartMentalState(MentalStateDefOf.ManhunterPermanent, forced: true);
+            }
+            if (name == "tamed" || name == "pen")
+            {
+                // fed and rested (only the stranding counts), the tamed macaw restricted to the lane's ground
+                fjA.needs.food.CurLevelPercentage = 1f;
+                if (fjA.needs.rest != null)
+                {
+                    fjA.needs.rest.CurLevelPercentage = 1f;
+                }
+                if (name == "tamed" && map.areaManager.TryMakeNewAllowed(out Area_Allowed area))
+                {
+                    fjArea = area;
+                    foreach (IntVec3 g in new CellRect(FjG(L, 0, 0).x, fjO.z, FjLaneWidth - 2, 10))
+                    {
+                        area[g] = true;
+                    }
+                    fjA.playerSettings.AreaRestrictionInPawnCurrentMap = area;
+                }
             }
             FjResetWatch(map);
             Info($"{name}: {kind} {fjA} ({(manhunter ? "wild manhunter" : "faction " + fjA.Faction)}) at {aAt} level {Levels.LevelOf(aAt, map)}, flies {FloorFlight.Flies(fjA)}; colonist at {colAt} level {Levels.LevelOf(colAt, map)}; 3D {Range3D.Distance(aAt, colAt, map):0.0}; can walk to the colonist {fjA.CanReach(fjCol, PathEndMode.Touch, Danger.Deadly, true, true, TraverseMode.PassDoors)}");
@@ -321,7 +392,12 @@ namespace ProjectZ.Dev
                     TickUntil(3000, () => { FjWatch(map); return fjMeleeTick >= 0 && fjA.Spawned && Levels.LevelOf(fjA.Position, map) >= 1; }, "fj_check", 1);
                     break;
                 case "flee":
+                case "strand":
                     TickUntil(900, () => { FjWatch(map); return fjLandings >= 1; }, "fj_check", 1);
+                    break;
+                case "tamed":
+                case "pen":
+                    TickUntil(1500, () => { FjWatch(map); return fjLandings >= 1; }, "fj_check", 1);
                     break;
                 default:
                     TickUntil(1500, () => { FjWatch(map); return false; }, "fj_check", 1);
@@ -369,9 +445,82 @@ namespace ProjectZ.Dev
                         fjFleeFlights == 1 && fjTakeoffs == 1 && fjLandings == 1 && Levels.LevelOf(fjLandCell, map) == 1 && Range3D.Distance(fjLandCell, fjCol.Position, map) > Range3D.Distance(FjG(FjLane("flee"), 5, 11), fjCol.Position, map) + 5f, seen);
                     break;
                 case "strand":
-                    Result("strand: no stairs up (no walk back): no flight, it runs on the ground", fjTakeoffs == 0 && fjFlee >= 1 && fjFleeNone > 0 && fjMaxLevel == 0, seen);
-                    break;
+                    Result("strand: no stairs up: the fleeing duck still flies up onto a slab (no walk back asked for)",
+                        fjFleeFlights == 1 && fjTakeoffs == 1 && fjLandings == 1 && Levels.LevelOf(fjLandCell, map) == 1 && fjUnGiven == 0, seen);
+                    fjFleeTakeoff = fjTakeoffTicks.Count > 0 ? fjTakeoffTicks[0] : -1;
+                    FjCalm(map);
+                    return;
+                case "tamed":
+                case "pen":
+                {
+                    bool inside = name == "tamed" ? fjLandCell.IsValid && fjArea != null && fjArea[fjLandCell]
+                        : fjA.Spawned && AnimalPenUtility.GetCurrentPenOf(fjA, false) != null;
+                    string goal = name == "tamed" ? "area" : "pen";
+                    Result($"{name}: a tamed {fjA.def.defName} stranded upstairs flies once into its {goal} on the ground",
+                        fjUnGiven == 1 && FloorUnstrand.LastGoal == goal && fjTakeoffs == 1 && fjLandings == 1 && Levels.LevelOf(fjLandCell, map) == 0 && inside,
+                        $"{seen}; last goal {FloorUnstrand.LastGoal}, inside {inside}");
+                    FjLong(map, name);
+                    return;
+                }
             }
+            Wait(2, "fj_case");
+        }
+
+        // After the flee flight onto the slab with no stairs: hungry now, the colonist still near: no flight down yet.
+        private static void FjCalm(Map map)
+        {
+            fjA.needs.food.CurLevelPercentage = 0.05f;
+            Thing hay = ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamedSilentFail("Hay") ?? ThingDefOf.Kibble);
+            hay.stackCount = 30;
+            GenSpawn.Spawn(hay, FjG(FjLane("strand"), 9, 2), map);
+            Info($"calm: duck at {fjA.Position} level {Levels.LevelOf(fjA.Position, map)} made hungry ({fjA.needs.food.CurCategory}), {hay} at {hay.Position}; calm-down left {FloorUnstrand.CalmLeft(fjA)} ticks; colonist at {fjCol.Position}");
+            FjMarkCounters();
+            FjResetWatch(map);
+            TickUntil(900, () => { FjWatch(map); return false; }, "fj_calm_check", 1);
+        }
+
+        private static void FjCalmCheck(Map map)
+        {
+            Result($"calm: hungry upstairs, the colonist still near ({FloorUnstrand.CalmRadius} cells): no flight down",
+                fjUnGiven == 0 && fjUnCalming > 0, $"{FjSeen(map)}; calming {fjUnCalming}");
+            // the next check starts from the slab (a flee flight down while calming is the flee's own business)
+            if (fjA.Spawned && Levels.LevelOf(fjA.Position, map) != 1)
+            {
+                Info($"food: duck put back on the slab from {fjA.Position}");
+                Teleport(fjA, FjUp(FjLane("strand"), 5, 18, map));
+            }
+            Heal(fjCol);
+            Teleport(fjCol, FjG(0, 5, 3));
+            Draft(fjCol, true);
+            Info($"food: colonist moved away to {fjCol.Position} ({Range3D.Distance(fjA.Position, fjCol.Position, map):0} cells)");
+            FjMarkCounters();
+            FjResetWatch(map);
+            TickUntil(2500, () => { FjWatch(map); return fjLandings >= 1 && fjIngestTick >= 0; }, "fj_food_check", 1);
+        }
+
+        private static void FjFoodCheck(Map map)
+        {
+            int gap = fjTakeoffTicks.Count > 0 && fjFleeTakeoff >= 0 ? fjTakeoffTicks[0] - fjFleeTakeoff : -1;
+            Result($"food: the colonist away, the hungry duck flies down to food after the {FloorUnstrand.CalmTicks}-tick calm-down and eats",
+                fjUnGiven == 1 && FloorUnstrand.LastGoal == "food" && fjTakeoffs == 1 && fjLandings == 1 && Levels.LevelOf(fjLandCell, map) == 0 && fjIngestTick >= 0 && gap >= FloorUnstrand.CalmTicks,
+                $"{FjSeen(map)}; last goal {FloorUnstrand.LastGoal}; take-off {gap} ticks after the flee flight; ingest {(fjIngestTick < 0 ? "none" : "after " + (fjIngestTick - fjStartTick) + " ticks")}");
+            FjLong(map, "food");
+        }
+
+        // A long run after a flight out of a stranded spot: no more flights (no ping-pong).
+        private static void FjLong(Map map, string name)
+        {
+            fjLongName = name;
+            fjLongTakeoffs = fjTakeoffs;
+            fjLongGiven = fjUnGiven;
+            TickUntil(6000, () => { FjWatch(map); return false; }, "fj_long_check", 1);
+        }
+
+        private static void FjLongCheck(Map map)
+        {
+            Result($"{fjLongName}: no ping-pong: no more flights in the next 6000 ticks",
+                fjTakeoffs == fjLongTakeoffs && fjUnGiven == fjLongGiven && fjA.Spawned && Levels.LevelOf(fjA.Position, map) == 0,
+                $"{FjSeen(map)}; take-offs {fjTakeoffs - fjLongTakeoffs} more, unstrand flights {fjUnGiven - fjLongGiven} more");
             Wait(2, "fj_case");
         }
 
@@ -410,12 +559,12 @@ namespace ProjectZ.Dev
         {
             fjLastJob = null;
             fjJobs = fjFlyJobs = fjFlee = fjTakeoffs = fjLandings = fjLadder = 0;
-            fjMeleeTick = -1;
-            fjInFlight = false;
+            fjMeleeTick = fjIngestTick = -1;
+            fjInFlight = fjA.ParentHolder is PawnFlyer;
             fjLandCell = IntVec3.Invalid;
             fjTakeoffTicks.Clear();
             fjJobDefs.Clear();
-            fjMaxLevel = Levels.LevelOf(fjA.Position, map);
+            fjMaxLevel = Levels.LevelOf(fjA.PositionHeld, map);
             fjStartTick = Find.TickManager.TicksGame;
         }
 
@@ -423,6 +572,9 @@ namespace ProjectZ.Dev
         {
             fjBase = new[] { JumpAcross.Asked, JumpAcross.MemoHits, JumpAcross.NoLanding, JumpAcross.Given, FloorFlight.Flights, FloorFlight.FleeFlights, FloorFlight.FleeNone, JumpAcross.Cooling };
             fjAsked = fjMemo = fjNoLanding = fjGiven = fjFlights = fjFleeFlights = fjFleeNone = fjCooling = 0;
+            fjUnBaseGiven = FloorUnstrand.Given;
+            fjUnBaseCalming = FloorUnstrand.Calming;
+            fjUnGiven = fjUnCalming = 0;
         }
 
         private static void FjWatch(Map map)
@@ -440,6 +592,8 @@ namespace ProjectZ.Dev
             fjFleeFlights = FloorFlight.FleeFlights - fjBase[5];
             fjFleeNone = FloorFlight.FleeNone - fjBase[6];
             fjCooling = JumpAcross.Cooling - fjBase[7];
+            fjUnGiven = FloorUnstrand.Given - fjUnBaseGiven;
+            fjUnCalming = FloorUnstrand.Calming - fjUnBaseCalming;
             bool flying = p.ParentHolder is PawnFlyer;
             if (flying && !fjInFlight)
             {
@@ -477,6 +631,10 @@ namespace ProjectZ.Dev
                 {
                     fjFlyJobs++;
                 }
+                if (j.def == JobDefOf.Ingest && fjIngestTick < 0)
+                {
+                    fjIngestTick = Find.TickManager.TicksGame;
+                }
                 if (j.def == JobDefOf.Flee)
                 {
                     fjFlee++;
@@ -492,7 +650,7 @@ namespace ProjectZ.Dev
         {
             Pawn p = fjA;
             string at = p.Spawned ? $"{p.Position} level {Levels.LevelOf(p.Position, map)}" : "not spawned (" + p.ParentHolder + ")";
-            return $"animal now at {at}; fly jobs {fjFlyJobs}, take-offs {fjTakeoffs}, landings {fjLandings} (last at {fjLandCell}, level {(fjLandCell.IsValid ? Levels.LevelOf(fjLandCell, map) : -9)}), attack on the colonist {(fjMeleeTick < 0 ? "none" : "after " + (fjMeleeTick - fjStartTick) + " ticks")}, highest level {fjMaxLevel}, ladder ticks {fjLadder}; jobs {fjJobs} ({string.Join(", ", fjJobDefs.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + " " + kv.Value))}); giver asked {fjAsked} (cooling {fjCooling}, memo {fjMemo}, no landing {fjNoLanding}, given {fjGiven}); flights {fjFlights}, flee flights {fjFleeFlights}, flee without landing {fjFleeNone}; colonist at {fjCol.Position} level {Levels.LevelOf(fjCol.Position, map)}";
+            return $"animal now at {at}; fly jobs {fjFlyJobs}, take-offs {fjTakeoffs}, landings {fjLandings} (last at {fjLandCell}, level {(fjLandCell.IsValid ? Levels.LevelOf(fjLandCell, map) : -9)}), attack on the colonist {(fjMeleeTick < 0 ? "none" : "after " + (fjMeleeTick - fjStartTick) + " ticks")}, highest level {fjMaxLevel}, ladder ticks {fjLadder}; jobs {fjJobs} ({string.Join(", ", fjJobDefs.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + " " + kv.Value))}); giver asked {fjAsked} (cooling {fjCooling}, memo {fjMemo}, no landing {fjNoLanding}, given {fjGiven}); flights {fjFlights}, flee flights {fjFleeFlights}, flee without landing {fjFleeNone}; unstrand flights {fjUnGiven} (calming {fjUnCalming}); colonist at {fjCol.Position} level {Levels.LevelOf(fjCol.Position, map)}";
         }
 
         private static void FjClearPawns(Map map)
@@ -513,6 +671,11 @@ namespace ProjectZ.Dev
                 fjA.Destroy();
             }
             fjA = null;
+            if (fjArea != null)
+            {
+                fjArea.Delete();
+                fjArea = null;
+            }
             ThingDef rat = DefDatabase<ThingDef>.GetNamedSilentFail("Rat");
             if (fjLists != null && fjLists.fly.Remove(rat))
             {

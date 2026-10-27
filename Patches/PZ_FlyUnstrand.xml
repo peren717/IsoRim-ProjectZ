@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- A stranded manhunter that flies (Source/FloorUnstrand.cs): after its own search and the jump to a near fight
+       (Patches/PZ_LocustJump.xml), before its wander. -->
+  <Operation Class="PatchOperationInsert">
+    <xpath>Defs/ThinkTreeDef[defName="MentalStateNonCritical"]//li[@Class="JobGiver_Manhunter"]/following-sibling::li[@Class="JobGiver_WanderAnywhere"]</xpath>
+    <order>Prepend</order>
+    <value>
+      <li Class="ProjectZ.JobGiver_FlyUnstrand" />
+    </value>
+  </Operation>
+
+</Patch>

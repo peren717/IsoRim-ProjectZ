@@ -18,7 +18,8 @@ namespace ProjectZ
     }
 
     // Flying animals fly between floors as the locust jumps (user 2026-10-26): to a fight on another floor
-    // (JobGiver_AIJumpAcross, JumpAcross) and away from danger (Flee_FlyAcross_Patch). Who flies: an animal the game lets
+    // (JobGiver_AIJumpAcross, JumpAcross), away from danger (Flee_FlyAcross_Patch) and, stranded, to a floor where it can
+    // do what it needs (FloorUnstrand). Who flies: an animal the game lets
     // fly (Odyssey's flight: Pawn_FlightTracker.CanEverFly, i.e. the MaxFlightTime stat over 0, not in vacuum for a
     // race that can't fly there, not a mutant whose flight is off), plus FloorFlyersDef.fly, less FloorFlyersDef.noFly.
     // A pawn with its own jump ability marked JumpAcrossFloors (the locust) uses that instead.
@@ -145,8 +146,8 @@ namespace ProjectZ
         }
 
         // A landing on another floor away from danger, for a flee that would walk to dest: the farthest from the danger
-        // (3D) that gains FleeGain over where it stands (or is as far as the walk), and one from which the pawn can walk
-        // back to where it stands (no flyer stranded where no stairs lead). Invalid when none.
+        // (3D) that gains FleeGain over where it stands (or is as far as the walk). No walk back asked for (user 2026-10-26:
+        // a bird doesn't know in advance); a flyer stranded there flies on later (FloorUnstrand). Invalid when none.
         public static IntVec3 FleeLanding(Pawn p, Thing danger, IntVec3 dest)
         {
             Map map = p.Map;
@@ -186,27 +187,10 @@ namespace ProjectZ
                 }
             }
             found.Sort((a, b) => b.Key.CompareTo(a.Key));
-            TraverseParms walk = TraverseParms.For(p, Danger.Deadly, TraverseMode.ByPawn);
-            // (the walk back asked once per region; only the flight's own check counts as a try)
-            Dictionary<Region, bool> back = new Dictionary<Region, bool>();
             for (int i = 0, tried = 0; i < found.Count && tried < FleeTries; i++)
             {
                 IntVec3 c = found[i].Value;
                 if (c.GetFirstPawn(map) != null || !map.pawnDestinationReservationManager.CanReserve(c, p))
-                {
-                    continue;
-                }
-                Region r = c.GetRegion(map);
-                if (r == null)
-                {
-                    continue;
-                }
-                if (!back.TryGetValue(r, out bool ok))
-                {
-                    ok = map.reachability.CanReach(c, root, PathEndMode.OnCell, walk);
-                    back[r] = ok;
-                }
-                if (!ok)
                 {
                     continue;
                 }
@@ -246,6 +230,7 @@ namespace ProjectZ
                 return false;
             }
             FleeFlights++;
+            FloorUnstrand.NoteFlee(p);
             return true;
         }
     }
