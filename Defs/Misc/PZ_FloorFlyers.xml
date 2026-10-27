@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Who flies between floors (Source/FloorFlight.cs): every animal the game lets fly (the MaxFlightTime stat), to a
+       fight on another floor and away from danger. Other mods: add your own ProjectZ.FloorFlyersDef (any defName), or
+       patch this one: <fly> races that fly their own way, <noFly> races that never fly between floors. -->
+  <ProjectZ.FloorFlyersDef>
+    <defName>PZ_FloorFlyers</defName>
+    <fly />
+    <noFly />
+  </ProjectZ.FloorFlyersDef>
+
+</Defs>

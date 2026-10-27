@@ -32,4 +32,14 @@
     <casualInterruptible>false</casualInterruptible>
   </JobDef>
 
+  <!-- A flying animal's flight to another floor (Source/FloorFlight.cs): to a fight, as the locust's jump. Not
+       suspendable: the flyer would put it back in the queue and run it again after landing. -->
+  <JobDef>
+    <defName>PZ_FlyAcross</defName>
+    <driverClass>ProjectZ.JobDriver_FlyAcross</driverClass>
+    <reportString>flying to another floor.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+    <suspendable>false</suspendable>
+  </JobDef>
+
 </Defs>

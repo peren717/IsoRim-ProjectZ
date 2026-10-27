@@ -16,10 +16,12 @@ namespace ProjectZ
     // A jump to a fight on another floor (design "locust jump", user 2026-10-21). Locusts fly in the game, but nothing flies
     // between floors; they jump instead, through the game's jump (JumpUtility, PawnFlyer) and ProjectZ's rules for jumps
     // between floors (Combat/JumpFlights.cs: 3D range, open sky over the landing, a clear arc, no void rows).
+    // Flying animals (FloorFlight.Flies) take the same way with a flight (FloorFlight: the game's jump, PZ_FlyAcross).
     // Sits right where the fight finds no enemy it can walk to: after the assault duties' JobGiver_AIFightEnemies (before
     // their building trashing, which a real colony almost always offers, the sapper and ProjectZ's ladder climb), after the
     // manhunter's own search, after the hive defence (Patches/PZ_LocustJump.xml). It acts only when:
-    //   - the map has floors, and the pawn has a ready (not cooling down) jump ability marked JumpAcrossFloors;
+    //   - the map has floors, and the pawn has a ready (not cooling down) jump ability marked JumpAcrossFloors, or is a
+    //     flyer (FloorFlight) whose flight between floors is ready;
     //   - a hostile pawn it would fight (threat, auto-targetable) is on another floor within targetAcquireRadius (3D),
     //     its current enemy target first, then the nearest, and it can't walk there (stairs, ladders, doors it could bash);
     //   - a landing next to that pawn, on its floor, passes the jump's own target check from where the pawn stands (the
@@ -88,7 +90,7 @@ namespace ProjectZ
 
         public static Job TryGive(Pawn pawn, float radius)
         {
-            if (Off || pawn == null || !pawn.Spawned || pawn.Downed || pawn.abilities == null)
+            if (Off || pawn == null || !pawn.Spawned || pawn.Downed)
             {
                 return null;
             }
@@ -97,13 +99,14 @@ namespace ProjectZ
             {
                 return null;
             }
+            // its jump ability, else (a flyer) its flight
             Ability ab = AbilityOf(pawn);
-            if (ab == null)
+            if (ab == null && !FloorFlight.Flies(pawn))
             {
                 return null;
             }
             Asked++;
-            if (!ab.CanCast)
+            if (ab != null ? !ab.CanCast : !FloorFlight.Ready(pawn))
             {
                 Cooling++;
                 return null;
@@ -128,14 +131,14 @@ namespace ProjectZ
             }
             memo[id] = now + RetryTicks;
             Given++;
-            return ab.GetJob(landing, landing);
+            return ab != null ? ab.GetJob(landing, landing) : FloorFlight.MakeJob(landing);
         }
 
         // A landing for a jump to the nearest hostile on another floor that can't be walked to; Invalid when none.
         private static IntVec3 FindLanding(Pawn pawn, Ability ab, float radius, Map map)
         {
             IntVec3 root = pawn.Position;
-            float range = ab.verb.EffectiveRange;
+            float range = ab != null ? ab.verb.EffectiveRange : FloorFlight.Range;
             // (a landing is within LandingRadius of the target: a target further than that past the range has none)
             float reach = Math.Min(radius, range + LandingRadius);
             List<KeyValuePair<float, Pawn>> found = new List<KeyValuePair<float, Pawn>>();
@@ -182,8 +185,8 @@ namespace ProjectZ
             return IntVec3.Invalid;
         }
 
-        // The nearest cell round target, on its floor, the jump may land on from where the pawn stands and from which the
-        // target is reached on foot.
+        // The nearest cell round target, on its floor, the jump (ab; null: the flight) may land on from where the pawn
+        // stands and from which the target is reached on foot.
         private static IntVec3 Landing(Pawn pawn, Ability ab, Pawn target, TraverseParms walk, Map map)
         {
             IntVec3 tc = target.Position;
@@ -196,7 +199,7 @@ namespace ProjectZ
                 {
                     continue;
                 }
-                if (!map.pawnDestinationReservationManager.CanReserve(c, pawn) || !ab.verb.ValidateTarget(c, false))
+                if (!map.pawnDestinationReservationManager.CanReserve(c, pawn) || !(ab != null ? ab.verb.ValidateTarget(c, false) : FloorFlight.CanLand(pawn, c)))
                 {
                     continue;
                 }

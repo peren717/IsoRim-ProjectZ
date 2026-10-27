@@ -231,6 +231,9 @@ namespace ProjectZ.Dev
     //                                   locustjump: locusts jump to a fight on another floor (JumpAcross: up, cooldown,
     //                                   roofed, stairs, same floor, down, manhunter, buttons; TestLocustJump), -projectzfloors=3
     //                                   -projectzseed=7; -projectzfloors=1: the map without floors (-projectznojumpacross: off)
+    //                                   flyjump: flying animals fly between floors (FloorFlight: detection, up, back,
+    //                                   roofed room, stairs, ladder, opt-in, flee, strand; TestFlyJump), -projectzfloors=3
+    //                                   -projectzseed=7 (-projectznoflight: off)
     //   -projectzfloors=N  floors of the world created in this run (overrides the setting, the page's default)
     //   (mode beamaim: a long seeded fight of beam-graser users on one floor and between floors, the beam's aim read on
     //   the render workers; -projectzfloors=3 -projectzseed=7; TestBeamAim)
@@ -327,6 +330,7 @@ namespace ProjectZ.Dev
             Patches.Dist3D.Off = GenCommandLine.CommandLineArgPassed("projectznodist3d");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
+            FloorFlight.Off = GenCommandLine.CommandLineArgPassed("projectznoflight");
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
                 MintBreak = mb;
@@ -917,6 +921,11 @@ namespace ProjectZ.Dev
                 StepLocustJump(map);
                 return;
             }
+            if (stage.StartsWith("fj_"))
+            {
+                StepFlyJump(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -1305,6 +1314,10 @@ namespace ProjectZ.Dev
                     else if (mode == "locustjump")
                     {
                         stage = "lj_setup";
+                    }
+                    else if (mode == "flyjump")
+                    {
+                        stage = "fj_setup";
                     }
                     else if (mode == "explode")
                     {

@@ -52,6 +52,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - Heavy hits (frag grenades, mortar and bombardment shells): a wooden upper floor breaks, a stone or metal one cracks and breaks on the next heavy hit. Plasteel and uranium floors (any metal with at least double hit points) withstand frag grenades and mortar shells; heavier blasts and sky strikes still crack them. A broken floor collapses: buildings on it are destroyed, pawns and items fall, the roof below drops. Cracked floors are taken up and laid again.
 - Pawns and items that end up over open air fall to the floor below.
 - Locusts (Odyssey) jump up to fights on another floor. Any jump ability can join the same rule.
+- Flying animals fly up or down to fights on another floor, and away from danger when stairs lead back.
 
 ## Tall mountains
 
@@ -91,7 +92,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air where a deck may go, or in place of a deck when its own rules allow replacing substructure on the ground.
 - 5: `ShipCells`: the ship's cells on every floor without the substructure limit (for a mod that leaves some of its own cells out of the count).
 
-Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source.
+Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source. Flying between floors: every animal the game lets fly does it; mods that fly their own way add a `FloorFlyersDef` (`fly`, `noFly` race lists) or patch `Defs/Misc/PZ_FloorFlyers.xml`.
 
 ## Credits
 
