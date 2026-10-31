@@ -335,6 +335,7 @@ namespace ProjectZ.Dev
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
             FloorFlight.Off = GenCommandLine.CommandLineArgPassed("projectznoflight");
+            OpenAirSkip.Off = GenCommandLine.CommandLineArgPassed("projectznoairskip");
             Api6Init();   // test-only combat part declarations (TestApi6)
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
@@ -386,6 +387,10 @@ namespace ProjectZ.Dev
             if (mode == "finders")
             {
                 h.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.ExitMap)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(FdExitPrefix)));
+            }
+            if (mode == "airskip")
+            {
+                OaInit(h);
             }
             if (mode == "checks4")
             {
@@ -1087,6 +1092,16 @@ namespace ProjectZ.Dev
                 StepChecks4b(map);
                 return;
             }
+            if (stage.StartsWith("oa_"))
+            {
+                StepAirSkip(map);
+                return;
+            }
+            if (stage.StartsWith("hz_"))
+            {
+                StepHiddenShadow(map);
+                return;
+            }
             switch (stage)
             {
                 case "start":
@@ -1264,6 +1279,14 @@ namespace ProjectZ.Dev
                     else if (mode == "talltower")
                     {
                         stage = "h_setup";
+                    }
+                    else if (mode == "airskip")
+                    {
+                        stage = "oa_setup";
+                    }
+                    else if (mode == "hiddenshadow")
+                    {
+                        stage = "hz_setup";
                     }
                     else if (mode == "space")
                     {
