@@ -218,10 +218,9 @@ namespace ProjectZ.Combat
     // jump's cell search.
     [HarmonyPatch]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Jump_VerbFlyer_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static IEnumerable<MethodBase> TargetMethods()
         {
             yield return AccessTools.Method(typeof(Verb_Jump), nameof(Verb_Jump.CanHitTargetFrom));
@@ -235,10 +234,9 @@ namespace ProjectZ.Combat
 
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.OrderJump))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Jump_OrderFlyer_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static void Prefix(Verb verb, out ThingDef __state) => __state = JumpRules.Push(JumpRules.FlyerOf(verb));
 
         public static void Finalizer(ThingDef __state) => JumpRules.Pop(__state);
@@ -246,10 +244,9 @@ namespace ProjectZ.Combat
 
     [HarmonyPatch(typeof(JumpUtility), nameof(JumpUtility.CanHitTargetFrom))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Jump_CanHitTargetFrom_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         private static byte Decide(Pawn pawn, IntVec3 root, LocalTargetInfo targ, float range)
         {
             Map map = pawn?.Map;
@@ -301,10 +298,9 @@ namespace ProjectZ.Combat
     // the shooting one (which has the high-ground bonus and the slab-edge rule).
     [HarmonyPatch(typeof(Verb), nameof(Verb.TryFindShootLineFromTo))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Jump_ShootLine_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         private static byte Decide(Verb verb, IntVec3 root, LocalTargetInfo targ)
         {
             if (!JumpRules.IsJumpVerb(verb) || !targ.IsValid || !JumpRules.Cross(root, targ.Cell, verb.caster?.Map))
@@ -346,12 +342,11 @@ namespace ProjectZ.Combat
     // The game's AI jump toward its job's target (paramedic mechs: rescue, fire) measures and looks along the map rows.
     [HarmonyPatch(typeof(JobGiver_AIJumpToJobTarget), "TryGiveJob")]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class AIJumpToJobTarget_Patch
     {
         private static readonly MethodInfo Dist = AccessTools.Method(typeof(IntVec3Utility), nameof(IntVec3Utility.DistanceTo), new[] { typeof(IntVec3), typeof(IntVec3) });
         private static readonly MethodInfo Sight = AccessTools.Method(typeof(GenSight), nameof(GenSight.LineOfSight), new[] { typeof(IntVec3), typeof(IntVec3), typeof(Map) });
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         public static void Prefix(Pawn pawn, JobGiver_AIJumpToJobTarget __instance)
         {
@@ -667,10 +662,9 @@ namespace ProjectZ.Combat
     // can land on there (the game draws its own ring on the jumper's floor).
     [HarmonyPatch]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Jump_DrawHighlight_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static IEnumerable<MethodBase> TargetMethods()
         {
             yield return AccessTools.Method(typeof(Verb_Jump), nameof(Verb_Jump.DrawHighlight));

@@ -19,6 +19,11 @@ namespace ProjectZ
     //   - groups: a failed KEY patch closes its group, every applied member is undone. Combat ("combat": the cross-floor
     //     sight/shooting core, CombatGate off as with Combat Extended loaded) and stair routing ("stair routing": reach,
     //     paths and the route graph; each floor then stands on its own).
+    //   - combat parts (Api 6, CombatGate): a class tagged [CombatPartOf] or an entry with a part is applied only while
+    //     its part is on. With a foreign combat system the parts it turns off are not known before every Mod constructor
+    //     has run: their classes are listed here and applied later (ApplyCombat, from CombatGate.Settle: the combat
+    //     group patched later); a failed key patch there still closes its group. A part released after its patches
+    //     landed has them undone (UndoParts; listed in Released, not as failed).
     // Log: one warning per failed patch (a list's failures in one line), and once loading is done one summary line
     // "[ProjectZ] N patches applied, M skipped: <names>".
     // Later: when another mod patches a method after ProjectZ, Harmony runs every transpiler on it again; one that lost
@@ -35,6 +40,7 @@ namespace ProjectZ
         {
             public string name, group;
             public bool key;
+            public CombatPart part;
             public Action undo;
             public Func<string> check;
         }
@@ -54,6 +60,11 @@ namespace ProjectZ
         // For the summary and the tests: patches that failed, and the members a closed group undid.
         public static readonly List<string> Failed = new List<string>();
         public static readonly List<string> Undone = new List<string>();
+        public static readonly List<string> Released = new List<string>();
+
+        // The classes of the combat parts a foreign combat system turns off (CombatGate), in assembly order: applied by
+        // ApplyCombat once the parts are settled.
+        private static readonly List<Type> combatClasses = new List<Type>();
         public static int Warnings;
 
         public static int Applied => applied.Count;
@@ -90,6 +101,11 @@ namespace ProjectZ
             {
                 if (t.HasHarmonyAttribute())
                 {
+                    CombatPartOfAttribute cp = t.GetCustomAttribute<CombatPartOfAttribute>();
+                    if (cp != null && (cp.part & ~global::ProjectZ.Combat.CombatGate.ForeignDefault) != 0)
+                    {
+                        combatClasses.Add(t);
+                    }
                     Class(t);
                 }
             }
@@ -99,6 +115,11 @@ namespace ProjectZ
         private static void Class(Type t)
         {
             string name = t.Name;
+            CombatPartOfAttribute cp = t.GetCustomAttribute<CombatPartOfAttribute>();
+            if (cp != null && !global::ProjectZ.Combat.CombatGate.On(cp.part))
+            {
+                return;   // its combat part is off (or not settled yet: ApplyCombat)
+            }
             PatchGroupAttribute g = t.GetCustomAttribute<PatchGroupAttribute>();
             string error = null;
             List<MethodInfo> done = null;
@@ -124,7 +145,7 @@ namespace ProjectZ
             }
             else if (done != null && done.Count > 0)
             {
-                applied[name] = new Unit { name = name, group = g?.group, key = g != null && g.key, undo = () => Remove(t) };
+                applied[name] = new Unit { name = name, group = g?.group, key = g != null && g.key, part = cp?.part ?? CombatPart.None, undo = () => Remove(t) };
             }
             Settle();
         }
@@ -151,8 +172,12 @@ namespace ProjectZ
         // One entry: the same patch methods on its targets (all or none), then its check (null = fine, else what is
         // missing). A null or missing target fails the entry.
         public static bool Entry(string name, IEnumerable<MethodBase> targets, HarmonyMethod prefix = null, HarmonyMethod postfix = null,
-            HarmonyMethod transpiler = null, HarmonyMethod finalizer = null, Func<string> check = null, string group = null)
+            HarmonyMethod transpiler = null, HarmonyMethod finalizer = null, Func<string> check = null, string group = null, CombatPart part = CombatPart.None)
         {
+            if (part != CombatPart.None && !global::ProjectZ.Combat.CombatGate.On(part))
+            {
+                return false;   // its combat part is off
+            }
             List<MethodBase> list = targets == null ? new List<MethodBase>() : targets.ToList();
             if (Forced(name))
             {
@@ -193,15 +218,49 @@ namespace ProjectZ
                 Settle();
                 return false;
             }
-            applied[name] = new Unit { name = name, group = group, undo = Undo, check = check };
+            applied[name] = new Unit { name = name, group = group, part = part, undo = Undo, check = check };
             Settle();
             return true;
         }
 
         public static bool Entry(string name, MethodBase target, HarmonyMethod prefix = null, HarmonyMethod postfix = null,
-            HarmonyMethod transpiler = null, HarmonyMethod finalizer = null, Func<string> check = null, string group = null)
+            HarmonyMethod transpiler = null, HarmonyMethod finalizer = null, Func<string> check = null, string group = null, CombatPart part = CombatPart.None)
         {
-            return Entry(name, new[] { target }, prefix, postfix, transpiler, finalizer, check, group);
+            return Entry(name, new[] { target }, prefix, postfix, transpiler, finalizer, check, group, part);
+        }
+
+        // ---- combat parts (CombatGate)
+
+        // The listed combat classes whose part is on now and that are not applied yet (none failed), then the combat setup
+        // steps (CombatGate.OnSettle: AimFloor, IsoRim's shot drawing). From CombatGate.Settle and a late KeepCombatParts.
+        public static void ApplyCombat()
+        {
+            if (harmony == null)
+            {
+                return;
+            }
+            foreach (Type t in combatClasses)
+            {
+                if (!applied.ContainsKey(t.Name) && !Failed.Contains(t.Name) && !Undone.Contains(t.Name))
+                {
+                    Class(t);
+                }
+            }
+            CloseGroups();
+            global::ProjectZ.Combat.CombatGate.RunSettleSteps();
+        }
+
+        // Undoes every applied patch of the given combat parts (a part released); returns how many.
+        public static int UndoParts(CombatPart parts)
+        {
+            List<Unit> mine = applied.Values.Where(u => (u.part & parts) != 0).ToList();
+            foreach (Unit u in mine)
+            {
+                applied.Remove(u.name);
+                Try(u.undo);
+                Released.Add(u.name);
+            }
+            return mine.Count;
         }
 
         // ---- transpilers

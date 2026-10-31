@@ -14,6 +14,7 @@ namespace ProjectZ
         // Dev/debug: extra logging, the annex spawn watch and the dev-mode camera bypass.
         public bool debug = false;
         // Decision D7: shooting down at a lower floor adds this to the shooter's accuracy factor (hit report "shooter").
+        // Not used and hidden in the settings while the HeightAccuracy combat part is off (Api 6); kept for compatibility.
         public float heightAccuracy = 0.2f;
         // Floor HUD (FloorHud.cs): hidden, and where it was moved with Alt + drag (distances of its right and bottom edges
         // from the screen's, in UI px); not moved = its own slot in the bottom-right controls.
@@ -55,7 +56,7 @@ namespace ProjectZ
             // radius effects stay on their centre's floor (an explicit list of vanilla methods)
             BandRadial.Patch(harmony);
             // directional effects (flame spews, sprays, beams) aimed at another floor: laid out on the target's floor
-            Combat.AimFloor.Patch(harmony);
+            Combat.CombatGate.OnSettle(() => Combat.AimFloor.Patch(harmony));
             IsoRimBridge.Init();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, default floors for new worlds=" + Settings.floors + " (effective " + WorldFloors.Default + ")");
@@ -71,9 +72,13 @@ namespace ProjectZ
             Settings.floors = Mathf.RoundToInt(list.Slider(Settings.floors, 1f, ProjectZSettings.MaxFloors));
             FloorsUI.DrawWarning(list, Settings.floors);
             list.Gap();
-            list.Label("PZ_HeightAccuracy".Translate(Settings.heightAccuracy.ToStringPercent()), tooltip: "PZ_HeightAccuracyTip".Translate());
-            Settings.heightAccuracy = UnityEngine.Mathf.Round(list.Slider(Settings.heightAccuracy, 0f, 0.5f) * 20f) / 20f;
-            list.Gap();
+            // hidden (field and key kept) while the HeightAccuracy combat part is off (Api 6: Combat Extended, or released)
+            if (Combat.CombatGate.On(CombatPart.HeightAccuracy))
+            {
+                list.Label("PZ_HeightAccuracy".Translate(Settings.heightAccuracy.ToStringPercent()), tooltip: "PZ_HeightAccuracyTip".Translate());
+                Settings.heightAccuracy = UnityEngine.Mathf.Round(list.Slider(Settings.heightAccuracy, 0f, 0.5f) * 20f) / 20f;
+                list.Gap();
+            }
             list.CheckboxLabeled("PZ_HideFloorHud".Translate(), ref Settings.hideFloorHud);
             if (list.ButtonText("PZ_ResetFloorHud".Translate(), widthPct: 0.4f))
             {

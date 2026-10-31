@@ -7,8 +7,9 @@ namespace ProjectZ.Combat
     //
     // Range is the true 3D distance between the shooter's cell and the target's: over the ground, plus the height between
     // their floors (one storey = IsoRimBridge.StoreyHeight cells, as drawn); the same both ways. A shooter above its
-    // target gets +1 cell of range per floor it stands above it (shooting down only). The minimum range (mortars) is the
-    // plain 3D distance. On one floor this is the game's own flat rule, so only shots between floors change.
+    // target gets +1 cell of range per floor it stands above it (shooting down only; the RangeHeightBonus combat part).
+    // The minimum range (mortars) is the plain 3D distance. On one floor this is the game's own flat rule, so only shots
+    // between floors change.
     //
     // Every range decision between floors goes through here (inventory in the design note, pz-range/plan.md):
     //   Verb.OutOfRange (behind Verb.CanHitTarget/CanHitTargetFrom, TryFindShootLineFromTo, abilities, drafted orders),
@@ -17,7 +18,8 @@ namespace ProjectZ.Combat
     //   attack's refusal reason (FloatMenuUtility), the turret avoid grid, and the range preview (rings and shell).
     public static class Range3D
     {
-        public const float BonusPerFloor = 1f;
+        // The +1 cell per floor shooting down (the RangeHeightBonus combat part; 0 while it is off: plain 3D distance).
+        public static float BonusPerFloor => CombatGate.On(CombatPart.RangeHeightBonus) ? 1f : 0f;
 
         // One storey in cells.
         public static float Storey => IsoRimBridge.StoreyHeight;

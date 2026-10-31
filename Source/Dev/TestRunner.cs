@@ -66,6 +66,9 @@ namespace ProjectZ.Dev
     //                                   write it; -projectzsave=pz_oldstairs to load it; TestOldStairs), -projectzfloors=3 -projectzseed=7
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
     //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
+    //                                   parts: the combat part switch (Api 6; -projectztestkeep[=A,B], -projectztestrelease=A,B;
+    //                                   run with and without Combat Extended); api6: the Api 6 3D space queries on a two-floor
+    //                                   fixture, -projectzfloors=3 -projectzseed=N (TestApi6)
     //                                   failsoft: the patch state after -projectzfailpatch=<names> made those patches fail
     //                                   (FailSoft; any other mode runs with that switch too; TestFailSoft)
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
@@ -332,6 +335,7 @@ namespace ProjectZ.Dev
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
             FloorFlight.Off = GenCommandLine.CommandLineArgPassed("projectznoflight");
+            Api6Init();   // test-only combat part declarations (TestApi6)
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
                 MintBreak = mb;
@@ -748,6 +752,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("d3_"))
             {
                 StepDist3D(map);
+                return;
+            }
+            if (stage.StartsWith("p6_"))
+            {
+                StepApi6(map);
                 return;
             }
             if (stage.StartsWith("rp_"))
@@ -1178,6 +1187,14 @@ namespace ProjectZ.Dev
                     else if (mode == "dist3d")
                     {
                         stage = "d3_setup";
+                    }
+                    else if (mode == "parts")
+                    {
+                        stage = "p6_parts";
+                    }
+                    else if (mode == "api6")
+                    {
+                        stage = "p6_setup";
                     }
                     else if (mode == "failsoft")
                     {

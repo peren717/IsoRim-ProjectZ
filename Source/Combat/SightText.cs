@@ -36,10 +36,9 @@ namespace ProjectZ.Combat
     // The shot preview (TooltipUtility.ShotCalculationTipString): the line under "Cannot hit target.".
     [HarmonyPatch(typeof(TooltipUtility), nameof(TooltipUtility.ShotCalculationTipString))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Sight)]
     public static class ShotTip_NoSight_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static void Postfix(Thing target, ref string __result)
         {
             if (string.IsNullOrEmpty(__result) || target == null)

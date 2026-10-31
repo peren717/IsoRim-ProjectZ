@@ -156,13 +156,12 @@ namespace ProjectZ.Combat
     // A turret ordered to attack a target on another floor (player turrets, mortars): the range rule, the game's messages.
     [HarmonyPatch(typeof(Building_TurretGun), nameof(Building_TurretGun.OrderAttack))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Range)]
     public static class TurretGun_OrderAttack_Patch
     {
         private static readonly AccessTools.FieldRef<Building_Turret, LocalTargetInfo> forced = AccessTools.FieldRefAccess<Building_Turret, LocalTargetInfo>("forcedTarget");
         private static readonly AccessTools.FieldRef<Building_TurretGun, int> cooldown = AccessTools.FieldRefAccess<Building_TurretGun, int>("burstCooldownTicksLeft");
         private static readonly AccessTools.FieldRef<Building_TurretGun, bool> holdFire = AccessTools.FieldRefAccess<Building_TurretGun, bool>("holdFire");
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         public static bool Prefix(Building_TurretGun __instance, LocalTargetInfo targ)
         {
@@ -204,10 +203,9 @@ namespace ProjectZ.Combat
     // but has no line of sight (the game's own result on one floor, Los3D's between floors): "no line of sight".
     [HarmonyPatch(typeof(FloatMenuUtility), nameof(FloatMenuUtility.GetRangedAttackAction))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Range)]
     public static class FloatMenu_RangedReason_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static void Postfix(Pawn pawn, LocalTargetInfo target, ref string failStr)
         {
             if (string.IsNullOrEmpty(failStr) || pawn?.Map == null || !target.IsValid)
@@ -252,12 +250,11 @@ namespace ProjectZ.Combat
     // The cells of the other floors it reaches by the range rule and sees, too.
     [HarmonyPatch(typeof(AvoidGrid), "PrintAvoidGridAroundTurret")]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Range)]
     public static class AvoidGrid_Turret_Patch
     {
         private static readonly Action<AvoidGrid, IntVec3, int> increment =
             AccessTools.MethodDelegate<Action<AvoidGrid, IntVec3, int>>(AccessTools.Method(typeof(AvoidGrid), "IncrementAvoidGrid"));
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         public static void Postfix(AvoidGrid __instance, Building_TurretGun tur, bool __runOriginal)
         {

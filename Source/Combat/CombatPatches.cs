@@ -13,54 +13,7 @@ using Verse.AI.Group;
 namespace ProjectZ.Combat
 {
     // Shooting between floors (design §1.2 patch list, §2.2). Only shots whose two ends are on different floors change;
-    // everything on one floor is left to the game. Off when Combat Extended is loaded (it has its own heights).
-    public static class CombatGate
-    {
-        private static bool? enabled;
-
-        public static bool Enabled
-        {
-            get
-            {
-                if (enabled == null)
-                {
-                    bool ce = ModsConfig.ActiveModsInLoadOrder.Any(m => m.PackageIdPlayerFacing != null && m.PackageIdPlayerFacing.ToLowerInvariant().Contains("combatextended"));
-                    enabled = !ce;
-                    if (ce)
-                    {
-                        Log.Message("[ProjectZ] Combat Extended is loaded: shooting between floors is left to it (ProjectZ's combat patches are off).");
-                    }
-                }
-                return enabled.Value;
-            }
-        }
-
-        // A key combat patch failed (FailSoft): combat between floors off, as with Combat Extended loaded.
-        public static void Disable() => enabled = false;
-
-        // Accuracy bonus for shooting down at a lower floor (decision D7, a setting).
-        public static float HeightBonus => ProjectZMod.Settings == null ? 0.2f : ProjectZMod.Settings.heightAccuracy;
-
-        // The hit report's shooter factor for a shot between floors over ground distance d (ShotReport_Patch), and the part
-        // of it the height bonus gave (after the 100 % cap; 0 unless the shooter stands on a higher floor). Api 2's
-        // HeightAccuracyBonus reads the same, so what it says is what the shot gets.
-        public static float ShooterFactor(Thing caster, Verb verb, IntVec3 targetCell, float d, Map map, out float bonus)
-        {
-            bonus = 0f;
-            if (!verb.verbProps.canGoWild)
-            {
-                return 1f;
-            }
-            float shooter = ShotReport.HitFactorFromShooter(caster, d);
-            if (ProjectZ.FloorOf(caster.Position, map) > ProjectZ.FloorOf(targetCell, map))
-            {
-                float raised = Mathf.Min(1f, shooter + HeightBonus);
-                bonus = raised - shooter;
-                shooter = raised;
-            }
-            return shooter;
-        }
-    }
+    // everything on one floor is left to the game. The switch (parts, Combat Extended): CombatGate (CombatParts.cs).
 
     // Cover between floors: the game's cover givers next to the target, seen from the shooter's spot moved onto the
     // target's floor, kept only where the shot passes below the cover's top (sandbags don't cover from a floor above;
@@ -107,10 +60,9 @@ namespace ProjectZ.Combat
     // none for a shot declared lobbed (Lobbed); on one floor the game's own code. Final say between floors (FinalSay).
     [HarmonyPatch(typeof(Verb), "CanHitCellFromCellIgnoringRange")]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Sight)]
     public static class Verb_CanHitCell_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static byte Decide(Verb verb, IntVec3 from, IntVec3 to, bool corners)
         {
             Map map = verb.caster?.Map;
@@ -163,11 +115,10 @@ namespace ProjectZ.Combat
     // Heights.CanSeeLeaning).
     [HarmonyPatch(typeof(ShootLeanUtility), nameof(ShootLeanUtility.LeanShootingSourcesFromTo))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Sight)]
     public static class ShootLean_Patch
     {
         public static bool Off;   // test only: the game's own directions, to show the gap
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         public static void Prefix(IntVec3 shooterLoc, ref IntVec3 targetPos, Map map)
         {
@@ -203,10 +154,9 @@ namespace ProjectZ.Combat
     // TryFindShootLineFromTo, abilities (Verb_CastAbility) and drafted attack orders.
     [HarmonyPatch(typeof(Verb), nameof(Verb.OutOfRange))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Range)]
     public static class Verb_OutOfRange_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         private static byte Decide(Verb verb, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect)
         {
             Map map = verb.caster?.Map;
@@ -245,6 +195,7 @@ namespace ProjectZ.Combat
     // and the real shot agree. Last of all postfixes: between floors these fields are ProjectZ's (FinalSay).
     [HarmonyPatch(typeof(ShotReport), nameof(ShotReport.HitReportFor))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.HitReport)]
     public static class ShotReport_Patch
     {
         private static readonly AccessTools.StructFieldRef<ShotReport, float> distance = AccessTools.StructFieldRefAccess<ShotReport, float>("distance");
@@ -254,8 +205,6 @@ namespace ProjectZ.Combat
         private static readonly AccessTools.StructFieldRef<ShotReport, float> coversBlock = AccessTools.StructFieldRefAccess<ShotReport, float>("coversOverallBlockChance");
         private static readonly AccessTools.StructFieldRef<ShotReport, float> gasFactor = AccessTools.StructFieldRefAccess<ShotReport, float>("factorFromCoveringGas");
         private static readonly AccessTools.StructFieldRef<ShotReport, ShootLine> line = AccessTools.StructFieldRefAccess<ShotReport, ShootLine>("shootLine");
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         [HarmonyPriority(Priority.Last)]
         public static void Postfix(Thing caster, Verb verb, LocalTargetInfo target, ref ShotReport __result)
@@ -316,11 +265,10 @@ namespace ProjectZ.Combat
     // A shot that goes wild between floors scatters around the target as seen from the shooter's spot on its floor.
     [HarmonyPatch(typeof(ShootLine), nameof(ShootLine.ChangeDestToMissWild))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.HitReport)]
     public static class ShootLine_MissWild_Patch
     {
         private static readonly AccessTools.StructFieldRef<ShootLine, IntVec3> source = AccessTools.StructFieldRefAccess<ShootLine, IntVec3>("source");
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         public static void Prefix(ref ShootLine __instance, Map map, out IntVec3 __state)
         {
@@ -346,10 +294,9 @@ namespace ProjectZ.Combat
     // Final say between floors (FinalSay).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.CanSee))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Sight)]
     public static class AttackTargetFinder_CanSee_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         private static byte Decide(Thing seer, Thing target, Func<IntVec3, bool> validator)
         {
             Map map = seer?.Map;
@@ -402,6 +349,7 @@ namespace ProjectZ.Combat
     // can shoot from here).
     [HarmonyPatch(typeof(AttackTargetFinder), nameof(AttackTargetFinder.BestAttackTarget))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.TargetPicking)]
     public static class AttackTargetFinder_Best_Patch
     {
         private static readonly Func<Thing, IAttackTarget, TargetScanFlags, bool> ignoreNoncombatant =
@@ -414,8 +362,6 @@ namespace ProjectZ.Combat
             AccessTools.MethodDelegate<Func<IAttackTargetSearcher, bool>>(AccessTools.Method(typeof(AttackTargetFinder), "HasRangedAttack"));
 
         private static readonly List<IAttackTarget> candidates = new List<IAttackTarget>();
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         [HarmonyPriority(Priority.Last)]
         public static void Postfix(IAttackTargetSearcher searcher, TargetScanFlags flags, Predicate<Thing> validator, float minDist, float maxDist,
@@ -627,10 +573,9 @@ namespace ProjectZ.Combat
     // cell, on the target's floor.
     [HarmonyPatch(typeof(CastPositionFinder), nameof(CastPositionFinder.TryFindCastPosition))]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.TargetPicking)]
     public static class CastPositionFinder_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         // The spot ProjectZ finds between floors; Invalid: none (the game's search runs).
         private static IntVec3 Decide(CastPositionRequest newReq)
         {
@@ -768,10 +713,9 @@ namespace ProjectZ.Combat
 
     [HarmonyPatch]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Flights)]
     public static class Projectile_Launch_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static MethodBase TargetMethod()
         {
             return AccessTools.Method(typeof(Projectile), nameof(Projectile.Launch), new[]
@@ -899,12 +843,11 @@ namespace ProjectZ.Combat
 
     [HarmonyPatch(typeof(Projectile), "CheckForFreeIntercept")]
     [PatchGroup(FailSoft.Combat, key: true)]
+    [CombatPartOf(CombatPart.Flights)]
     public static class Projectile_Intercept_Patch
     {
         private static readonly Func<Projectile, Thing, bool> canHit = AccessTools.MethodDelegate<Func<Projectile, Thing, bool>>(AccessTools.Method(typeof(Projectile), "CanHit"));
         private static readonly Action<Projectile, Thing, bool> impact = AccessTools.MethodDelegate<Action<Projectile, Thing, bool>>(AccessTools.Method(typeof(Projectile), "Impact"));
-
-        public static bool Prepare() => CombatGate.Enabled;
 
         // A direct shot between floors: its flight decides. A lobbed one between floors (declared, Lobbed; a def flying
         // overhead never gets here with a hit) is never intercepted on the way.

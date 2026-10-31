@@ -37,10 +37,17 @@ namespace ProjectZ.Combat
         public static List<IntVec3> CellsToHit(IEnumerable<IntVec3> vanilla, IntVec3 center, Map map, float radius, FloatRange? angle, AnnexMapComponent an)
         {
             List<IntVec3> res = new List<IntVec3>();
+            CellsToHit(vanilla, center, map, radius, angle, an, res, Heights.Middle);
+            return res;
+        }
+
+        // The same into res (added to); hcOver = the centre height over its floor in wall units (Api.ExplosionCells3D).
+        public static void CellsToHit(IEnumerable<IntVec3> vanilla, IntVec3 center, Map map, float radius, FloatRange? angle, AnnexMapComponent an, List<IntVec3> res, float hcOver)
+        {
             int kc = ProjectZ.FloorOf(center, map);
             if (kc < 0)
             {
-                return res;   // a void row: nothing there to hit
+                return;   // a void row: nothing there to hit
             }
             foreach (IntVec3 c in vanilla)
             {
@@ -51,10 +58,10 @@ namespace ProjectZ.Combat
             }
             if (AimFloor.IsVirtualCentre(center, map))
             {
-                return res;   // a directional spew aimed at another floor: its cone on the target's floor only (AimFloor)
+                return;   // a directional spew aimed at another floor: its cone on the target's floor only (AimFloor)
             }
             IntVec3 gc = ProjectZ.GroundCellOf(center, map);
-            float hc = kc * Heights.Storey + Heights.Middle;
+            float hc = kc * Heights.Storey + hcOver;
             for (int k = an.MinLevel; k <= an.MaxLevel; k++)
             {
                 if (k == kc)
@@ -98,7 +105,6 @@ namespace ProjectZ.Combat
                     res.Add(c);
                 }
             }
-            return res;
         }
 
         public static int PlaneLeaksStopped;
@@ -197,6 +203,7 @@ namespace ProjectZ.Combat
     // preview GenExplosion.RenderPredictedAreaOfEffect, Verb_LaunchProjectileStaticPsychic's highlight). No DamageWorker
     // overrides it in the game.
     [HarmonyPatch(typeof(DamageWorker), nameof(DamageWorker.ExplosionCellsToHit), new[] { typeof(IntVec3), typeof(Map), typeof(float), typeof(IntVec3?), typeof(IntVec3?), typeof(FloatRange?) })]
+    [CombatPartOf(CombatPart.Explosions)]
     public static class DamageWorker_ExplosionCellsToHit_Patch
     {
         [HarmonyPriority(Priority.Last)]   // final say between floors (FinalSay)
@@ -234,6 +241,7 @@ namespace ProjectZ.Combat
 
     // Every distance an explosion measures from its centre to a cell or thing, in 3D between floors (see Explosions3D).
     [HarmonyPatch]
+    [CombatPartOf(CombatPart.Explosions)]
     public static class ExplosionDistance_Patch
     {
         // method -> argument holding the explosion

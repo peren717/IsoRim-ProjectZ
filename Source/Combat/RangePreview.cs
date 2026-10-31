@@ -30,7 +30,7 @@ namespace ProjectZ.Combat
         public static void Draw(Thing caster, IntVec3 at, float range)
         {
             Map map = Find.CurrentMap;
-            if (!CombatGate.Enabled || caster == null || map == null || caster.MapHeld != map || !at.IsValid || range <= 1.5f || range > MaxRange
+            if (!CombatGate.On(CombatPart.RangePreview) || caster == null || map == null || caster.MapHeld != map || !at.IsValid || range <= 1.5f || range > MaxRange
                 || !IsoRimBridge.Present || !IsoRimBridge.View3DOn || ProjectZ.Annex(map) == null)
             {
                 return;
@@ -91,10 +91,9 @@ namespace ProjectZ.Combat
     // Command_Ability, Verb_CastAbility all draw it through VerbProperties.DrawRadiusRing.
     [HarmonyPatch(typeof(VerbProperties), nameof(VerbProperties.DrawRadiusRing))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.RangePreview)]
     public static class VerbProps_DrawRadiusRing_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static void Postfix(VerbProperties __instance, IntVec3 center, Verb verb)
         {
             if (verb?.caster == null || __instance.IsMeleeAttack || !__instance.targetable || Find.CurrentMap == null)
@@ -108,10 +107,9 @@ namespace ProjectZ.Combat
     // A selected turret's ring (its selection overlay).
     [HarmonyPatch(typeof(Building_TurretGun), nameof(Building_TurretGun.DrawExtraSelectionOverlays))]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.RangePreview)]
     public static class TurretGun_SelectionRing_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static void Postfix(Building_TurretGun __instance)
         {
             Verb v = __instance.AttackVerb;

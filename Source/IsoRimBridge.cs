@@ -49,13 +49,23 @@ namespace ProjectZ
             {
                 HoldFacing();   // a climber's figure faces its ladder (Links.LadderPose), also going down
             }
-            if (Combat.CombatGate.Enabled)
+            Combat.CombatGate.OnSettle(HookShots);
+        }
+
+        private static bool shotsHooked;
+
+        // ProjectZ's flights between floors drawn by IsoRim (the Flights combat part; run once the parts are settled).
+        private static void HookShots()
+        {
+            if (shotsHooked || !Combat.CombatGate.On(CombatPart.Flights))
             {
-                IsoRim.Api.ProjectileCard = Combat.ProjectilePitch.Card;   // shots between floors pitched (ProjectilePitch)
-                if (ApiVersion >= 20)
-                {
-                    ShotArcs();   // a shot between floors drawn on the arc only when it flies as a lobbed one
-                }
+                return;
+            }
+            shotsHooked = true;
+            IsoRim.Api.ProjectileCard = Combat.ProjectilePitch.Card;   // shots between floors pitched (ProjectilePitch)
+            if (ApiVersion >= 20)
+            {
+                ShotArcs();   // a shot between floors drawn on the arc only when it flies as a lobbed one
             }
         }
 

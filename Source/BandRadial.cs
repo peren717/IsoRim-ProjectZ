@@ -241,7 +241,63 @@ namespace ProjectZ
         private static readonly MethodInfo add = AccessTools.Method(typeof(IntVec3), "op_Addition", new[] { typeof(IntVec3), typeof(IntVec3) });
         private static readonly MethodInfo mul = AccessTools.Method(typeof(IntVec3), "op_Multiply", new[] { typeof(IntVec3), typeof(int) });
 
+        // the vanilla list is patched; other mods' methods (Api.ClipRadialLoops) asked before wait for it
+        private static bool listDone;
+        private static readonly List<(MethodBase method, string mapPath)> waiting = new List<(MethodBase, string)>();
+
         public static void Patch(Harmony h)
+        {
+            PatchList();
+            listDone = true;
+            foreach ((MethodBase m, string path) in waiting)
+            {
+                External(m, path);
+            }
+            waiting.Clear();
+        }
+
+        // Api 6 (Api.ClipRadialLoops): another mod's method gets the same swap as a listed vanilla row, its map read from
+        // mapPath at entry (the row syntax: "this", "arg:<name>", "this.<field or property>...", "current"). Before
+        // ProjectZ's own constructor has patched the list: queued, patched right after it (true). False: no method or
+        // body, the clip is off (-projectznoradialclip), or the patch failed (no cell producer found, a map path that
+        // doesn't resolve; FailSoft logs which). A method added twice: the first stands.
+        public static bool AddExternal(MethodBase m, string mapPath)
+        {
+            if (m == null || string.IsNullOrEmpty(mapPath) || m.GetMethodBody() == null)
+            {
+                return false;
+            }
+            if (!listDone)
+            {
+                waiting.Add((m, mapPath));
+                return true;
+            }
+            return External(m, mapPath);
+        }
+
+        private static bool External(MethodBase m, string mapPath)
+        {
+            if (Off)
+            {
+                return false;
+            }
+            if (idOf.TryGetValue(m, out int had))
+            {
+                return FailSoft.IsApplied(rows[had].entry);
+            }
+            Row r = new Row("X", m.DeclaringType?.FullName ?? "?", m.Name, string.Join(",", m.GetParameters().Select(p => p.ParameterType.Name)), mapPath, 0) { target = m };
+            int id = rows.Length;
+            rows = rows.Concat(new[] { r }).ToArray();
+            idOf[m] = id;
+            r.entry = "BandRadial:ext:" + r.Name + "(" + r.args + ")";
+            Row row = r;
+            bool ok = FailSoft.Entry(r.entry, m, transpiler: new HarmonyMethod(typeof(BandRadial), nameof(Transpiler)) { priority = Priority.Last },
+                check: () => row.swaps > 0 ? null : "no cell producer found");
+            Log.Message($"[ProjectZ] radius clip for {m.DeclaringType?.FullName}.{m.Name} (map {mapPath}): {(ok ? r.swaps + " cell producers swapped" : "not applied")}");
+            return ok;
+        }
+
+        private static void PatchList()
         {
             Off = GenCommandLine.CommandLineArgPassed("projectznoradialclip");
             Listed = rows.Length;

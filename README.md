@@ -67,7 +67,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 
 ## Compatibility
 
-- Combat Extended is not supported: it loads, but cross-floor combat is turned off.
+- Combat Extended: it loads, but cross-floor combat is turned off unless a bridging pack keeps parts of it on (Api 6).
 - Dubs Mint Minimap shows the ground only.
 - Patches fail soft: if another mod changes a patched method, only the feature behind that patch turns off, with a log line.
 - Packs (both optional): [IsoRim Waylith - VFE Medieval 2 Pack](https://github.com/peren717/IsoRimWaylith-VFEM2Pack), [IsoRim Waylith - Giddy-Up Pack](https://github.com/peren717/IsoRimWaylith-GiddyUpPack).
@@ -91,6 +91,9 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
   - `RequestFogRefresh`: runs the floors' fog rule again, after a mod re-fogged the map.
   - `RegisterDeckTerrain`: another foundation that counts as a ship deck. On upper floors it is built like the deck, on the floor support over open air where a deck may go, or in place of a deck when its own rules allow replacing substructure on the ground.
 - 5: `ShipCells`: the ship's cells on every floor without the substructure limit (for a mod that leaves some of its own cells out of the count).
+- 6 (details and the patch inventory in [`Docs/Api.md`](Docs/Api.md)):
+  - Combat parts: `CombatPart`, `ForeignCombatSystem`, `KeepCombatParts` (an addon bridging another combat system keeps parts on), `ReleaseCombatParts` (an addon that does a part itself), `CombatPartOn`.
+  - 3D space: `WallHeight`, `FloorRowShift`, `ToVirtual` / `FromVirtual`, `HasFloorAt`, `PlaneSolid`, `CeilingSolid`, `SightBlockerAt`, `ColumnTop`, `LineClear3D`, `WalkLine3D`, `ExplosionCells3D`, `ClipRadialLoops`.
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source. Flying between floors: every animal the game lets fly does it; mods that fly their own way add a `FloorFlyersDef` (`fly`, `noFly` race lists) or patch `Defs/Misc/PZ_FloorFlyers.xml`.
 

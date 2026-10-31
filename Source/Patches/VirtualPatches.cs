@@ -171,6 +171,7 @@ namespace ProjectZ.Patches
     // flyOverhead def shot directly). A lobbed shot whose def does not fly overhead meets a roof on its landing cell as
     // the game's shells do (a thick roof stops it, a thin one falls in).
     [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Projectile_ImpactOnTop_Patch
     {
         public static bool Prefix(Projectile __instance)

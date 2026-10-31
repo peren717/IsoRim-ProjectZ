@@ -147,6 +147,7 @@ namespace ProjectZ.Combat
     // ---- the strike's position
 
     [HarmonyPatch(typeof(OrbitalStrike), nameof(OrbitalStrike.StartStrike))]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class OrbitalStrike_StartStrike_Patch
     {
         public static void Prefix(OrbitalStrike __instance) => SkyStrikes.Follow(__instance);
@@ -155,6 +156,7 @@ namespace ProjectZ.Combat
     // ---- bombardment
 
     [HarmonyPatch(typeof(Bombardment), "GetNextExplosionCell")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Bombardment_NextCell_Patch
     {
         private static readonly AccessTools.FieldRef<Bombardment, IntVec3> next = AccessTools.FieldRefAccess<Bombardment, IntVec3>("nextExplosionCell");
@@ -174,6 +176,7 @@ namespace ProjectZ.Combat
 
     // The shell lands on the top of its column as it is when it lands.
     [HarmonyPatch(typeof(Bombardment), "TryDoExplosion")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Bombardment_TryDoExplosion_Patch
     {
         public static void Prefix(Bombardment __instance, Bombardment.BombardmentProjectile proj)
@@ -192,6 +195,7 @@ namespace ProjectZ.Combat
     }
 
     [HarmonyPatch(typeof(Bombardment), "StartRandomFire")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Bombardment_StartRandomFire_Patch
     {
         public static bool Prefix(Bombardment __instance)
@@ -222,6 +226,7 @@ namespace ProjectZ.Combat
     // ---- power beam
 
     [HarmonyPatch(typeof(PowerBeam), "StartRandomFireAndDoFlameDamage")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class PowerBeam_Fire_Patch
     {
         private static readonly List<Thing> tmp = new List<Thing>();
@@ -257,6 +262,7 @@ namespace ProjectZ.Combat
 
     // The beam's heavy hits, every BeamInterval ticks of its life.
     [HarmonyPatch(typeof(PowerBeam), "Tick")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class PowerBeam_Tick_Patch
     {
         private static readonly AccessTools.FieldRef<OrbitalStrike, int> startTick = AccessTools.FieldRefAccess<OrbitalStrike, int>("startTick");
@@ -281,6 +287,7 @@ namespace ProjectZ.Combat
     // ---- shields: ground distance
 
     [HarmonyPatch]
+    [CombatPartOf(CombatPart.Shields)]
     public static class ProjectileInterceptor_GroundDistance_Patch
     {
         public static IEnumerable<MethodBase> TargetMethods()
@@ -315,6 +322,7 @@ namespace ProjectZ.Combat
     // ---- lightning
 
     [HarmonyPatch(typeof(WeatherEvent_LightningStrike), nameof(WeatherEvent_LightningStrike.DoStrike))]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Lightning_DoStrike_Patch
     {
         public static void Prefix(ref IntVec3 strikeLoc, Map map) => strikeLoc = SkyStrikes.LightningCell(strikeLoc, map);
@@ -322,12 +330,14 @@ namespace ProjectZ.Combat
 
     // (the event's own cell, which the bolt is drawn at, too)
     [HarmonyPatch(typeof(WeatherEvent_LightningStrike), nameof(WeatherEvent_LightningStrike.FireEvent))]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Lightning_FireEvent_Patch
     {
         public static void Prefix(ref IntVec3 ___strikeLoc, Map ___map) => ___strikeLoc = SkyStrikes.LightningCell(___strikeLoc, ___map);
     }
 
     [HarmonyPatch(typeof(WeatherEvent_LightningStrikeDelayed), nameof(WeatherEvent_LightningStrikeDelayed.WeatherEventTick))]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class LightningDelayed_Tick_Patch
     {
         public static void Prefix(ref IntVec3 ___strikeLoc, Map ___map, int ___age, int ___delay)
@@ -342,6 +352,7 @@ namespace ProjectZ.Combat
     // A flashstorm strikes only its centre's band (void barrier: never another band's raw rows nor a void row; a storm
     // cast on an upper floor stays there), and may strike a roof with floors under it (on the top floor).
     [HarmonyPatch(typeof(GameCondition_Flashstorm), "IsGoodLocationForStrike")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Flashstorm_GoodLocation_Patch
     {
         public static void Postfix(GameCondition_Flashstorm __instance, IntVec3 loc, ref bool __result)
@@ -369,6 +380,7 @@ namespace ProjectZ.Combat
 
     // (GetForcedMissTarget is small enough to be inlined into TryCastShot, so its call there is swapped for Pick.)
     [HarmonyPatch(typeof(Verb_LaunchProjectile), "TryCastShot")]
+    [CombatPartOf(CombatPart.SkyStrikes)]
     public static class ForcedMiss_Patch
     {
         public static int Lifted;   // counters (tests)

@@ -15,6 +15,7 @@ namespace ProjectZ.Combat
     // is run with the two positions placed just outside and inside its circle on the shield's band, in the direction
     // of the 3D entry point (the flash shows there).
     [HarmonyPatch(typeof(CompProjectileInterceptor), nameof(CompProjectileInterceptor.CheckIntercept))]
+    [CombatPartOf(CombatPart.Shields)]
     public static class ProjectileInterceptor_3D_Patch
     {
         public static int Checked;   // counters (tests)

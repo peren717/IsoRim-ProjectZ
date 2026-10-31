@@ -95,7 +95,7 @@ namespace ProjectZ
                 return null;
             }
             Map map = pawn.Map;
-            if (ProjectZ.Annex(map) == null || !CombatGate.Enabled || !FailSoft.IsApplied(nameof(Jump_CanHitTargetFrom_Patch)))
+            if (ProjectZ.Annex(map) == null || !CombatGate.On(CombatPart.Jumps) || !FailSoft.IsApplied(nameof(Jump_CanHitTargetFrom_Patch)))
             {
                 return null;
             }

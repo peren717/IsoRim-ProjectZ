@@ -17,10 +17,13 @@ namespace ProjectZ
         //  3: stacked cells (StackedCell, StackedCells) and vertical links drawn like power risers (AddRiserSource,
         //     RemoveRiserSource, RiserSource, RiserLink);
         //  4: AimPoint (turrets that turn themselves), gravship cells relative to a ship (ShipToMap, MapToShip),
-        //     RequestFogRefresh, RegisterDeckTerrain; 5: ShipCells, the ship's cells on every floor without the substructure limit).
+        //     RequestFogRefresh, RegisterDeckTerrain; 5: ShipCells, the ship's cells on every floor without the substructure limit;
+        //  6: combat parts (CombatPart, ForeignCombatSystem, KeepCombatParts, ReleaseCombatParts, CombatPartOn) and 3D space
+        //     queries (WallHeight, FloorRowShift, ToVirtual, FromVirtual, HasFloorAt, PlaneSolid, CeilingSolid, SightBlockerAt,
+        //     ColumnTop, LineClear3D, WalkLine3D, ExplosionCells3D, ClipRadialLoops)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 5;
+        public static int Version => 6;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -190,13 +193,16 @@ namespace ProjectZ
         public static void RemoveStepHook(Func<Pawn, StepKind, Building, bool> hook) => ApiEvents.RemoveStepHook(hook);
 
         // ---- combat between floors (2)
-        // ProjectZ's own rules (off with Combat Extended loaded: it has its own heights). On one floor they are the game's.
+        // ProjectZ's own rules. On one floor they are the game's. With Combat Extended loaded they answer as ProjectZ's combat
+        // parts stand (6): RangeDistance has the per-floor bonus only while RangeHeightBonus is on, HeightAccuracyBonus is 0
+        // while HitReport or HeightAccuracy is off; Distance3D is plain geometry.
 
         // True 3D distance between two cells, each on its floor: over the ground, and StoreyHeight per floor between.
         public static float Distance3D(IntVec3 a, IntVec3 b, Map map) => map == null ? (a - b).LengthHorizontal : Range3D.Distance(a, b, map);
 
         // The distance ProjectZ compares with a weapon's range for a shot from shooter to target: Distance3D less 1 cell
-        // per floor the shooter stands above the target (shooting down reaches farther); Distance3D otherwise. A shot is in
+        // per floor the shooter stands above the target (shooting down reaches farther; only while the RangeHeightBonus
+        // combat part is on); Distance3D otherwise. A shot is in
         // range when this is at most the verb's range (and Distance3D at least its minimum range).
         public static float RangeDistance(IntVec3 shooter, IntVec3 target, Map map) => map == null ? (shooter - target).LengthHorizontal : Range3D.RangeDistance(shooter, target, map);
 
@@ -207,7 +213,7 @@ namespace ProjectZ
         {
             Thing caster = verb?.caster;
             Map map = caster?.Map;
-            if (map == null || !target.IsValid || !CombatGate.Enabled || !Heights.CrossFloor(caster.Position, target.Cell, map))
+            if (map == null || !target.IsValid || !CombatGate.On(CombatPart.HitReport | CombatPart.HeightAccuracy) || !Heights.CrossFloor(caster.Position, target.Cell, map))
             {
                 return 0f;
             }
@@ -304,5 +310,166 @@ namespace ProjectZ
             }
             ShipSet.Fill(engine, into, int.MaxValue, requireInsideFootprint);
         }
+        // ---- combat parts (6)
+        // ProjectZ's combat between floors comes in parts (CombatPart; which patch belongs to which part: Docs/Api.md). An
+        // addon that bridges another combat system keeps the parts that still apply with it; an addon that does a part
+        // itself releases it. Call both from the addon's Mod constructor, after checking Version >= 6 (in a method of its
+        // own): every Mod constructor has run before the parts are settled, whatever the load order.
+        //   - No foreign combat system: every part is on and patched as before (a release turns its part off: the rule
+        //     parts at once, a part's patches are undone).
+        //   - A foreign combat system and no declaration: the parts it never touched (Explosions, Shields, SkyStrikes) are
+        //     on, every other part is off, as before Api 6.
+        //   - A foreign combat system and KeepCombatParts: those parts too are on, patched once startup has settled (a
+        //     StaticConstructorOnStartup). A later call still patches them, but code that ran before saw them off.
+
+        // Another combat system is loaded that ProjectZ can't run under alone (today: Combat Extended).
+        public static bool ForeignCombatSystem => CombatGate.Foreign;
+
+        // Keeps these parts on with a foreign combat system (no effect without one). 'by': the addon (packageId), for the log.
+        public static void KeepCombatParts(CombatPart parts, string by) => CombatGate.Keep(parts, by);
+
+        // Turns these parts off, with or without a foreign system: ProjectZ's version is left to the addon. Rule parts
+        // (RangeHeightBonus, HeightAccuracy) are read at run time; a part's patches are undone if they landed already.
+        public static void ReleaseCombatParts(CombatPart parts, string by) => CombatGate.Release(parts, by);
+
+        // Every flag of 'part' runs now (tests, other addons). Valid once startup has settled (before that, with a foreign
+        // system, false for the parts it turns off).
+        public static bool CombatPartOn(CombatPart part) => CombatGate.On(part);
+
+        // ---- 3D space (6)
+        // Virtual space: x, z over the ground rows (a cell spans [x, x + 1) as in map positions), y = absolute height in
+        // cells (floor k's floor at k * StoreyHeight; negative below the ground). Heights "over a floor" are in cells over
+        // that floor's floor. On a map without floors there is one floor (0) and the map's rows are the ground rows.
+
+        // IsoRim's locked wall height in cells (StoreyHeight is a little more), for converting another mod's units.
+        public static float WallHeight => IsoRimBridge.WallHeight;
+
+        // Rows from the ground rows to floor's rows: ground row z is row z + FloorRowShift(k) on floor k (0 without
+        // floors, and for a floor the map doesn't have).
+        public static int FloorRowShift(int floor, Map map) => map == null || !Levels.Has(map, floor) ? 0 : Levels.Shift(map, floor);
+
+        // A map position on its floor (its row picks the floor) with a height over that floor, as a virtual point. False
+        // (v zero) for a void row between floors, rows past the top floor's, and without a map. Rows below the ground rows'
+        // end (south of the map too) count as the ground; x is not checked.
+        public static bool ToVirtual(UnityEngine.Vector3 mapPos, float heightOverFloor, Map map, out UnityEngine.Vector3 v)
+        {
+            v = default;
+            if (map == null)
+            {
+                return false;
+            }
+            int k = Levels.LevelOf(new IntVec3(0, 0, UnityEngine.Mathf.FloorToInt(mapPos.z)), map);
+            if (k == Levels.None || !Levels.Has(map, k))
+            {
+                return false;
+            }
+            v = new UnityEngine.Vector3(mapPos.x, k * StoreyHeight + heightOverFloor, mapPos.z - Levels.Shift(map, k));
+            return true;
+        }
+
+        // A virtual point back on the map: floor = the storey its height is in (floor(y / StoreyHeight), clamped to the
+        // map's floors: above the top floor the top floor, below the lowest the lowest), heightOverFloor = y less that
+        // floor's height (may be negative or over a storey when clamped), mapPos = (x, heightOverFloor, z + FloorRowShift).
+        // The outs are always set; false when x or z leave the ground rows (GroundRect).
+        public static bool FromVirtual(UnityEngine.Vector3 v, Map map, out UnityEngine.Vector3 mapPos, out int floor, out float heightOverFloor)
+        {
+            mapPos = default;
+            floor = 0;
+            heightOverFloor = v.y;
+            if (map == null)
+            {
+                return false;
+            }
+            floor = UnityEngine.Mathf.Clamp(UnityEngine.Mathf.FloorToInt(v.y / StoreyHeight), Levels.Min(map), Levels.Max(map));
+            heightOverFloor = v.y - floor * StoreyHeight;
+            mapPos = new UnityEngine.Vector3(v.x, heightOverFloor, v.z + Levels.Shift(map, floor));
+            CellRect g = ProjectZ.GroundRect(map);
+            return v.x >= 0f && v.z >= 0f && v.x < g.maxX + 1 && v.z < g.maxZ + 1;
+        }
+
+        // Floor 'floor' has a floor to stand on over ground cell g (slab, deck, rock floor; the ground always). False for a
+        // floor the map doesn't have or g off the ground rows.
+        public static bool HasFloorAt(IntVec3 groundCell, int floor, Map map) => OnGround(groundCell, map) && Levels.Has(map, floor) && Column.FloorAt(groundCell, floor, map);
+
+        // The plane between floor upperFloor - 1 and upperFloor over ground cell g is solid: a roof over the cell below
+        // (not a stairwell's opening) or a floor on upperFloor. upperFloor = the top floor + 1: the top floor's roof.
+        public static bool PlaneSolid(IntVec3 groundCell, int upperFloor, Map map) => OnGround(groundCell, map) && Column.PlaneSolid(groundCell, upperFloor, map);
+
+        // The cell (any floor) has a roof that stops things over it: false for none and for a stairwell's opening.
+        public static bool CeilingSolid(IntVec3 cell, Map map) => map != null && cell.InBounds(map) && !Column.OpenAbove(cell, map);
+
+        // A sight-blocking building (wall, closed door, rock) on floor 'floor' over ground cell g (the game's
+        // CanBeSeenOverFast); it stands WallHeight high over that floor.
+        public static bool SightBlockerAt(IntVec3 groundCell, int floor, Map map) => OnGround(groundCell, map) && Column.BlockAt(groundCell, floor, map);
+
+        // The top of the column over a cell (any floor): the highest floor with a floor there, else the ground cell (the
+        // cell itself without floors; Invalid for a void row). Where things falling from the sky land.
+        public static IntVec3 ColumnTop(IntVec3 cell, Map map) => map == null ? IntVec3.Invalid : Column.Top(cell, map);
+
+        // Line of sight from 'from' at fromHeight to 'to' at toHeight (cells over each end's floor): CanSeeBetweenFloors'
+        // blocks (solid planes crossed anywhere, ends included: an end exactly at a floor's level crosses that plane when
+        // the line comes up to it or leaves it downward; sight blockers the line passes below the top of, ends
+        // exempt; the validator on the cell the line's middle is in per inner column, false = blocked). Any two cells,
+        // also on one floor and on a map without floors. False for a void row end.
+        public static bool LineClear3D(IntVec3 from, float fromHeight, IntVec3 to, float toHeight, Map map, Func<IntVec3, bool> validator = null)
+            => map != null && Los3D.Clear(from, fromHeight, to, toHeight, map, validator);
+
+        // One column of WalkLine3D.
+        public struct LineStep
+        {
+            public IntVec3 cell;     // the column's cell on the floor the line's middle is on there (clamped to the map's floors)
+            public int floor;        // that floor
+            public float lo, hi;     // the line's height range in this column, over that floor's floor (cells);
+                                     // consecutive steps' ranges meet, also where the line passes a cell corner
+            public int solidPlane;   // the first solid plane crossed in this column in the line's direction (PlaneSolid's
+                                     // upperFloor), int.MinValue: none
+        }
+
+        // The game's sight walk over the ground columns from virtual point 'from' to 'to' (the end cells' cell sequence),
+        // one step per column. 'into' is cleared first, nothing is allocated; returns the step count (0 when an end leaves
+        // the ground rows). stopAtSolidPlane: the walk ends with the column of the first solid plane crossed.
+        public static int WalkLine3D(UnityEngine.Vector3 from, UnityEngine.Vector3 to, Map map, List<LineStep> into, bool stopAtSolidPlane = true)
+        {
+            if (into == null)
+            {
+                return 0;
+            }
+            if (map == null)
+            {
+                into.Clear();
+                return 0;
+            }
+            return Los3D.Walk(from, to, map, into, stopAtSolidPlane);
+        }
+
+        // ProjectZ's explosion cell picker as a service: sameFloorCells (the other system's own cells round center) kept
+        // where they are on center's floor, plus the other floors' cells within the 3D radius whose height line from the
+        // centre is clear (slabs, roofs and walls block; on an upper floor only cells with a floor). Added to 'into' (not
+        // cleared). centreHeight: cells over the centre's floor (< 0: ProjectZ's own, half a wall). angle: the game's
+        // directional filter over the ground. Without floors: sameFloorCells as they are; a void-row centre: nothing.
+        public static void ExplosionCells3D(IntVec3 center, Map map, float radius, IEnumerable<IntVec3> sameFloorCells, List<IntVec3> into,
+            float centreHeight = -1f, FloatRange? angle = null)
+        {
+            if (map == null || into == null || sameFloorCells == null)
+            {
+                return;
+            }
+            AnnexMapComponent an = ProjectZ.Annex(map);
+            if (an == null)
+            {
+                into.AddRange(sameFloorCells);
+                return;
+            }
+            Explosions3D.CellsToHit(sameFloorCells, center, map, radius, angle, an, into, centreHeight < 0f ? Heights.Middle : centreHeight / IsoRimBridge.WallHeight);
+        }
+
+        // ProjectZ's radius clip (the swap its vanilla list gets) for another mod's method: its radius loops
+        // (GenRadial.RadialCellsAround, RadialPattern[i] + c) stay on the centre's floor; a cell past the floor's edge
+        // becomes the inert void-row cell next to it. mapPath: where the method's map is read at entry: "this" (a Thing,
+        // comp, verb, Map...), "arg:<parameter>", "this.<field or property>..." or "current". Call from a Mod constructor
+        // or StaticConstructorOnStartup. False: no method body, the clip is off, or the patch failed (logged).
+        public static bool ClipRadialLoops(System.Reflection.MethodBase method, string mapPath) => BandRadial.AddExternal(method, mapPath);
+
+        private static bool OnGround(IntVec3 g, Map map) => map != null && g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.GroundRect(map).maxZ + 1;
     }
 }

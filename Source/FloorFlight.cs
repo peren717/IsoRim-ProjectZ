@@ -209,7 +209,7 @@ namespace ProjectZ
         public static bool TryFlee(Pawn p, Job job)
         {
             if (Off || p == null || job == null || job.exitMapOnArrival || !p.Spawned || p.Downed || ProjectZ.Annex(p.Map) == null
-                || !CombatGate.Enabled || !FailSoft.IsApplied(nameof(Jump_CanHitTargetFrom_Patch)))
+                || !CombatGate.On(CombatPart.Jumps) || !FailSoft.IsApplied(nameof(Jump_CanHitTargetFrom_Patch)))
             {
                 return false;
             }
@@ -277,10 +277,9 @@ namespace ProjectZ
     // Flee by flight (FloorFlight.TryFlee): a first step before the flee's own.
     [HarmonyPatch(typeof(JobDriver_Flee), "MakeNewToils")]
     [PatchGroup(FailSoft.Combat)]
+    [CombatPartOf(CombatPart.Jumps)]
     public static class Flee_FlyAcross_Patch
     {
-        public static bool Prepare() => CombatGate.Enabled;
-
         public static IEnumerable<Toil> Postfix(IEnumerable<Toil> toils, JobDriver_Flee __instance)
         {
             Toil fly = ToilMaker.MakeToil("FleeFlyAcross");

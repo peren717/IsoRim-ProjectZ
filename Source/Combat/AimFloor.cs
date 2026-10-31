@@ -366,14 +366,22 @@ namespace ProjectZ.Combat
 
         private static Row RowOf(MethodBase m) => m != null && rowOf.TryGetValue(m, out Row r) ? r : null;
 
+        private static bool done;
+
+        // (run by CombatGate.OnSettle: again after a late KeepCombatParts, so once only)
         public static void Patch(Harmony h)
         {
+            if (done)
+            {
+                return;
+            }
             Off = GenCommandLine.CommandLineArgPassed("projectznoaimfloor");
-            if (Off || !CombatGate.Enabled)
+            if (Off || !CombatGate.On(CombatPart.AimFloor))
             {
                 Log.Message("[ProjectZ] aim on the target's floor: off" + (Off ? " (-projectznoaimfloor)" : " (combat between floors off)"));
                 return;
             }
+            done = true;
             Assembly game = typeof(Pawn).Assembly;
             foreach (Row r in Rows)
             {
@@ -395,14 +403,14 @@ namespace ProjectZ.Combat
                 Row row = r;
                 bool inner = r.target == "inner";
                 if (FailSoft.Entry(r.Entry, r.found, prefix: inner ? null : pre, transpiler: tr, finalizer: inner ? null : fin,
-                    check: () => row.swaps > 0 ? null : "no call to swap found", group: FailSoft.Combat))
+                    check: () => row.swaps > 0 ? null : "no call to swap found", group: FailSoft.Combat, part: CombatPart.AimFloor))
                 {
                     patched++;
                 }
             }
             // the aim pie (after IsoRim's prefix, which draws a 3D figure's pie at its muzzle itself)
             bool pie = FailSoft.Entry("AimFloor:GenDraw.DrawAimPie", AccessTools.Method(typeof(GenDraw), nameof(GenDraw.DrawAimPie)),
-                prefix: new HarmonyMethod(typeof(AimFloor), nameof(AimPie)) { priority = Priority.Low }, group: FailSoft.Combat);
+                prefix: new HarmonyMethod(typeof(AimFloor), nameof(AimPie)) { priority = Priority.Low }, group: FailSoft.Combat, part: CombatPart.AimFloor);
             FailSoft.EndList();
             Log.Message($"[ProjectZ] aim on the target's floor: {patched} of {Rows.Length} methods patched, {Rows.Sum(r => r.swaps)} calls swapped, aim pie {(pie ? "on" : "off")}");
         }
