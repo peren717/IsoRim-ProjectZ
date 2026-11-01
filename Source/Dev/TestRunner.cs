@@ -424,6 +424,10 @@ namespace ProjectZ.Dev
             {
                 PatchExplodeProbe(h);
             }
+            if (mode.StartsWith("firefloors"))
+            {
+                FfPatch(h);
+            }
             if (mode == "slabarmor")
             {
                 PatchStrikesProbe(h);
@@ -910,6 +914,11 @@ namespace ProjectZ.Dev
                 StepStrikes(map);
                 return;
             }
+            if (stage.StartsWith("fw_"))
+            {
+                StepFireFloors(map);
+                return;
+            }
             if (stage.StartsWith("ar_"))
             {
                 StepSlabArmor(map);
@@ -1380,6 +1389,10 @@ namespace ProjectZ.Dev
                     else if (mode == "strikes")
                     {
                         stage = "sx_setup";
+                    }
+                    else if (mode == "firefloors" || mode == "firefloors1")
+                    {
+                        stage = "fw_setup";
                     }
                     else if (mode == "slabarmor")
                     {

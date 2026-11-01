@@ -29,6 +29,11 @@ namespace ProjectZ
         private static readonly Dictionary<TerrainDef, TerrainDef> damagedOf = new Dictionary<TerrainDef, TerrainDef>();
         private static readonly Dictionary<ThingDef, TerrainDef> byStuff = new Dictionary<ThingDef, TerrainDef>();
         private static readonly Dictionary<TerrainDef, ThingDef> stuffOf = new Dictionary<TerrainDef, ThingDef>();
+        private static readonly HashSet<TerrainDef> burns = new HashSet<TerrainDef>();
+
+        // Fire (FloorFire): the flammability of a slab of a Woody stuff, as the game's wood plank floor (read from
+        // WoodPlankFloor when present). Every other slab keeps 0 (never burns).
+        public const float WoodFlammability = 0.22f;
 
         // The buildable slabs (one per stuff; damaged slabs are not built).
         public static IEnumerable<TerrainDef> All => slabs;
@@ -52,7 +57,10 @@ namespace ProjectZ
 
         public static ThingDef StuffOf(TerrainDef t) => t != null && stuffOf.TryGetValue(t, out ThingDef s) ? s : null;
 
-        private static bool Woody(ThingDef d)
+        // A slab that burns (FloorFire): a buildable slab of a Woody stuff, modded woods too. Stone, metal and damaged: never.
+        public static bool Burns(TerrainDef t) => t != null && burns.Contains(t);
+
+        public static bool Woody(ThingDef d)
         {
             if (d?.stuffProps?.categories == null)
             {
@@ -108,6 +116,7 @@ namespace ProjectZ
             damagedOf.Clear();
             byStuff.Clear();
             stuffOf.Clear();
+            burns.Clear();
             TerrainDef wood = DefDatabase<TerrainDef>.GetNamedSilentFail("PZ_UpperFloor");
             ThingDef log = DefDatabase<ThingDef>.GetNamedSilentFail("WoodLog");
             if (wood == null)
@@ -236,6 +245,16 @@ namespace ProjectZ
                 }
             }
             stats.Add(new StatModifier { stat = StatDefOf.WorkToBuild, value = UnityEngine.Mathf.Max(1f, UnityEngine.Mathf.Round(work)) });
+            // fire (FloorFire): a Woody slab burns like the game's wood plank floor, but never into a burned floor (it burns
+            // through instead); every other slab never burns
+            float fl = 0f;
+            if (Woody(stuff))
+            {
+                fl = DefDatabase<TerrainDef>.GetNamedSilentFail("WoodPlankFloor")?.statBases?.GetStatValueFromList(StatDefOf.Flammability, WoodFlammability) ?? WoodFlammability;
+                burns.Add(t);
+            }
+            stats.RemoveAll(m => m.stat == StatDefOf.Flammability);
+            stats.Add(new StatModifier { stat = StatDefOf.Flammability, value = fl });
             t.statBases = stats;
             if (Armored(stuff))
             {
@@ -254,6 +273,26 @@ namespace ProjectZ
         public static void Prefix(bool hotReload)
         {
             SlabDefs.Generate(hotReload);
+        }
+    }
+}
+
+namespace ProjectZ
+{
+    // A wood slab is flammable, not layerable and has no burned def on purpose (FloorFire: it burns through instead of
+    // becoming a burned floor; the game's TryBurnFloor leaves it alone): the game's config check for that one case is
+    // dropped for these defs only.
+    [HarmonyLib.HarmonyPatch(typeof(Verse.TerrainDef), nameof(Verse.TerrainDef.ConfigErrors))]
+    public static class TerrainDef_ConfigErrors_WoodSlab_Patch
+    {
+        public const string Error = "flammable but burnedDef is null and not layerable";
+
+        public static void Postfix(Verse.TerrainDef __instance, ref System.Collections.Generic.IEnumerable<string> __result)
+        {
+            if (SlabDefs.Burns(__instance) && __result != null)
+            {
+                __result = System.Linq.Enumerable.ToList(System.Linq.Enumerable.Where(__result, e => e != Error));
+            }
         }
     }
 }

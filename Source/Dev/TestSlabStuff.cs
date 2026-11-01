@@ -373,7 +373,7 @@ namespace ProjectZ.Dev
                 float work = t.GetStatValueAbstract(StatDefOf.WorkToBuild);
                 float want = Mathf.Round(SlabDefs.BaseWork * s.stuffProps.statFactors.GetStatFactorFromList(StatDefOf.WorkToBuild) + s.stuffProps.statOffsets.GetStatOffsetFromList(StatDefOf.WorkToBuild));
                 bool ok = t.CostList.Count == 1 && t.CostList[0].thingDef == s && t.CostList[0].count == 4 && t.DrawColor == s.stuffProps.color && t.uiIconColor == s.stuffProps.color
-                    && Mathf.Abs(work - Mathf.Max(1f, want)) < 0.5f && t.GetStatValueAbstract(StatDefOf.Beauty) == -1f && t.GetStatValueAbstract(StatDefOf.Flammability) == 0f
+                    && Mathf.Abs(work - Mathf.Max(1f, want)) < 0.5f && t.GetStatValueAbstract(StatDefOf.Beauty) == -1f && Mathf.Abs(t.GetStatValueAbstract(StatDefOf.Flammability) - (SlabDefs.Woody(s) ? 0.22f : 0f)) < 0.001f
                     && t.pathCost == 0 && t.designatorDropdown == PZDefOf.PZ_UpperFloor.designatorDropdown && t.uiIcon != null && (t.uiIcon.name ?? "").Contains("UpperFloor_MenuIcon") && !t.cropIcon
                     && t.texturePath == "ProjectZ/Terrain/SlabLattice" && t.blueprintDef != null && t.frameDef != null;
                 if (!ok)
@@ -382,7 +382,7 @@ namespace ProjectZ.Dev
                 }
             }
             Info("slab defs: " + string.Join("; ", all.Select(t => $"{t.defName} '{t.label}' {t.CostList[0].thingDef.defName}x{t.CostList[0].count} work {t.GetStatValueAbstract(StatDefOf.WorkToBuild)} colour {t.DrawColor} effect {t.constructEffect?.defName}")));
-            Result("each slab: 4 of its stuff, its colour and icon colour, work scaled like a wall's, beauty -1, never burns, walk speed 100 %, the lattice texture and icon",
+            Result("each slab: 4 of its stuff, its colour and icon colour, work scaled like a wall's, beauty -1, flammability 0.22 for Woody (FloorFire: burns through) else 0, walk speed 100 %, the lattice texture and icon",
                 bad.Count == 0, bad.Count == 0 ? $"{all.Count} checked; wood {PZDefOf.PZ_UpperFloor.GetStatValueAbstract(StatDefOf.WorkToBuild)}, steel {SlabDefs.For(ThingDefOf.Steel).GetStatValueAbstract(StatDefOf.WorkToBuild)}, granite {SlabDefs.For(pGranite).GetStatValueAbstract(StatDefOf.WorkToBuild)} work; walk speed {(PZDefOf.PZ_UpperFloor.pathCost == 0 ? "100%" : "slower")}" : "wrong: " + string.Join(", ", bad));
             Designator_Dropdown dd = PZDefOf.PZ_UpperFloor.designationCategory.AllResolvedDesignators.OfType<Designator_Dropdown>().FirstOrDefault(x => x.Elements.Any(e => e is Designator_Build b && b.PlacingDef == PZDefOf.PZ_UpperFloor));
             List<BuildableDef> inDrop = dd?.Elements.OfType<Designator_Build>().Select(b => b.PlacingDef).ToList() ?? new List<BuildableDef>();

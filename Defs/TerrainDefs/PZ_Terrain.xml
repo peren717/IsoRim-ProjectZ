@@ -39,7 +39,7 @@
        any Woody, Metallic or Stony stuff: one slab def per stuff, like the game's stone tiles, in one build-menu dropdown.
        This def is the wood slab (the defName older saves have). SlabDefs.cs makes the others from it at load, for every
        such stuff incl. modded ones, and sets each one's label, colour, icon colour, cost (4 of the stuff) and work (300,
-       scaled by the stuff like a wall's). Not flammable, even wood (§9). -->
+       scaled by the stuff like a wall's). Flammability 0 here; SlabDefs gives every Woody slab the wood plank floor's 0.22 (FloorFire: it burns through). -->
   <TerrainDef>
     <defName>PZ_UpperFloor</defName>
     <label>upper floor</label>
