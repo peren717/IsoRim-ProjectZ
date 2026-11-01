@@ -66,6 +66,9 @@ namespace ProjectZ.Dev
     //                                   write it; -projectzsave=pz_oldstairs to load it; TestOldStairs), -projectzfloors=3 -projectzseed=7
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
     //                                   control, sappers, raider targets, performance; TestDist3D), -projectzfloors=3 -projectzseed=7
+    //                                   billradius: a bill's ingredient radius in 3D (fetching upstairs and down, Unlimited
+    //                                   on level 4, outfit stands, one-floor parity, timing, ring shots; TestBillRadius),
+    //                                   -projectzfloors=5 -projectzmapsize=250 -projectzseed=7 (-projectzfloors=1: no floors)
     //                                   parts: the combat part switch (Api 6; -projectztestkeep[=A,B], -projectztestrelease=A,B;
     //                                   run with and without Combat Extended); api6: the Api 6 3D space queries on a two-floor
     //                                   fixture, -projectzfloors=3 -projectzseed=N (TestApi6)
@@ -336,6 +339,7 @@ namespace ProjectZ.Dev
             JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
             FloorFlight.Off = GenCommandLine.CommandLineArgPassed("projectznoflight");
             OpenAirSkip.Off = GenCommandLine.CommandLineArgPassed("projectznoairskip");
+            Patches.BillRadius3D.Off = GenCommandLine.CommandLineArgPassed("projectznobillradius");
             Api6Init();   // test-only combat part declarations (TestApi6)
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
@@ -752,6 +756,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("s4_"))
             {
                 StepStairs4(map);
+                return;
+            }
+            if (stage.StartsWith("br_"))
+            {
+                StepBillRadius(map);
                 return;
             }
             if (stage.StartsWith("d3_"))
@@ -1198,6 +1207,10 @@ namespace ProjectZ.Dev
                     else if (mode == "stairs4")
                     {
                         stage = "s4_setup";
+                    }
+                    else if (mode == "billradius")
+                    {
+                        stage = "br_setup";
                     }
                     else if (mode == "dist3d")
                     {
