@@ -45,7 +45,8 @@ namespace ProjectZ.Dev
         }
 
         private static IntVec3 sfO;
-        private static int sfLeg, sfFrames, sfMarkerSeen, sfShotsTaken, sfUpperRec;
+        private static int sfLeg, sfFrames, sfMarkerSeen, sfShotsTaken, sfUpperRec, sfHoles;
+        private static IntVec3 sfHoleOff;
         private static bool sfLandedSeen, sfLandQueued, sfSaved;
         private static string sfLastStage = "", sfSleeper, sfCarrier, sfUp3, sfGroundP, sfLeft, sfCarried, sfLamp, sfBattery, sfStock, sfLampX, sfConduitX;
         private static float sfStageAt, sfTempA, sfTempB;
@@ -97,6 +98,12 @@ namespace ProjectZ.Dev
                     return;
                 case "sf_walked":
                     SfWalked(map);
+                    return;
+                case "sf_hole":
+                    SfHole(map);
+                    return;
+                case "sf_hole2":
+                    SfHole2(map);
                     return;
                 case "sf_record":
                     SfRecordAndShoot(map);
@@ -230,13 +237,14 @@ namespace ProjectZ.Dev
             Place(PZDefOf.PZ_Stairs, woodLog, SF(-2, -2), map, Rot4.North);
             Place(PZDefOf.PZ_Stairs, woodLog, SFF(-2, 5, 1, map), map, Rot4.North);
             map.terrainGrid.SetTerrain(SFF(-1, 7, 2, map), wood);
-            // decks: floor 2 over the whole 13 x 11, floor 3 over its west part (x 0-6)
+            // decks: floor 2 over the whole 13 x 11, floor 3 over its west part (x 0-6) and a north strip (x 7-12, z 9-10:
+            // a floor-2 deck under it is taken up before the flight, Q6 (b), SfWalked)
             for (int x = 0; x < 13; x++)
             {
                 for (int z = 0; z < 11; z++)
                 {
                     map.terrainGrid.SetTerrain(SFF(x, z, 1, map), PZDefOf.PZ_ShipDeck);
-                    if (x <= 6)
+                    if (x <= 6 || z >= 9)
                     {
                         map.terrainGrid.SetTerrain(SFF(x, z, 2, map), PZDefOf.PZ_ShipDeck);
                     }
@@ -370,6 +378,63 @@ namespace ProjectZ.Dev
             Result("F1 colonists walked up the stairs to floors 2 and 3 and onto the ground deck",
                 sleeper?.Position == SFF(2, 5, 1, map) && carrier?.Position == SFF(10, 5, 1, map) && up3?.Position == sfRoomB && gp?.Position == SF(3, 2),
                 $"{sleeper?.Position}, {carrier?.Position}, {up3?.Position}, {gp?.Position} after {ticksTotal} ticks");
+            // (Q6 (b), user 2026-11-01) the carrier takes up the floor-2 deck at (11, 10) under the floor-3 strip: a hole in
+            // the ship under a deck that stays
+            IntVec3 hole = SFF(11, 10, 1, map);
+            Designator_RemoveFoundation rf = new Designator_RemoveFoundation();
+            AcceptanceReport ok = rf.CanDesignateCell(hole);
+            Result("F1 the floor-2 deck under a floor-3 deck may be designated for removal (Q6 (b))", ok.Accepted, $"{hole}: {ok.Reason}");
+            if (ok.Accepted && carrier != null)
+            {
+                rf.DesignateSingleCell(hole);
+                Draft(carrier, false);
+                foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+                {
+                    if (!carrier.WorkTypeIsDisabled(wt))
+                    {
+                        carrier.workSettings.SetPriority(wt, wt == WorkTypeDefOf.Construction ? 1 : 0);
+                    }
+                }
+                Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                TickUntil(10000, () => !ShipDeck.At(hole, map), "sf_hole", 30);
+                return;
+            }
+            SfWalked2(map);
+        }
+
+        private static void SfHole(Map map)
+        {
+            tickWatch = null;
+            IntVec3 hole = SFF(11, 10, 1, map), up = SFF(11, 10, 2, map);
+            Pawn carrier = SfPawn(sfCarrier);
+            foreach (WorkTypeDef wt in DefDatabase<WorkTypeDef>.AllDefs)
+            {
+                if (carrier != null && !carrier.WorkTypeIsDisabled(wt))
+                {
+                    carrier.workSettings.SetPriority(wt, 3);
+                }
+            }
+            if (carrier != null)
+            {
+                Draft(carrier, true);
+            }
+            StartTicks(120, "sf_hole2");
+            Info($"F1 hole: deck at {hole} {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}");
+        }
+
+        private static void SfHole2(Map map)
+        {
+            IntVec3 hole = SFF(11, 10, 1, map), up = SFF(11, 10, 2, map);
+            Building_GravEngine e = GlEngine(map);
+            Result("F1 a colonist took the floor-2 deck up: a hole under the floor-3 deck, which stays on its floor roof, aboard (a ship column hole)",
+                !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && ShipColumn.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && e.ValidSubstructure.Contains(up),
+                $"deck {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}, above in the ship set {e.ValidSubstructure.Contains(up)}");
+            SfWalked2(map);
+        }
+
+        private static void SfWalked2(Map map)
+        {
+            Pawn sleeper = SfPawn(sfSleeper), carrier = SfPawn(sfCarrier);
             // the sleeper lies down in the bed (tired), the carrier is handed steel to carry
             Building_Bed bed = SFF(2, 2, 1, map).GetFirstThing<Building_Bed>(map);
             if (sleeper != null && bed != null)
@@ -412,7 +477,7 @@ namespace ProjectZ.Dev
             Result("F1 the floor-2 lamp is powered by the ground battery through the riser", lamp != null && lamp.PowerOn && lamp.PowerNet != null && lamp.PowerNet.batteryComps.Any(b => b.parent.ThingID == sfBattery), $"on {lamp?.PowerOn}, net batteries {lamp?.PowerNet?.batteryComps.Count}");
             SfLampXCheck(map, "F1");
             HashSet<IntVec3> set = e.ValidSubstructure;
-            Result("F1 the ship set holds ground + both floors' decks", set.Count == 147 + 143 + 77 && SsOnFloor(set, 1, map) == 143 && SsOnFloor(set, 2, map) == 77, $"{set.Count}: {SsFloors(set, map)}");
+            Result("F1 the ship set holds ground + both floors' decks", set.Count == 147 + 142 + 89 && SsOnFloor(set, 1, map) == 142 && SsOnFloor(set, 2, map) == 89, $"{set.Count}: {SsFloors(set, map)}");
             foreach (string id in new[] { sfSleeper, sfCarrier, sfUp3, sfGroundP })
             {
                 Pawn p = SfPawn(id);
@@ -465,6 +530,18 @@ namespace ProjectZ.Dev
                     sfStockOffs.Add(ShipLocal.From(c, o, map));
                 }
             }
+            // the holes under kept decks (ShipColumn.Hole, Q6 (b)): open air with the floor roof, recorded like the deck cells
+            sfHoles = 0;
+            foreach (IntVec3 c in set.ToList())
+            {
+                IntVec3 up = FloorRoof.Above(c, map);
+                if (up.IsValid && ShipColumn.Hole(up, map) && !sfCells.ContainsKey(ShipLocal.From(up, o, map)))
+                {
+                    sfCells[ShipLocal.From(up, o, map)] = new SfCellRec { found = Def(tg.FoundationAt(up)), terr = Def(tg.TerrainAt(up)), under = Def(tg.UnderTerrainAt(up)), roof = map.roofGrid.RoofAt(up)?.defName ?? "-" };
+                    sfHoleOff = ShipLocal.From(up, o, map);
+                    sfHoles++;
+                }
+            }
             foreach (Thing t in map.listerThings.AllThings)
             {
                 // (filth the walkers tracked in comes and goes with the game's own rules: only the dirt laid upstairs is followed)
@@ -481,7 +558,7 @@ namespace ProjectZ.Dev
                     sfPawns[p.ThingID] = ShipLocal.From(p.Position, o, map);
                 }
             }
-            sfUpperRec = sfCells.Keys.Count(k => k.y != 0);
+            sfUpperRec = sfCells.Keys.Count(k => k.y != 0) - sfHoles;   // (decks only: the holes are no ship foundation)
 
             sfOffA = ShipLocal.From(sfRoomA, o, map);
             sfOffB = ShipLocal.From(sfRoomB, o, map);
@@ -901,7 +978,7 @@ namespace ProjectZ.Dev
                 return;
             }
             AnnexMapComponent an = ProjectZ.Annex(map);
-            Result($"{leg} landed on the ground ({sfRot})", ProjectZ.FloorOf(e.Position, map) == 0 && e.ValidSubstructure.Count == 147 + 143 + 77, $"engine {GlCell(e.Position, map)}, root {sfRoot}, set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
+            Result($"{leg} landed on the ground ({sfRot})", ProjectZ.FloorOf(e.Position, map) == 0 && e.ValidSubstructure.Count == 147 + 142 + 89, $"engine {GlCell(e.Position, map)}, root {sfRoot}, set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
             // cells
             TerrainGrid tg = map.terrainGrid;
             int bad = 0;
@@ -918,6 +995,16 @@ namespace ProjectZ.Dev
                 }
             }
             Result($"{leg} every cell on its floor and place (foundation, terrain, under, roof)", bad == 0, $"{bad} of {sfCells.Count}; {first}");
+            if (sfHoles > 0)
+            {
+                IntVec3 hc = SfAt(sfHoleOff, sfRoot, sfRot, map), hu = FloorRoof.Above(hc, map);
+                Result($"{leg} the hole under the kept floor-3 deck landed with it: open air with the floor roof, the deck above on it, still a ship column hole", !ShipDeck.At(hc, map) && hu.IsValid && ShipDeck.At(hu, map) && map.roofGrid.RoofAt(hc) == PZDefOf.PZ_FloorRoof && ShipColumn.Hole(hc, map) && e.ValidSubstructure.Contains(hu),
+                    $"hole {hc} f{ProjectZ.FloorOf(hc, map) + 1}: {Def(tg.TerrainAt(hc))}, roof {map.roofGrid.RoofAt(hc)?.defName ?? "none"}, deck above {hu.IsValid && ShipDeck.At(hu, map)}, hole {ShipColumn.Hole(hc, map)}, above aboard {e.ValidSubstructure.Contains(hu)}");
+            }
+            else
+            {
+                Result($"{leg} the hole was recorded before take-off", false, "no hole recorded");
+            }
             int carpets = sfCells.Count(kv => kv.Key.y > 0 && kv.Value.terr.StartsWith("Carpet"));
             int carpetsOk = sfCells.Count(kv => kv.Key.y > 0 && kv.Value.terr.StartsWith("Carpet") && tg.UnderTerrainAt(SfAt(kv.Key, sfRoot, sfRot, map)) == PZDefOf.PZ_OpenAir);
             Result($"{leg} carpets upstairs lie on decks over open air (no soil)", carpets > 0 && carpetsOk == carpets, $"{carpetsOk} of {carpets}");

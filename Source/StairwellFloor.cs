@@ -33,7 +33,7 @@ namespace ProjectZ
         }
 
         // Placement: a stairwell cell with a floor on it can be cleared when nothing keeps that floor there (a building,
-        // a blueprint or frame, the exit of other stairs, a floor above it).
+        // a blueprint or frame, the exit of other stairs; a floor above it stays, Q6 (b)).
         public static bool CanClear(IntVec3 up, Map map)
         {
             return Slab.At(up, map) && Slab.Blocker(up, map) == null;

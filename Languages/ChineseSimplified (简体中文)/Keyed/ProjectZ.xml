@@ -91,4 +91,8 @@
   <PZ_ElevatorCap>这块楼板会封住电梯井，电梯只到它下面</PZ_ElevatorCap>
   <PZ_ElevatorLastWay>这是离开这里的最后一条路</PZ_ElevatorLastWay>
   <PZ_ElevatorNoPower>没电：当梯子爬</PZ_ElevatorNoPower>
+  <PZ_ElevatorTop>顶层：{0}</PZ_ElevatorTop>
+  <PZ_ElevatorTopDesc>电梯到达的最高楼层。上面的楼层可以照常建造。</PZ_ElevatorTopDesc>
+  <PZ_ElevatorTopBlocked>请先清空到{0}的电梯井</PZ_ElevatorTopBlocked>
+  <PZ_ElevatorTopAuto>电梯顶层：{0}（上方电梯井被挡住）</PZ_ElevatorTopAuto>
 </LanguageData>

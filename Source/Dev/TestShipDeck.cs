@@ -21,7 +21,7 @@ namespace ProjectZ.Dev
     //      walking up the ordinary stairs; roofs under them are the floors' roofs; colonists walk on the decks;
     //   D3 ship parts on a deck (placement acceptance of thruster, tank, extender; two hull pieces built), a carpet laid
     //      on a deck (open air stays its under layer), ordinary stairs on a deck refused; remove-foundation refused under a
-    //      deck (ground and floor 2);
+    //      deck on the ground, allowed under a deck on floor 2 (Q6 (b), user 2026-11-01);
     //   D4 save and reload: decks, carpet and roofs intact (FloorRoof.Normalize fixes nothing, no collapse);
     //   D5 support (the game's roof rules, as for slabs; user decision 2026-10-17): the only wall in range of an open
     //      3 x 3 deck pad deconstructed by a colonist: the pad falls with its roof, as does an ordinary roof held only by
@@ -223,7 +223,7 @@ namespace ProjectZ.Dev
                     FloorView.Set(0);
                     SdExpect("D3 removing the substructure under a deck refused", rf, SD(1, 5), "PZ_DeckAboveFirst".Translate());
                     FloorView.Set(1);
-                    SdExpect("D3 removing a floor-2 deck under a floor-3 deck refused", rf, SDF(1, 6, 1, map), "PZ_DeckAboveFirst".Translate());
+                    SdExpect("D3 removing a floor-2 deck under a floor-3 deck allowed (Q6 (b), user 2026-11-01: the deck above stays over the hole)", rf, SDF(1, 6, 1, map), null);
                     FloorView.Set(0);
                     GlShot(2, SD(1, 5), 12f, "sd_1_built_f3");
                     GlShot(1, SD(1, 5), 12f, "sd_1_built_f2");

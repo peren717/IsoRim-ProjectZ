@@ -16,7 +16,8 @@ namespace ProjectZ
     //   - Which cells are the ship (GravshipUtility.GetConnectedSubstructure, replaced on maps with floors): the engine's
     //     ground column first, then vanilla's own ground flood fill from there, then floor by floor upwards. A cell on a
     //     floor counts only when the cell right below it counts, so the ship is the ground ship plus its stacked deck
-    //     columns, and no accepted cell ever floats. The opening of ship stairs is a column cell too (ShipColumn): not in the
+    //     columns, and no accepted cell ever floats. The opening of ship stairs and a hole under a kept deck (Q6 (b)) are
+    //     column cells too (ShipColumn.Open): not in the
     //     set itself (no foundation; its roof flies with ShipStairs.TakeOpeningRoofs), but the column goes on through it,
     //     so a deck over it is aboard. The limit (SubstructureSupport) cuts the order: over it, the top floors
     //     drop out first. An engine standing on a deck is always aboard (its own columns up to its floor come right after
@@ -97,9 +98,9 @@ namespace ProjectZ
                     break;
                 }
                 IntVec3 b = FloorRoof.Below(u, map);
-                if (!cells.Contains(b) && ShipStairs.Opening(b, map))
+                while (!cells.Contains(b) && ShipColumn.Open(b, map))
                 {
-                    b = FloorRoof.Below(b, map);   // (through a ship stairs opening)
+                    b = FloorRoof.Below(b, map);   // (through a ship stairs opening or a hole, ShipColumn.Open)
                 }
                 if (cells.Contains(b))
                 {
@@ -133,9 +134,9 @@ namespace ProjectZ
                         cells.Add(u);
                         tmpCur.Add(u);
                     }
-                    else if (ShipStairs.Opening(u, map))
+                    else if (ShipColumn.Open(u, map))
                     {
-                        tmpCur.Add(u);   // (a ship stairs opening: the column goes on, the cell itself is no substructure)
+                        tmpCur.Add(u);   // (a ship stairs opening or a hole: the column goes on, the cell itself is no substructure)
                     }
                 }
                 tmpPrev.Clear();

@@ -91,4 +91,8 @@
   <PZ_ElevatorCap>This floor caps the elevator shaft: the elevator stops below it</PZ_ElevatorCap>
   <PZ_ElevatorLastWay>The last way out from here</PZ_ElevatorLastWay>
   <PZ_ElevatorNoPower>No power: climbed like a ladder</PZ_ElevatorNoPower>
+  <PZ_ElevatorTop>Top floor: {0}</PZ_ElevatorTop>
+  <PZ_ElevatorTopDesc>The highest floor the elevator serves. The floors above stay free for building.</PZ_ElevatorTopDesc>
+  <PZ_ElevatorTopBlocked>Clear the shaft up to {0} first</PZ_ElevatorTopBlocked>
+  <PZ_ElevatorTopAuto>Elevator top floor: {0} (the shaft above is blocked)</PZ_ElevatorTopAuto>
 </LanguageData>

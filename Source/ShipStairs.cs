@@ -212,21 +212,20 @@ namespace ProjectZ
             }
             foreach (IntVec3 c in engine.ValidSubstructure.ToList())
             {
-                IntVec3 up = StairShape.Above(c, map);
-                if (!up.IsValid || !up.InBounds(map) || !Opening(up, map))
+                // (up the open cells over it: a stairs opening, holes under a kept deck, ShipColumn.Open)
+                for (IntVec3 up = StairShape.Above(c, map); up.IsValid && up.InBounds(map) && ShipColumn.Open(up, map); up = StairShape.Above(up, map))
                 {
-                    continue;
-                }
-                RoofDef r = map.roofGrid.RoofAt(up);
-                if (r != null)
-                {
-                    roofs[ShipLocal.From(up, ship.originalPosition, map)] = r;
-                    // (as vanilla takes the ship cells' roofs: directly, so the floor-roof rule, which keeps the roof
-                    // under a deck over the opening, doesn't hold it back; that deck flies too)
-                    map.roofGrid.RemoveRoofUnsafe(map.cellIndices.CellToIndex(up));
-                    map.mapDrawer.MapMeshDirty(up, MapMeshFlagDefOf.Roofs);
-                    map.glowGrid.DirtyCell(up);
-                    ProjectZ.DebugLog($"ship stairs opening {up}: its roof {r.defName} flies with the ship");
+                    RoofDef r = map.roofGrid.RoofAt(up);
+                    if (r != null)
+                    {
+                        roofs[ShipLocal.From(up, ship.originalPosition, map)] = r;
+                        // (as vanilla takes the ship cells' roofs: directly, so the floor-roof rule, which keeps the roof
+                        // under a deck over the opening, doesn't hold it back; that deck flies too)
+                        map.roofGrid.RemoveRoofUnsafe(map.cellIndices.CellToIndex(up));
+                        map.mapDrawer.MapMeshDirty(up, MapMeshFlagDefOf.Roofs);
+                        map.glowGrid.DirtyCell(up);
+                        ProjectZ.DebugLog($"ship column opening {up}: its roof {r.defName} flies with the ship");
+                    }
                 }
             }
         }

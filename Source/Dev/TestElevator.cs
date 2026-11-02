@@ -46,6 +46,7 @@ namespace ProjectZ.Dev
     public static partial class TestRunner
     {
         private static Building_Elevator elE;
+        private static string elPuFrames = "no frame seen";
         private static Thing elBattery;
         private static readonly int[] elSpans = { 1, 2, 4 };
         private static int elIdx;
@@ -1117,24 +1118,28 @@ namespace ProjectZ.Dev
                 (floor.Accepted || floor.Reason != msg) && !wall.Accepted && wall.Reason == msg && !lamp.Accepted && roofArea.Accepted && !roofWork && map.roofGrid.RoofAt(s1) == PZDefOf.PZ_StairwellRoof,
                 $"floor {floor.Accepted} ({floor.Reason}), wall {wall.Accepted} ({wall.Reason}), lamp {lamp.Accepted} ({lamp.Reason}), roof area {roofArea.Accepted} ({roofArea.Reason}), roof over the elevator {roofOver.Accepted} ({roofOver.Reason}), roof work {roofWork}");
             // placement where the shaft is not open: a floor on level 3 and a roof over the cell (allowed: the floor is taken
-            // up, the roof becomes the shaft's), a blueprint on level 2 and a wall on a floor on level 2 (refused)
-            IntVec3 a = ElG(25, 6), b = ElG(27, 6), c = ElG(29, 6), d = ElG(31, 6), w = ElG(33, 6);
+            // up, the roof becomes the shaft's), a blueprint on level 1 and a wall on a floor on level 1 (refused); a wall on
+            // level 2 (allowed since the top floor setting, 2026-11-01: its top is set to level 1, ElevTop)
+            IntVec3 a = ElG(25, 6), b = ElG(27, 6), c = ElG(29, 6), d = ElG(31, 6), w = ElG(33, 6), w1 = ElG(35, 6);
             map.terrainGrid.SetTerrain(ElL(33, 6, 2, map), PZDefOf.PZ_UpperFloor);
             R2Wall(map, ElL(33, 6, 2, map));
+            map.terrainGrid.SetTerrain(ElL(35, 6, 1, map), PZDefOf.PZ_UpperFloor);
+            R2Wall(map, ElL(35, 6, 1, map));
             map.terrainGrid.SetTerrain(ElL(25, 6, 3, map), PZDefOf.PZ_UpperFloor);
             map.roofGrid.SetRoof(b, RoofDefOf.RoofConstructed);
             // (a floor blueprint put there as it stands: the player may have planned it before)
-            Blueprint bpFloor = GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_UpperFloor, ElL(29, 6, 2, map), map, Rot4.North, Faction.OfPlayer, null);
+            Blueprint bpFloor = GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_UpperFloor, ElL(29, 6, 1, map), map, Rot4.North, Faction.OfPlayer, null);
             string blocked = "PZ_ElevatorShaftBlocked".Translate();
             AcceptanceReport pa = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, a, Rot4.West, map);
             AcceptanceReport pb = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, b, Rot4.West, map);
             AcceptanceReport pc = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, c, Rot4.West, map);
             AcceptanceReport pd = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, d, Rot4.West, map);
             AcceptanceReport pw = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, w, Rot4.West, map);
+            AcceptanceReport pw1 = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, w1, Rot4.West, map);
             AcceptanceReport top = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, ElL(31, 13, 4, map), Rot4.West, map);
-            Result("CO placement: under a floor (level 3) and under a built roof it is allowed; a floor blueprint (level 2) or a wall (level 2) in the shaft refuse it; open: allowed; the top level: refused",
-                pa.Accepted && pb.Accepted && bpFloor != null && bpFloor.Spawned && !pc.Accepted && pc.Reason == blocked && !pw.Accepted && pw.Reason == blocked && pd.Accepted && !top.Accepted,
-                $"floor {pa.Accepted} ({pa.Reason}), roof {pb.Accepted} ({pb.Reason}), blueprint {bpFloor?.def.defName} at {bpFloor?.Position} -> {pc.Accepted} ({pc.Reason}), wall {pw.Accepted} ({pw.Reason}), open {pd.Accepted} ({pd.Reason}), top level {top.Accepted} ({top.Reason})");
+            Result("CO placement: under a floor (level 3) and under a built roof it is allowed; a floor blueprint (level 1) or a wall (level 1) in the shaft refuse it; a wall on level 2 is allowed (top set below it); open: allowed; the top level: refused",
+                pa.Accepted && pb.Accepted && bpFloor != null && bpFloor.Spawned && !pc.Accepted && pc.Reason == blocked && pw.Accepted && ElevatorRule.ClearTop(w, map) == 1 && !pw1.Accepted && pw1.Reason == blocked && pd.Accepted && !top.Accepted,
+                $"floor {pa.Accepted} ({pa.Reason}), roof {pb.Accepted} ({pb.Reason}), blueprint {bpFloor?.def.defName} at {bpFloor?.Position} -> {pc.Accepted} ({pc.Reason}), wall L2 {pw.Accepted} ({pw.Reason}, clear to {ElevatorRule.ClearTop(w, map)}), wall L1 {pw1.Accepted} ({pw1.Reason}), open {pd.Accepted} ({pd.Reason}), top level {top.Accepted} ({top.Reason})");
             // an elevator blueprint keeps its shaft open too
             GenConstruct.PlaceBlueprintForBuild(ElevatorDefOf.PZ_Elevator, d, map, Rot4.West, Faction.OfPlayer, null);
             AcceptanceReport inBp = GenConstruct.CanPlaceBlueprintAt(ThingDefOf.Wall, ElL(31, 6, 3, map), Rot4.North, map, stuffDef: ThingDefOf.WoodLog);
@@ -1349,10 +1354,10 @@ namespace ProjectZ.Dev
             elStairs = R2Stairs(map, ElG(8, 10), Rot4.East);
             ElNewBattery(map);
             Thing steel = ThingMaker.MakeThing(ThingDefOf.Steel);
-            steel.stackCount = 120;
+            steel.stackCount = 250;   // (spare: a failed construction, the game's random roll, loses part of what was delivered)
             GenPlace.TryPlaceThing(steel, ElG(22, 10), map, ThingPlaceMode.Near);
             Thing comp = ThingMaker.MakeThing(ThingDefOf.ComponentIndustrial);
-            comp.stackCount = 5;
+            comp.stackCount = 10;
             GenPlace.TryPlaceThing(comp, ElG(22, 12), map, ThingPlaceMode.Near);
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             Teleport(r2P, ElG(22, 14));
@@ -1385,6 +1390,7 @@ namespace ProjectZ.Dev
             SeedTicks("el_pu");
             TickUntil(30000, () =>
             {
+                if (ElG(19, 13).GetThingList(map).FirstOrDefault(x => x is Frame && ElevatorSite.Is(x)) is Frame pf) { elPuFrames = $"frame seen (work done {pf.workDone:0}, steel {pf.resourceContainer.TotalStackCountOfDef(ThingDefOf.Steel)})"; }
                 elE = map.listerThings.ThingsOfDef(ElevatorDefOf.PZ_Elevator).OfType<Building_Elevator>().FirstOrDefault();
                 return elE != null;
             }, "el_pu_check", 30);
@@ -1402,6 +1408,12 @@ namespace ProjectZ.Dev
                 {
                     bool can = site != null && GenConstruct.CanConstruct(site, p, false);
                     s += $"; {p.LabelShort} at {p.Position} job {p.CurJobDef?.defName} drafted {p.Drafted}, can construct {can} ({JobFailReason.Reason})";
+                    if (site != null)
+                    {
+                        JobFailReason.Clear();
+                        bool cc = GenConstruct.CanConstruct(site, p, WorkTypeDefOf.Construction, false, JobDefOf.HaulToContainer);
+                        s += $", touch {GenConstruct.CanTouchTargetFromValidCell(site, p)}, blocking {GenConstruct.FirstBlockingThing(site, p)}, can construct (haul) {cc} ({JobFailReason.Reason}), resources {GenConstruct.CanGetResources_NewTemp(site, p, false)}, reach {p.CanReach(site, PathEndMode.Touch, Danger.Deadly)}, construction prio {p.workSettings.GetPriority(WorkTypeDefOf.Construction)}, forbidden steel {map.listerThings.ThingsOfDef(ThingDefOf.Steel).Count(x => x.IsForbidden(p))}";
+                    }
                     foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefs.Where(w => w.Worker is WorkGiver_Scanner && (w.workType == WorkTypeDefOf.Construction || w.workType == WorkTypeDefOf.Hauling)))
                     {
                         Job j = null;
@@ -1410,7 +1422,12 @@ namespace ProjectZ.Dev
                     }
                 }
                 s += "; things on the cell: " + string.Join(", ", ElG(19, 13).GetThingList(map).Select(x => x.def.defName)) + "; steel left " + map.listerThings.ThingsOfDef(ThingDefOf.Steel).Sum(x => x.stackCount);
-                Info("PU diag: " + s);
+                CellRect near = r2Area.ExpandedBy(3);
+                s += "; steel/components here: " + string.Join(", ", map.listerThings.AllThings.Where(x => (x.def == ThingDefOf.Steel || x.def == ThingDefOf.ComponentIndustrial) && x.Spawned && near.Contains(Levels.Ground(x.Position, map)))
+                    .Select(x => $"{x.def.defName} x{x.stackCount} at {x.Position} L{Levels.LevelOf(x.Position, map)} forbidden {x.IsForbidden(Faction.OfPlayer)}"));
+                s += "; carried: " + string.Join(", ", map.mapPawns.AllPawnsSpawned.Where(p => p.carryTracker?.CarriedThing != null || p.inventory?.innerContainer.Count > 0).Select(p => $"{p.LabelShort} carries {p.carryTracker?.CarriedThing?.LabelShort} inv [{string.Join(",", p.inventory.innerContainer.Select(x => x.LabelShort))}]"));
+                s += "; all steel/components on the map: " + string.Join(", ", map.listerThings.AllThings.Where(x => (x.def == ThingDefOf.Steel || x.def == ThingDefOf.ComponentIndustrial) && x.Spawned && !near.Contains(Levels.Ground(x.Position, map))).Select(x => $"{x.def.defName} x{x.stackCount} at {x.Position}"));
+                Info("PU diag: " + elPuFrames + "; " + s);
             }
             Result("PU placed under a floor: allowed, the floor in the shaft marked for removal, the elevator waits for it; colonists take it up and build the elevator, which links up to level 4 with its shaft roofed",
                 elFlag && elE != null && !ProjectZ.HasFloor(up, map) && elE.LinkedTop == 4 && map.roofGrid.RoofAt(ElG(19, 13)) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(up) == PZDefOf.PZ_StairwellRoof,

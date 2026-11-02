@@ -60,6 +60,10 @@ namespace ProjectZ.Dev
     //                                   a tame animal, visitors, raiders and prisoners kept out, power cut and the emergency
     //                                   ladder, carrying, the shaft kept open and its safety net, a blocked stop, shots, save
     //                                   mid-ride, gone mid-ride, real raids; TestElevator), -projectzfloors=5 -projectzseed=7
+    //                                   elevtop: the elevator's top floor setting (lowered, raised, refused, power cut, a blueprint
+    //                                   under a 4-floor building, save/load and an old save; TestElevTop), -projectzfloors=5 -projectzseed=7
+    //                                   slabhole: a slab taken up under a slab (Q6 (b)): the hole, the floor above stays and is walked
+    //                                   on, the unsupported case collapses (TestSlabHole), -projectzfloors=3 -projectzseed=7
     //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
     //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
     //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
@@ -746,6 +750,16 @@ namespace ProjectZ.Dev
                 StepLadders(map);
                 return;
             }
+            if (stage.StartsWith("hl_"))
+            {
+                StepSlabHole(map);
+                return;
+            }
+            if (stage.StartsWith("et_"))
+            {
+                StepElevTop(map);
+                return;
+            }
             if (stage.StartsWith("el_"))
             {
                 StepElevator(map);
@@ -1209,6 +1223,14 @@ namespace ProjectZ.Dev
                     else if (mode == "ladders" || mode == "ladderpose")
                     {
                         stage = "ld_setup";
+                    }
+                    else if (mode == "slabhole")
+                    {
+                        stage = "hl_setup";
+                    }
+                    else if (mode == "elevtop")
+                    {
+                        stage = "et_setup";
                     }
                     else if (mode == "elevator")
                     {

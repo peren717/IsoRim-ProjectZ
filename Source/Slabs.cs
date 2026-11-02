@@ -12,7 +12,8 @@ namespace ProjectZ
     //   - Remove: the designator, its work giver and job (and god mode) via TerrainGrid.CanRemoveFoundationAt /
     //     RemoveFoundation; a stairwell's floor (StairwellFloor, same designation); the stairs' own landing when they go.
     //     A floor laid on the slab (carpet) is a separate vanilla job first. Half the slab's stuff back, pawns and items moved off.
-    //   - Blocker: what keeps a slab from being taken up (built things on it, stairs landing there, a slab above).
+    //   - Blocker: what keeps a slab from being taken up (built things on it, stairs landing there). A slab above does not
+    //     (Q6 (b), user 2026-11-01): it stays, resting on the roof over the new hole (vanilla roof support, SlabCollapse).
     //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer).
     //   - SlabCollapse: the roof under a slab collapses (vanilla support rules), the slab falls with everything on it.
     public static class Slab
@@ -29,8 +30,9 @@ namespace ProjectZ
         }
 
         // Why a slab can't be taken up now (null: it can). Built things on it (the vanilla foundation rule, any building,
-        // blueprint or frame), the landing of stairs (part of the stairs: it goes with them), a slab right above (from
-        // the top down).
+        // blueprint or frame), the landing of stairs (part of the stairs: it goes with them). A slab right above does not
+        // block (Q6 (b), user 2026-11-01): the floor above keeps resting on the roof over the new hole, held by the game's
+        // roof support (SlabCollapse when that support goes).
         public static string Blocker(IntVec3 c, Map map)
         {
             List<Thing> list = map.thingGrid.ThingsListAtFast(c);
@@ -44,11 +46,6 @@ namespace ProjectZ
             if (StairwellFloor.IsStairsExit(c, map))
             {
                 return "PZ_StairsLandHere".Translate();
-            }
-            IntVec3 up = StairShape.Above(c, map);
-            if (up.IsValid && ProjectZ.HasFloor(up, map))
-            {
-                return "PZ_FloorAboveFirst".Translate();
             }
             return null;
         }

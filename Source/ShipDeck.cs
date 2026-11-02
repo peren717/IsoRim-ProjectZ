@@ -17,7 +17,9 @@ namespace ProjectZ
     //     (PZ_FloorRoof) needs a wall, column or stairs within range below, at placement (planned decks next to it count)
     //     and when built; without one it collapses with the deck. Separately, a deck needs a ship column cell right
     //     below it (placement, and the fall below).
-    //   - Removal: the vanilla remove-foundation tool; refused under a deck ("remove the deck above first"). What stands on
+    //   - Removal: the vanilla remove-foundation tool. An upper deck may go from under a deck (removal design Q6 (b), user
+    //     2026-11-01): the deck above stays over the hole and flies (ShipColumn.Hole); only the ground substructure under a
+    //     deck is refused ("remove the deck above first"), the deck would lose the ship under it. What stands on
     //     a removed deck falls to the floor below (Slab.MoveOff, the gravity rule; the worker stands on a next cell,
     //     WorkSpot), what was laid on it goes.
     //   - Falling: a deck whose cell below lost its substructure falls through the slab collapse (SlabCollapse): its roof
@@ -30,16 +32,49 @@ namespace ProjectZ
 
     // The ship's column (fix 2026-10-17, user rule "a staircase governs only its own next floor"): a cell that counts as
     // part of the ship for anything above it. Gravship substructure or a ship upper deck; with countPlanned also a
-    // blueprint or frame of one; and the stairwell opening of ship stairs (open air over a ramp, built or planned,
-    // ShipStairs.Opening): it flies with the ship, so a deck may go over it as over any deck. Every "is there ship right
+    // blueprint or frame of one; the stairwell opening of ship stairs (open air over a ramp, built or planned,
+    // ShipStairs.Opening): it flies with the ship, so a deck may go over it as over any deck; and a hole left by a deck taken
+    // up under a deck (Hole, Q6 (b)). Every "is there ship right
     // below" question asks this: deck placement and construction, the ship stairs' exit, the deck fall (runtime and at
     // load), the ship set's column walk, and the ordinary-slab and ordinary-stairs refusal over a ship.
     public static class ShipColumn
     {
         public static bool Cell(IntVec3 c, Map map, bool countPlanned = false)
         {
-            return SlabSupport.Gravship(c, map) || ShipStairs.Opening(c, map) || countPlanned && ShipDeck.Planned(c, map);
+            return SlabSupport.Gravship(c, map) || Open(c, map) || countPlanned && ShipDeck.Planned(c, map);
         }
+
+        // An open cell of the ship's column: the opening of ship stairs, or a hole (Hole). Not in the ship set itself (no
+        // foundation; its roof flies with ShipStairs.TakeOpeningRoofs), but the column goes on through it.
+        public static bool Open(IntVec3 c, Map map) => ShipStairs.Opening(c, map) || Hole(c, map);
+
+        // A hole in the ship (removal design Q6 (b), user 2026-11-01): an upper-floor deck taken up under a deck that stays.
+        // An open-air cell with no foundation, a ship deck above it (over more such holes) and the ship's column below it
+        // (over more holes or stairs openings). The deck above keeps resting on the roof over the hole and still flies.
+        public static bool Hole(IntVec3 c, Map map)
+        {
+            if (PZDefOf.PZ_ShipDeck == null || !c.IsValid || !c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || !Air(c, map) || ShipStairs.Opening(c, map))
+            {
+                return false;
+            }
+            IntVec3 u = FloorRoof.Above(c, map);
+            while (u.IsValid && Air(u, map))
+            {
+                u = FloorRoof.Above(u, map);
+            }
+            if (!u.IsValid || !ShipDeck.At(u, map))
+            {
+                return false;
+            }
+            IntVec3 b = FloorRoof.Below(c, map);
+            while (b.IsValid && Air(b, map) && ProjectZ.FloorOf(b, map) >= 1 && !ShipStairs.Opening(b, map))
+            {
+                b = FloorRoof.Below(b, map);
+            }
+            return b.IsValid && (SlabSupport.Gravship(b, map) || ShipStairs.Opening(b, map));
+        }
+
+        private static bool Air(IntVec3 c, Map map) => map.terrainGrid.FoundationAt(c) == null && map.terrainGrid.TopTerrainAt(c) == PZDefOf.PZ_OpenAir;
     }
 
     // A gravship deck foundation: Substructure's tag (TerrainDef.IsSubstructure), or the game's Substructure terrain
@@ -224,9 +259,11 @@ namespace ProjectZ
             return AcceptanceReport.WasAccepted;
         }
 
-        // Why the substructure (or deck) at c can't be removed now: a deck built or planned right above it. Null: no reason.
-        // A deck over a ship stairs ramp (forWell: about to be one) may go though: it becomes the stairs' opening, still
-        // the ship's column for the deck above (ShipColumn).
+        // Why the substructure (or deck) at c can't be removed now. Null: no reason. Ground substructure: a deck built or
+        // planned right above it (the deck would lose the ship's column). An upper deck under a built deck may go (removal
+        // design Q6 (b), user 2026-11-01): the deck above stays over the hole and flies (ShipColumn.Hole); under a deck that
+        // is only planned it may not (the plan waits for a deck or substructure below). A deck over a ship stairs ramp
+        // (forWell: about to be one) may go anyway: it becomes the stairs' opening, still the ship's column (ShipColumn).
         public static string Blocker(IntVec3 c, Map map, bool forWell = false)
         {
             if (!SlabSupport.Gravship(c, map))
@@ -234,7 +271,8 @@ namespace ProjectZ
                 return null;
             }
             IntVec3 up = StairShape.Above(c, map);
-            if (up.IsValid && (At(up, map) || Planned(up, map)) && !forWell && !ShipStairs.OverRamp(c, map))
+            bool upper = ProjectZ.FloorOf(c, map) >= 1;
+            if (up.IsValid && (upper ? !At(up, map) && Planned(up, map) : At(up, map) || Planned(up, map)) && !forWell && !ShipStairs.OverRamp(c, map))
             {
                 return "PZ_DeckAboveFirst".Translate();
             }

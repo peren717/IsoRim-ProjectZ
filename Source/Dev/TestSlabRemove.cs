@@ -13,8 +13,8 @@ namespace ProjectZ.Dev
     // falling. Real flows: the vanilla Remove-foundation designator through the UI pointer on floor 2, colonists doing
     // the jobs with ticks, stairs built and deconstructed by colonists, a wall killed under a slab.
     //   Z1 house H (13 x 10, roofed, slab over its inside, stairs S up to it): the tool reads "Remove upper floor" on
-    //      floor 2 and the vanilla label on the ground; refusals: a wall, a table, a wall blueprint, S's landing, a slab
-    //      with a slab above (floor 3);
+    //      floor 2 and the vanilla label on the ground; refusals: a wall, a table, a wall blueprint, S's landing; a slab
+    //      with a slab above (floor 3) is allowed (Q6 (b), user 2026-11-01);
     //   Z2 a 4 x 5 block dragged at H's east end (one cell carpeted, filth on one, a drafted colonist and steel on two)
     //      plus a slab island nobody reaches: colonists take the block up farthest first (peel order), each from the
     //      cell one step nearer the stairs, carpet then slab; no materials back for a slab (user 2026-10-18); the colonist and
@@ -185,6 +185,12 @@ namespace ProjectZ.Dev
                         IntVec3 g = ProjectZ.GroundCellOf(kv.Value, map);
                         AcceptanceReport r = RefusalAt(zTool, ScreenOf(g, 1), out IntVec3 at);
                         string want = kv.Key == "wall" ? null : kv.Key == "stairs landing" ? "PZ_StairsLandHere".Translate().ToString() : kv.Key == "slab above" ? "PZ_FloorAboveFirst".Translate().ToString() : "MessageCannotRemoveSupportingFoundation".Translate().ToString();
+                        if (kv.Key == "slab above")
+                        {
+                            // (Q6 (b), user 2026-11-01: a slab under a slab may be taken up; the floor above stays)
+                            Result("allowed: a slab with a slab above (floor 3) may be designated (Q6 (b))", r.Accepted && at == kv.Value, $"{at} (want {kv.Value}): accepted {r.Accepted}, '{r.Reason}'");
+                            continue;
+                        }
                         bool ok = !r.Accepted && at == kv.Value && (want == null || r.Reason == want);
                         Result($"refused: {kv.Key}{(want == null ? " (silently, as vanilla for a wall)" : ": '" + want + "'")}", ok, $"{at} (want {kv.Value}): accepted {r.Accepted}, '{r.Reason}'");
                         if (!r.Reason.NullOrEmpty())

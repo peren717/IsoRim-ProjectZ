@@ -34,6 +34,14 @@ namespace ProjectZ
     // The safety net: a shaft filled anyway (dev spawn, a landing ship, another mod) links only the floors up to the first
     // blocked one (checked when a column cell changes, LadderColumnWatch, and every rare tick); open again, it links them
     // again. Breaking it would cost 100 steel for something the player may not even have caused.
+    // Its top floor (user 2026-11-01): a gizmo on the elevator, its blueprint and its frame sets the highest floor it serves
+    // (ElevatorRule.TopGizmo; built: topSetting, a site: ElevatorTops, handed on blueprint -> frame -> building). Above it
+    // the shaft ends: no stops, no reservation, no shaft roof, no removal marks; the cells there are ordinary ones. One rule
+    // for the shaft's extent (ElevatorRule.ShaftTop): built = LinkedTop = min(the set top, a cap, the first blocked level)
+    // (OpenTop); a site = its set top. Lowered: at once (a site's removal marks above it are taken back). Raised: only
+    // when the shaft between is already clear, otherwise refused with a message (nothing is marked for removal). Placed
+    // where the shaft is blocked higher up (but open at least one floor up): the site's top is set to the highest clear
+    // level. Default (and old saves): all the way up (TopAll).
     // Taking it down (K2, as for the last stairs): not while its own floor would be cut off from the map edge without it
     // (the worker stands there); a powered rider gets a platform drawn under it (IsoRim Api 8, ElevatorDraw).
     public class Building_Elevator : Building
@@ -49,6 +57,15 @@ namespace ProjectZ
 
         public static int Relinks;
 
+        // The top floor setting: a level, or TopAll (the map's top level).
+        public const int TopAll = int.MaxValue;
+        private int topSetting = TopAll;
+
+        public int TopSetting => topSetting;
+
+        // The set top as a level above the elevator's.
+        public int SetTop => ElevatorRule.ClampTop(topSetting, baseLevel, Map);
+
         public bool Powered => power == null || power.PowerOn;
 
         public bool LinkedPowered => linkedPowered;
@@ -62,6 +79,7 @@ namespace ProjectZ
         {
             base.ExposeData();
             Scribe_Values.Look(ref linkedPowered, "linkedPowered", false);
+            Scribe_Values.Look(ref topSetting, "topSetting", TopAll);
         }
 
         public override void SpawnSetup(Map map, bool respawningAfterLoad)
@@ -71,6 +89,10 @@ namespace ProjectZ
             baseLevel = Levels.LevelOf(Position, map);
             IntVec3 door = Position + Rotation.FacingCell;
             baseStop = door.InBounds(map) && ProjectZ.SameBand(door, Position, map) ? door : IntVec3.Invalid;
+            if (!respawningAfterLoad && ElevatorTops.TakeHandoff(Position, map, out int handed))
+            {
+                topSetting = handed;   // its frame's setting
+            }
             ready = true;
             // (loaded: the power net says its state on its first tick; until then the links stay as they were saved)
             Relink(respawningAfterLoad ? linkedPowered : Powered);
@@ -122,13 +144,14 @@ namespace ProjectZ
             }
         }
 
-        // The highest level the shaft is open to: no roof under a shaft cell, no floor or building in it.
+        // The highest level the shaft is open to, up to its set top: no roof under a shaft cell, no floor or building in it.
         public int OpenTop()
         {
             Map map = Map;
             IntVec3 g = Levels.Ground(Position, map);
             int top = baseLevel;
-            for (int L = baseLevel + 1; L <= Levels.Max(map); L++)
+            int max = Mathf.Min(Levels.Max(map), SetTop);
+            for (int L = baseLevel + 1; L <= max; L++)
             {
                 IntVec3 below = Levels.Cell(g, L - 1, map);
                 IntVec3 c = Levels.Cell(g, L, map);
@@ -139,6 +162,29 @@ namespace ProjectZ
                 top = L;
             }
             return top;
+        }
+
+        // The top floor set from the gizmo (ElevatorRule.TrySetTop checked it): linked again at once.
+        public void SetTopSetting(int top)
+        {
+            topSetting = top;
+            if (ready && Spawned)
+            {
+                Relink(linkedPowered);
+            }
+        }
+
+        public override IEnumerable<Gizmo> GetGizmos()
+        {
+            foreach (Gizmo g in base.GetGizmos())
+            {
+                yield return g;
+            }
+            Gizmo top = ElevatorRule.TopGizmo(this);
+            if (top != null)
+            {
+                yield return top;
+            }
         }
 
         // The stop on level L (Invalid without one).
@@ -218,6 +264,28 @@ namespace ProjectZ
         // shaft's own, ColumnRoof).
         public static bool CapRoof(RoofDef r) => r != null && r != PZDefOf.PZ_StairwellRoof && (r == PZDefOf.PZ_FloorRoof || r.isNatural || r.isThickRoof);
 
+        // A top setting as a level: TopAll or anything past the map's top = the top level; never below the one above b.
+        public static int ClampTop(int setting, int b, Map map)
+        {
+            int max = Levels.Max(map);
+            return setting >= max ? max : Mathf.Clamp(setting, Mathf.Min(b + 1, max), max);
+        }
+
+        // The set top of an elevator, its blueprint or frame (a level).
+        public static int SetTopOf(Thing t)
+        {
+            Map map = t.MapHeld;
+            if (map == null)
+            {
+                return 0;
+            }
+            return t is Building_Elevator e ? e.SetTop : ClampTop(ElevatorTops.Of(t), Levels.LevelOf(t.Position, map), map);
+        }
+
+        // THE extent of a shaft (every reader goes through this): a built elevator's = its linked top (the set top, a cap,
+        // the first blocked level); a blueprint's or frame's = its set top.
+        public static int ShaftTop(Thing t) => t is Building_Elevator e && e.Ready ? e.LinkedTop : SetTopOf(t);
+
         public static bool IsElevatorThing(Thing t) => t != null && ElevatorDefOf.PZ_Elevator != null && (t.def == ElevatorDefOf.PZ_Elevator || t.def.entityDefToBuild == ElevatorDefOf.PZ_Elevator);
 
         // Who may ride (user 2026-10-20): whoever may open the owner's doors, by the game's door rule
@@ -294,7 +362,7 @@ namespace ProjectZ
             return In(built, g, L, max, plane, map) ?? In(bps, g, L, max, plane, map) ?? In(frames, g, L, max, plane, map);
         }
 
-        // (a built elevator's shaft ends at its cap: linkedTop; a site's runs to the top level)
+        // (ShaftTop: a built elevator's shaft ends at its linked top; a site's at its set top)
         private static Thing In(List<Thing> list, IntVec3 g, int L, int maxLevel, bool plane, Map map)
         {
             if (list == null)
@@ -309,7 +377,7 @@ namespace ProjectZ
                     continue;
                 }
                 int b = Levels.LevelOf(t.Position, map);
-                int max = t is Building_Elevator e && e.Ready ? e.LinkedTop : maxLevel;
+                int max = ShaftTop(t);
                 if (plane ? L >= b && L < max : L > b && L <= max)
                 {
                     return t;
@@ -318,52 +386,141 @@ namespace ProjectZ
             return null;
         }
 
-        // The shaft over loc can be opened all the way up: in its cells nothing but floors that can be taken up (no
-        // building, blueprint, frame or item, no other ladder's or elevator's column), no rock roof under them (a built
-        // roof becomes the shaft's own). Owners standing at loc (this elevator's own blueprint or frame) do not count.
-        public static bool ShaftClear(IntVec3 loc, Map map)
+        // The highest level the shaft over loc can be opened to (loc's own level if not even the one above): in its cells
+        // nothing but floors that can be taken up (no building, blueprint, frame or item, no other ladder's or elevator's
+        // column), no rock roof under them (a built roof becomes the shaft's own). Owners standing at loc (this elevator's
+        // own blueprint or frame) do not count.
+        public static int ClearTop(IntVec3 loc, Map map)
         {
             IntVec3 g = Levels.Ground(loc, map);
             int b = Levels.LevelOf(loc, map);
             int max = Levels.Max(map);
-            for (int L = b; L <= max; L++)
+            int top = b;
+            for (int L = b + 1; L <= max; L++)
             {
+                IntVec3 below = Levels.Cell(g, L - 1, map);
                 IntVec3 c = Levels.Cell(g, L, map);
-                if (!c.IsValid || !c.InBounds(map))
+                if (!c.IsValid || !c.InBounds(map) || !below.IsValid || !below.InBounds(map))
                 {
-                    return false;
+                    break;
                 }
-                if (L > b)
+                RoofDef r = map.roofGrid.RoofAt(below);
+                if (r != null && (r.isNatural || r.isThickRoof) || OtherOwner(below, map, true, loc))
                 {
-                    if (ProjectZ.HasFloor(c, map) ? !StairwellFloor.CanClear(c, map) : LadderColumn.Busy(c, map))
-                    {
-                        return false;
-                    }
-                    Thing o = LadderColumn.Owner(c, map, false);
-                    if (o != null && o.Position != loc)
-                    {
-                        return false;
-                    }
+                    break;
                 }
-                if (L < max)
+                // (a floor: one that can be taken up; a floor above it stays, resting on the roof over the hole, Slab.Blocker)
+                if ((ProjectZ.HasFloor(c, map) ? !StairwellFloor.CanClear(c, map) : LadderColumn.Busy(c, map)) || OtherOwner(c, map, false, loc))
                 {
-                    RoofDef r = map.roofGrid.RoofAt(c);
-                    if (r != null && (r.isNatural || r.isThickRoof))
-                    {
-                        return false;
-                    }
-                    Thing o = LadderColumn.Owner(c, map, true);
-                    if (o != null && o.Position != loc)
-                    {
-                        return false;
-                    }
+                    break;
                 }
+                top = L;
+            }
+            return top;
+        }
+
+        // The shaft over loc can be opened up to level top (the top level by default).
+        public static bool ShaftClear(IntVec3 loc, Map map, int top = int.MaxValue) => ClearTop(loc, map) >= Mathf.Min(top, Levels.Max(map));
+
+        private static bool OtherOwner(IntVec3 c, Map map, bool plane, IntVec3 loc)
+        {
+            Thing o = LadderColumn.Owner(c, map, plane);
+            return o != null && o.Position != loc;
+        }
+
+        // Raising t's shaft from level 'from' to 'to' needs nothing taken away: no floor, building, blueprint, frame or
+        // item in the cells, no floor's or rock roof under them, no other column. The first blocked level, or -1.
+        public static int RaiseBlocked(Thing t, int from, int to)
+        {
+            Map map = t.MapHeld;
+            IntVec3 g = Levels.Ground(t.Position, map);
+            for (int L = from + 1; L <= to; L++)
+            {
+                IntVec3 below = Levels.Cell(g, L - 1, map);
+                IntVec3 c = Levels.Cell(g, L, map);
+                if (!c.IsValid || !c.InBounds(map) || !below.IsValid || !below.InBounds(map) || CapRoof(map.roofGrid.RoofAt(below))
+                    || LadderColumn.Busy(c, map) || OtherOwner(c, map, false, t.Position) || OtherOwner(below, map, true, t.Position))
+                {
+                    return L;
+                }
+            }
+            return -1;
+        }
+
+        // (tests) refusals and changes made
+        public static int TopRefused, TopChanged;
+
+        // The player picks top level L for t (an elevator, its blueprint or frame). Lowered: at once (a site's removal marks
+        // above it taken back). Raised over its present extent: only if nothing is in the way, else refused with a message.
+        public static bool TrySetTop(Thing t, int L)
+        {
+            Map map = t.MapHeld;
+            if (map == null || ProjectZ.Annex(map) == null || !(t is Building_Elevator || ElevatorSite.Is(t)))
+            {
+                return false;
+            }
+            int b = Levels.LevelOf(t.Position, map);
+            int setting = L >= Levels.Max(map) ? Building_Elevator.TopAll : L;
+            int want = ClampTop(setting, b, map);
+            int cur = ShaftTop(t);
+            if (want > cur && RaiseBlocked(t, cur, want) >= 0)
+            {
+                TopRefused++;
+                Messages.Message("PZ_ElevatorTopBlocked".Translate(FloorView.Label(want)), new TargetInfo(t.Position, map), MessageTypeDefOf.RejectInput, historical: false);
+                return false;
+            }
+            TopChanged++;
+            if (t is Building_Elevator e)
+            {
+                e.SetTopSetting(setting);
+            }
+            else
+            {
+                ElevatorTops.Set(t, setting);
+                ElevatorSite.UnmarkAbove(t, map, want);
             }
             return true;
         }
+
+        // The top floor button (the player's elevator, its blueprint or frame, on a map with floors).
+        public static Gizmo TopGizmo(Thing t)
+        {
+            Map map = t?.Map;
+            if (map == null || ProjectZ.Annex(map) == null || t.Faction != Faction.OfPlayer)
+            {
+                return null;
+            }
+            int b = Levels.LevelOf(t.Position, map);
+            int max = Levels.Max(map);
+            if (b == Levels.None || b >= max)
+            {
+                return null;
+            }
+            return new Command_Action
+            {
+                defaultLabel = "PZ_ElevatorTop".Translate(FloorView.Label(SetTopOf(t))),
+                defaultDesc = "PZ_ElevatorTopDesc".Translate(),
+                icon = ElevatorDefOf.PZ_Elevator.uiIcon,
+                groupable = false,
+                action = () => Find.WindowStack.Add(new FloatMenu(TopOptions(t, b, max))),
+            };
+        }
+
+        // The top floor menu: the floors from the one above the elevator up to the top.
+        public static List<FloatMenuOption> TopOptions(Thing t, int b, int max)
+        {
+            List<FloatMenuOption> opts = new List<FloatMenuOption>();
+            for (int L = b + 1; L <= max; L++)
+            {
+                int level = L;
+                opts.Add(new FloatMenuOption(FloorView.Label(level), () => TrySetTop(t, level)));
+            }
+            return opts;
+        }
     }
 
-    // Placing an elevator: a level above, its door side on the map, and the shaft open all the way up (ElevatorRule.ShaftClear).
+    // Placing an elevator: a level above, its door side on the map, and the shaft open at least one floor up
+    // (ElevatorRule.ClearTop; blocked higher up, the site's top is set below the block: ElevatorSite_Spawn_Patch).
     public class PlaceWorker_Elevator : PlaceWorker
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
@@ -378,7 +535,7 @@ namespace ProjectZ
             {
                 return "PZ_ElevatorNoExit".Translate();
             }
-            if (!ElevatorRule.ShaftClear(loc, map))
+            if (ElevatorRule.ClearTop(loc, map) <= L)
             {
                 return "PZ_ElevatorShaftBlocked".Translate();
             }
@@ -564,12 +721,14 @@ namespace ProjectZ
     {
         public static bool Is(Thing t) => t != null && (t is Blueprint || t is Frame) && t.def.entityDefToBuild == ElevatorDefOf.PZ_Elevator && ElevatorDefOf.PZ_Elevator != null;
 
+        // (up to its set top, ElevatorRule.ShaftTop)
         private static IEnumerable<IntVec3> Shaft(Thing site)
         {
             Map map = site.Map;
             IntVec3 g = Levels.Ground(site.Position, map);
             int b = Levels.LevelOf(site.Position, map);
-            for (int L = b + 1; L <= Levels.Max(map); L++)
+            int top = ElevatorRule.ShaftTop(site);
+            for (int L = b + 1; L <= top; L++)
             {
                 IntVec3 c = Levels.Cell(g, L, map);
                 if (c.IsValid && c.InBounds(map))
@@ -593,7 +752,10 @@ namespace ProjectZ
             }
         }
 
-        public static void Unmark(Thing site, Map map)
+        public static void Unmark(Thing site, Map map) => UnmarkAbove(site, map, Levels.LevelOf(site.Position, map));
+
+        // The removal marks the site added above level top taken back (its top lowered, or cancelled: all).
+        public static void UnmarkAbove(Thing site, Map map, int top)
         {
             StairwellMarks marks = map.GetComponent<StairwellMarks>();
             if (marks == null || marks.cells.Count == 0)
@@ -601,8 +763,7 @@ namespace ProjectZ
                 return;
             }
             IntVec3 g = Levels.Ground(site.Position, map);
-            int b = Levels.LevelOf(site.Position, map);
-            for (int L = b + 1; L <= Levels.Max(map); L++)
+            for (int L = top + 1; L <= Levels.Max(map); L++)
             {
                 IntVec3 c = Levels.Cell(g, L, map);
                 if (c.IsValid && marks.cells.Remove(c))
@@ -630,15 +791,40 @@ namespace ProjectZ
         }
     }
 
+    // A new site: its top handed on from what it replaces (blueprint -> frame, a failed frame -> blueprint), or, a fresh
+    // blueprint whose shaft is blocked higher up, set to the highest clear level (said once); then its marks.
     [HarmonyPatch(typeof(Thing), nameof(Thing.SpawnSetup))]
     public static class ElevatorSite_Spawn_Patch
     {
+        private static float lastShown = -10f;
+        public static int AutoTops;
+
         public static void Postfix(Thing __instance, bool respawningAfterLoad)
         {
-            if (!respawningAfterLoad && ElevatorSite.Is(__instance) && ProjectZ.Annex(__instance.Map) != null)
+            if (respawningAfterLoad || !ElevatorSite.Is(__instance) || ProjectZ.Annex(__instance.Map) == null)
             {
-                ElevatorSite.Mark(__instance);
+                return;
             }
+            Map map = __instance.Map;
+            if (ElevatorTops.TakeHandoff(__instance.Position, map, out int handed))
+            {
+                ElevatorTops.Set(__instance, handed);
+            }
+            else if (__instance is Blueprint)
+            {
+                int clear = ElevatorRule.ClearTop(__instance.Position, map);
+                if (clear < Levels.Max(map) && clear > Levels.LevelOf(__instance.Position, map))
+                {
+                    ElevatorTops.Set(__instance, clear);
+                    AutoTops++;
+                    if (__instance.Faction == Faction.OfPlayer && Time.realtimeSinceStartup - lastShown > 2f)
+                    {
+                        lastShown = Time.realtimeSinceStartup;
+                        Messages.Message("PZ_ElevatorTopAuto".Translate(FloorView.Label(clear)), new TargetInfo(__instance.Position, map), MessageTypeDefOf.CautionInput, historical: false);
+                    }
+                }
+            }
+            ElevatorSite.Mark(__instance);
         }
     }
 
@@ -647,10 +833,139 @@ namespace ProjectZ
     {
         public static void Prefix(Thing __instance, DestroyMode mode)
         {
-            if (mode == DestroyMode.Cancel && ElevatorSite.Is(__instance) && __instance.Map != null)
+            if (!ElevatorSite.Is(__instance) || __instance.Map == null)
+            {
+                return;
+            }
+            if (mode == DestroyMode.Cancel)
             {
                 ElevatorSite.Unmark(__instance, __instance.Map);
             }
+            ElevatorTops.Forget(__instance);
+        }
+    }
+
+    // The top setting handed on: blueprint -> frame, frame -> elevator, a failed frame -> blueprint (the successor spawns
+    // at the same cell inside these calls: ElevatorTops.TakeHandoff).
+    [HarmonyPatch(typeof(Blueprint), nameof(Blueprint.TryReplaceWithSolidThing))]
+    public static class ElevatorTop_Replace_Patch
+    {
+        public static void Prefix(Blueprint __instance) => ElevatorTops.Offer(__instance);
+
+        public static void Finalizer() => ElevatorTops.ClearOffer();
+    }
+
+    [HarmonyPatch(typeof(Frame), nameof(Frame.CompleteConstruction))]
+    public static class ElevatorTop_Complete_Patch
+    {
+        public static void Prefix(Frame __instance) => ElevatorTops.Offer(__instance);
+
+        public static void Finalizer() => ElevatorTops.ClearOffer();
+    }
+
+    [HarmonyPatch(typeof(Frame), nameof(Frame.FailConstruction))]
+    public static class ElevatorTop_Fail_Patch
+    {
+        public static void Prefix(Frame __instance) => ElevatorTops.Offer(__instance);
+
+        public static void Finalizer() => ElevatorTops.ClearOffer();
+    }
+
+    // The top floor button on the elevator's blueprint and frame.
+    [HarmonyPatch]
+    public static class ElevatorTop_SiteGizmo_Patch
+    {
+        public static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(Blueprint), nameof(Blueprint.GetGizmos));
+            yield return AccessTools.Method(typeof(Frame), nameof(Frame.GetGizmos));
+        }
+
+        public static IEnumerable<Gizmo> Postfix(IEnumerable<Gizmo> __result, Thing __instance)
+        {
+            foreach (Gizmo g in __result)
+            {
+                yield return g;
+            }
+            if (ElevatorSite.Is(__instance) && ElevatorRule.TopGizmo(__instance) is Gizmo top)
+            {
+                yield return top;
+            }
+        }
+    }
+
+    // The top floor set on an elevator's blueprint or frame (thing id -> level; absent = all the way up), and the hand-on
+    // from a site to its successor.
+    public class ElevatorTops : MapComponent
+    {
+        private Dictionary<int, int> tops = new Dictionary<int, int>();
+
+        public ElevatorTops(Map map) : base(map)
+        {
+        }
+
+        public override void ExposeData()
+        {
+            base.ExposeData();
+            Scribe_Collections.Look(ref tops, "tops", LookMode.Value, LookMode.Value);
+            if (tops == null)
+            {
+                tops = new Dictionary<int, int>();
+            }
+        }
+
+        public static int Of(Thing t)
+        {
+            ElevatorTops c = t?.MapHeld?.GetComponent<ElevatorTops>();
+            return c != null && c.tops.TryGetValue(t.thingIDNumber, out int v) ? v : Building_Elevator.TopAll;
+        }
+
+        public static void Set(Thing t, int top)
+        {
+            ElevatorTops c = t?.MapHeld?.GetComponent<ElevatorTops>();
+            if (c == null)
+            {
+                return;
+            }
+            if (top == Building_Elevator.TopAll)
+            {
+                c.tops.Remove(t.thingIDNumber);
+            }
+            else
+            {
+                c.tops[t.thingIDNumber] = top;
+            }
+        }
+
+        public static void Forget(Thing t) => t?.MapHeld?.GetComponent<ElevatorTops>()?.tops.Remove(t.thingIDNumber);
+
+        private static Map offerMap;
+        private static IntVec3 offerAt;
+        private static int offerTop;
+
+        public static void Offer(Thing t)
+        {
+            offerMap = null;
+            if ((t is Building_Elevator || ElevatorSite.Is(t)) && t.Spawned)
+            {
+                offerMap = t.Map;
+                offerAt = t.Position;
+                offerTop = t is Building_Elevator e ? e.TopSetting : Of(t);
+            }
+        }
+
+        public static void ClearOffer() => offerMap = null;
+
+        public static bool TakeHandoff(IntVec3 at, Map map, out int top)
+        {
+            top = Building_Elevator.TopAll;
+            if (offerMap == null || offerMap != map || offerAt != at)
+            {
+                return false;
+            }
+            top = offerTop;
+            offerMap = null;
+            return true;
         }
     }
 
