@@ -560,26 +560,56 @@ namespace ProjectZ
             return false;
         }
 
-        // The roof a cell really gets when 'def' is written to it.
+        // c is an opening of a link or a shaft: a stairs ramp, a mined shaft under a covered top, an elevator's or a
+        // ladder's column (ColumnRoof).
+        public static bool Well(IntVec3 c, Map map)
+        {
+            return StairThingAt(c, map) || Shaft.Covered(c, map) || ColumnRoof.Open(c, map);
+        }
+
+        // The roof a cell really gets when 'def' is written to it (the one column-roof rule; a cell under a floor gets the
+        // floor's roof instead, FloorRoof): no roof under a covered column is the stairwell roof (an atrium, Atrium.cs);
+        // any built or natural roof in an opening is the stairwell roof; the stairwell roof outside an opening stays the
+        // atrium's under a covered column, else it is an ordinary built roof again.
         public static RoofDef RoofFor(IntVec3 c, Map map, RoofDef def)
         {
-            if (def == null || def == PZDefOf.PZ_FloorRoof)
+            if (def == PZDefOf.PZ_FloorRoof)
             {
                 return def;
+            }
+            if (def == null)
+            {
+                return Atrium.Covered(c, map) ? PZDefOf.PZ_StairwellRoof : null;
             }
             // (one rule: an opening is a stairs thing or a mined shaft under a covered top; a hole to the sky keeps a roof
             // built over it, Shaft.ApplyRoof)
             // (an elevator shaft and a ladder column too: ColumnRoof)
-            bool well = StairThingAt(c, map) || Shaft.Covered(c, map) || ColumnRoof.Open(c, map);
-            if (well && def != PZDefOf.PZ_StairwellRoof)
+            if (Well(c, map))
             {
                 return PZDefOf.PZ_StairwellRoof;
             }
-            if (!well && def == PZDefOf.PZ_StairwellRoof)
+            if (def == PZDefOf.PZ_StairwellRoof)
             {
-                return RoofDefOf.RoofConstructed;
+                return Atrium.Covered(c, map) ? def : RoofDefOf.RoofConstructed;
             }
             return def;
+        }
+
+        // Built stairs gone: the roof their ramp turned into the stairwell roof is an ordinary built roof again, also under
+        // a covered column (it was a roof before the stairs came; the atrium rule is for roofs taken away).
+        public static void Closed(Map map, CellRect ramp)
+        {
+            if (map == null || ProjectZ.Annex(map) == null)
+            {
+                return;
+            }
+            foreach (IntVec3 c in ramp)
+            {
+                if (c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof && !FloorRoof.FloorAbove(c, map) && !Well(c, map))
+                {
+                    map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
+                }
+            }
         }
 
         public static void Refresh(Map map, CellRect rect)
@@ -640,6 +670,11 @@ namespace ProjectZ
         {
             if (__state != null)
             {
+                if (StairDefs.Is(__instance.def))
+                {
+                    // (built stairs only: a site cancelled over an atrium leaves it open)
+                    Stairwell.Closed(__state, StairShape.RampRect(__instance.Position, __instance.Rotation));
+                }
                 Stairwell.Refresh(__state, __instance.OccupiedRect());
                 StairwellFloor.Unmark(__state, StairShape.RampRect(__instance.Position, __instance.Rotation));
                 if (ShipStairs.Is(__instance.def) || ShipStairs.Is(__instance.def.entityDefToBuild))

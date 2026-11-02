@@ -235,6 +235,7 @@ namespace ProjectZ
             {
                 JumpGrid.ColumnChanged(c, map);
                 ReachFogMap.ColumnChanged(c, map);
+                Atrium.Recheck(c, map);   // (the cell below: cover come or gone, Atrium.cs)
                 if (__instance.Roofed(c))
                 {
                     LadderColumn.Changed(c, map, true);   // (a roof over a ladder's column: the safety net)

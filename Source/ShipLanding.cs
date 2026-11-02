@@ -147,10 +147,6 @@ namespace ProjectZ
         public static void Postfix(Designator_MoveGravship __instance, IntVec3 loc, List<IntVec3> validCells, List<IntVec3> invalidCells, ref AcceptanceReport __result)
         {
             bool lists = validCells != null || invalidCells != null;
-            if (!__result.Accepted && !lists)
-            {
-                return;
-            }
             Gravship g = __instance.marker?.gravship;
             Map map = Find.CurrentMap;
             if (g == null || map == null || ShipLanding.Height(g) == 0)
@@ -164,7 +160,8 @@ namespace ProjectZ
             {
                 return;
             }
-            if (__result.Accepted)
+            // (a floor above is the reason that counts: vanilla's "blocked by roof" there is the atrium roof under it, Atrium.cs)
+            if (__result.Accepted || r.Reason == "PZ_ShipFloorAbove".Translate())
             {
                 __result = r;
             }

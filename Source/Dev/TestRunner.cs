@@ -64,6 +64,9 @@ namespace ProjectZ.Dev
     //                                   under a 4-floor building, save/load and an old save; TestElevTop), -projectzfloors=5 -projectzseed=7
     //                                   slabhole: a slab taken up under a slab (Q6 (b)): the hole, the floor above stays and is walked
     //                                   on, the unsupported case collapses (TestSlabHole), -projectzfloors=3 -projectzseed=7
+    //                                   atrium: a roof removed under a covered column is the invisible stairwell roof (indoors, no
+    //                                   rain), back to the sky when the cover goes; build roof, save/load, a cave (TestAtrium),
+    //                                   -projectzfloors=3 -projectzseed=7
     //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
     //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
     //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
@@ -755,6 +758,11 @@ namespace ProjectZ.Dev
                 StepSlabHole(map);
                 return;
             }
+            if (stage.StartsWith("at_"))
+            {
+                StepAtrium(map);
+                return;
+            }
             if (stage.StartsWith("et_"))
             {
                 StepElevTop(map);
@@ -1223,6 +1231,10 @@ namespace ProjectZ.Dev
                     else if (mode == "ladders" || mode == "ladderpose")
                     {
                         stage = "ld_setup";
+                    }
+                    else if (mode == "atrium")
+                    {
+                        stage = "at_setup";
                     }
                     else if (mode == "slabhole")
                     {
