@@ -15,8 +15,10 @@ namespace ProjectZ
     //   - its cap: a floor laid in the shaft of a built elevator ends it there (it serves the floors below; the placement
     //     says so, ElevatorCap); the floor taken up again, it reaches up again (the roof the floor leaves under it becomes
     //     the shaft's own roof, ColumnRoof via Stairwell.RoofFor). A roof cannot cap it: the shaft is roofed already;
-    //   - roofed: every shaft cell from the elevator's to the top one gets the invisible stairwell roof (ColumnRoof): no
-    //     rain or snow in it, rooms beside it stay indoors, falls, shots and the link pass (Column.OpenAbove);
+    //   - roofed: the roofs under the shaft's cells (the elevator's level up to the one under its top) are the invisible
+    //     stairwell roof (ColumnRoof, ElevatorRule.RoofTop): no rain or snow in it, rooms beside it stay indoors, falls,
+    //     shots and the link pass (Column.OpenAbove), and so is the top cell's own, except under a top lowered by the
+    //     setting: there it is an ordinary roof cell (the player may roof it or lay the next floor over it);
     //   - placed under floors: they are marked for removal like a stairwell's (ElevatorSite), and the elevator waits for
     //     them; a floor that cannot be taken up (something on it), a building, rock or a rock roof in the way: refused.
     //
@@ -226,10 +228,11 @@ namespace ProjectZ
             }
             ProjectZ.DebugLog($"{this} at {Position}: {(on ? "powered" : "no power (a ladder)")}, shaft open to level {top}, {now.Count} link(s)");
             sg.Replace(this, now);
-            // the shaft's roofs up to its top; none over its cells above a cap
+            // the shaft's own roofs (ElevatorRule.RoofTop); none above them
             IntVec3 g = Levels.Ground(Position, map);
-            ColumnRoof.Apply(map, g, baseLevel, top);
-            ColumnRoof.Clear(map, g, top + 1, Levels.Max(map));
+            int roofTop = ElevatorRule.RoofTop(top, SetTop, map);
+            ColumnRoof.Apply(map, g, baseLevel, roofTop);
+            ColumnRoof.Clear(map, g, roofTop + 1, Levels.Max(map));
         }
 
         public override string GetInspectString()
@@ -285,6 +288,13 @@ namespace ProjectZ
         // THE extent of a shaft (every reader goes through this): a built elevator's = its linked top (the set top, a cap,
         // the first blocked level); a blueprint's or frame's = its set top.
         public static int ShaftTop(Thing t) => t is Building_Elevator e && e.Ready ? e.LinkedTop : SetTopOf(t);
+
+        // The highest level whose roof is the shaft's own (ColumnRoof) for a shaft open up to level top with set top
+        // setTop: the roofs under its cells (the planes, as ShaftOwner's), and the top cell's own unless the shaft ends
+        // there by its setting below the map's top. There the top cell's roof is an ordinary one: a roof the player builds
+        // stays a roof, a floor may be laid over it, raising is refused while either is there. (Ended lower by a cap or a
+        // block, the top cell's roof stays the shaft's: the floor taken up, its roof is the shaft's at once.)
+        public static int RoofTop(int top, int setTop, Map map) => top < setTop || top >= Levels.Max(map) ? top : top - 1;
 
         public static bool IsElevatorThing(Thing t) => t != null && ElevatorDefOf.PZ_Elevator != null && (t.def == ElevatorDefOf.PZ_Elevator || t.def.entityDefToBuild == ElevatorDefOf.PZ_Elevator);
 
@@ -429,7 +439,8 @@ namespace ProjectZ
         }
 
         // Raising t's shaft from level 'from' to 'to' needs nothing taken away: no floor, building, blueprint, frame or
-        // item in the cells, no floor's or rock roof under them, no other column. The first blocked level, or -1.
+        // item in the cells, no roof under them but the shaft's own (a player's roof over the old top, a floor's, rock),
+        // no other column. The first blocked level, or -1.
         public static int RaiseBlocked(Thing t, int from, int to)
         {
             Map map = t.MapHeld;
@@ -438,7 +449,7 @@ namespace ProjectZ
             {
                 IntVec3 below = Levels.Cell(g, L - 1, map);
                 IntVec3 c = Levels.Cell(g, L, map);
-                if (!c.IsValid || !c.InBounds(map) || !below.IsValid || !below.InBounds(map) || CapRoof(map.roofGrid.RoofAt(below))
+                if (!c.IsValid || !c.InBounds(map) || !below.IsValid || !below.InBounds(map) || ColumnRoof.Blocks(below, map)
                     || LadderColumn.Busy(c, map) || OtherOwner(c, map, false, t.Position) || OtherOwner(below, map, true, t.Position))
                 {
                     return L;
@@ -567,8 +578,8 @@ namespace ProjectZ
 
 namespace ProjectZ
 {
-    // The roof of an open column (user 2026-10-20, second round): the cells of a built elevator's shaft (its level up to
-    // its cap or the top level) and of a built ladder's column (the foot's level up to the top's) carry the invisible
+    // The roof of an open column (user 2026-10-20, second round): the cells of a built elevator's shaft (its own roofs,
+    // ElevatorRule.RoofTop) and of a built ladder's column (the foot's level up to the top's) carry the invisible
     // stairwell roof (PZ_StairwellRoof): rooms beside them stay indoors, no rain or snow falls in, and the column stays
     // open for the link, falls and shots (Column.OpenAbove). Stairwell.RoofFor makes any roof written there this one,
     // so a floor taken up from the column leaves no ordinary roof behind; set when the column opens, taken away when it
@@ -594,7 +605,7 @@ namespace ProjectZ
                 List<Thing> els = map.listerThings.ThingsOfDef(d);
                 for (int i = 0; i < els.Count; i++)
                 {
-                    if (els[i] is Building_Elevator e && e.Ready && e.Spawned && Levels.Ground(e.Position, map) == g && L >= e.baseLevel && L <= e.LinkedTop)
+                    if (els[i] is Building_Elevator e && e.Ready && e.Spawned && Levels.Ground(e.Position, map) == g && L >= e.baseLevel && L <= ElevatorRule.RoofTop(e.LinkedTop, e.SetTop, map))
                     {
                         return true;
                     }

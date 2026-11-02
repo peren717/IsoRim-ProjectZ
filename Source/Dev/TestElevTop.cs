@@ -20,19 +20,25 @@ namespace ProjectZ.Dev
     //       an item can lie on it; level 4 unreachable, level 3 reached over stairs only (rides end at level 2); shots
     //       (3D, gizmo, menu)
     //   RB  raising it to the top while that floor is there: refused with the message, setting unchanged (shot)
-    //   RA  a colonist takes the floor up; raised to the top: 10 links, the shaft roofed again, a ride to level 4
+    //   RA  a colonist takes the floor up; the ordinary roof it leaves over the top cell still refuses raising, a colonist
+    //       takes it off; raised to the top: 10 links, the shaft roofed again, a ride to level 4
     //   PW  lowered to level 2, power cut: the emergency ladder links only up to level 2; a colonist climbs to level 2
     //   BP  a blueprint under a 4-floor building: all floors in the shaft marked, its gizmo set to Floor 2 takes the marks
     //       on levels 2-4 back; a second blueprint under a wall on level 3 gets top level 2 by itself (cancelled: marks
     //       gone); colonists take the level-1 floor up and build it (the frame carries the setting and its gizmo): it
     //       serves levels 0-1, the floors above stay, a colonist rides it
+    //   RF  (user 2026-11-02) top lowered to Floor 3: a colonist builds the roof over the shaft's top cell on level 2 (a
+    //       real BuildRoof job, an ordinary roof); a ride to level 2; raising refused while it is there; a colonist takes
+    //       it off, raised: the shaft's own roof up to the map's top again (shots of the roofed top)
+    //   BR  the same set on a blueprint: roofed before it is built, raising the blueprint refused; built with the setting,
+    //       the roof stays, a ride to level 2, raising refused
     //   SV  saved and loaded: the elevator's setting and a blueprint's kept; OLD the same save without the new field and
     //       component (as from before): all the way up
     public static partial class TestRunner
     {
         private static Thing etBp;
         private static int etInt, etInt2, etAuto;
-        private static bool etFrameSeen, etFrameGizmo;
+        private static bool etFrameSeen, etFrameGizmo, etRoofJob;
         private static int etFrameTop = -99;
         private static FloatMenu etMenu;
 
@@ -121,11 +127,12 @@ namespace ProjectZ.Dev
                     IntVec3 s3 = ElL(19, 13, 3, map), s4 = ElL(19, 13, 4, map), s2 = ElL(19, 13, 2, map);
                     List<VLink> ls = StairGrid.For(map).links.Where(l => l.thing == elE).ToList();
                     Command_Action g2 = EtGizmo(elE);
-                    Result("LO picked Floor 3: the elevator serves levels 0-2 (3 links), the shaft's reservation and roof end at level 2 (lid roof on level 2, none above), the button says Floor 3",
+                    IntVec3 s1 = ElL(19, 13, 1, map);
+                    Result("LO picked Floor 3: the elevator serves levels 0-2 (3 links), the shaft's reservation ends at level 2, its own roof under level 2 (none over the top cell on level 2: an ordinary cell, none above), the button says Floor 3",
                         ElevatorRule.TopChanged == etInt + 1 && elE.TopSetting == 2 && elE.LinkedTop == 2 && ls.Count == 3 && ls.All(l => Levels.LevelOf(l.top, map) <= 2)
                         && !LadderColumn.Reserved(s3, map) && !LadderColumn.Reserved(s4, map) && LadderColumn.Reserved(s2, map)
-                        && map.roofGrid.RoofAt(s2) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(s3) == null && map.roofGrid.RoofAt(s4) == null && g2?.defaultLabel == EtTopLabel(2),
-                        $"{ElLinks(map)}, reserved L2 {LadderColumn.Reserved(s2, map)} L3 {LadderColumn.Reserved(s3, map)} L4 {LadderColumn.Reserved(s4, map)}, roofs L2 {map.roofGrid.RoofAt(s2)?.defName} L3 {map.roofGrid.RoofAt(s3)?.defName ?? "none"} L4 {map.roofGrid.RoofAt(s4)?.defName ?? "none"}, gizmo '{g2?.defaultLabel}'");
+                        && map.roofGrid.RoofAt(s1) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(s2) == null && map.roofGrid.RoofAt(s3) == null && map.roofGrid.RoofAt(s4) == null && g2?.defaultLabel == EtTopLabel(2),
+                        $"{ElLinks(map)}, reserved L2 {LadderColumn.Reserved(s2, map)} L3 {LadderColumn.Reserved(s3, map)} L4 {LadderColumn.Reserved(s4, map)}, roofs L1 {map.roofGrid.RoofAt(s1)?.defName ?? "none"} L2 {map.roofGrid.RoofAt(s2)?.defName ?? "none"} L3 {map.roofGrid.RoofAt(s3)?.defName ?? "none"} L4 {map.roofGrid.RoofAt(s4)?.defName ?? "none"}, gizmo '{g2?.defaultLabel}'");
                     // a floor planned in the freed cell on level 3: allowed, no cap message (not in the shaft); laid by a colonist
                     etInt2 = ElevatorCap.Shown;
                     AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, s3, Rot4.North, map);
@@ -242,13 +249,32 @@ namespace ProjectZ.Dev
                     Teleport(r2P, ElL(14, 13, 3, map));
                     EtWork(r2P, true);
                     SeedTicks("et_ra_take");
-                    TickUntil(10000, () => !ProjectZ.HasFloor(s3, map), "et_ra_go", 10);
+                    TickUntil(10000, () => !ProjectZ.HasFloor(s3, map), "et_ra_left", 10);
+                    return true;
+                }
+                case "et_ra_left":
+                {
+                    // the floor gone, the roof it leaves over the top cell (an ordinary roof now) still refuses raising;
+                    // the colonist takes that roof off too (the no-roof area, a real job)
+                    tickWatch = null;
+                    IntVec3 s2 = ElL(19, 13, 2, map);
+                    RoofDef left = map.roofGrid.RoofAt(s2);
+                    int refused = ElevatorRule.TopRefused;
+                    bool done = ElevatorRule.TrySetTop(elE, 4);
+                    elNote = $"roof left over the top cell {left?.defName ?? "none"}, raise with it {done} (refused {ElevatorRule.TopRefused - refused}), setting {elE.TopSetting}";
+                    elFlag = left == RoofDefOf.RoofConstructed && !done && ElevatorRule.TopRefused == refused + 1 && elE.TopSetting == 2;
+                    new Designator_AreaNoRoof().DesignateSingleCell(s2);
+                    SeedTicks("et_ra_unroof");
+                    TickUntil(6000, () => map.roofGrid.RoofAt(s2) == null, "et_ra_go", 5);
                     return true;
                 }
                 case "et_ra_go":
                 {
                     tickWatch = null;
                     EtWork(r2P, false);
+                    Result("RA the floor taken up leaves an ordinary roof over the top cell: raising is refused while it is there; a colonist takes it off (no-roof area)",
+                        elFlag && map.roofGrid.RoofAt(ElL(19, 13, 2, map)) == null, $"{elNote}; roof after the job {map.roofGrid.RoofAt(ElL(19, 13, 2, map))?.defName ?? "none"}");
+                    map.areaManager.NoRoof[ElL(19, 13, 2, map)] = false;
                     bool done = ElevatorRule.TrySetTop(elE, 4);
                     IntVec3 s3 = ElL(19, 13, 3, map);
                     elNote = $"raised {done}, floor left {ProjectZ.HasFloor(s3, map)}, roofs L2 {map.roofGrid.RoofAt(ElL(19, 13, 2, map))?.defName} L3 {map.roofGrid.RoofAt(s3)?.defName ?? "none"} L4 {map.roofGrid.RoofAt(ElL(19, 13, 4, map))?.defName ?? "none"}, {ElLinks(map)}";
@@ -487,8 +513,244 @@ namespace ProjectZ.Dev
                     return true;
                 case "et_s3_b_take":
                     Capture("elevtop_lowered_3d_floor3");
+                    stage = "et_rf";
+                    return true;
+
+                // ------------------------------------------------------------------------------------ RF: roof over the top
+                // (user 2026-11-02: top set to Floor 3, the roof over the elevator on floor 3 could not be built) mirror
+                // fixture, top lowered to level 2 from the button; a colonist builds the roof over the shaft's top cell on
+                // level 2 (roof area, a real BuildRoof job); the elevator still rides to level 2; raising refused while
+                // the roof is there, done after a colonist takes it off
+                case "et_rf":
+                    ElFixture(map, "et_rf_go", true, true, 4, r2P);
+                    Heal(r2P);
+                    Teleport(r2P, ElG(24, 13));
+                    Draft(r2P, true);
+                    return true;
+                case "et_rf_go":
+                {
+                    tickWatch = null;
+                    ElevatorRule.TopOptions(elE, 0, 4)[1].action();   // Floor 3 = level 2
+                    IntVec3 s2 = ElL(19, 13, 2, map);
+                    R2Wall(map, ElL(21, 11, 2, map));   // (a roof holder on level 2)
+                    RoofDef before = map.roofGrid.RoofAt(s2);
+                    Designator_AreaBuildRoof des = new Designator_AreaBuildRoof();
+                    AcceptanceReport ok = des.CanDesignateCell(s2);
+                    if (ok.Accepted)
+                    {
+                        des.DesignateSingleCell(s2);
+                    }
+                    Teleport(r2P, ElL(24, 13, 2, map));
+                    EtWork(r2P, true);
+                    bool work = new WorkGiver_BuildRoof().HasJobOnCell(r2P, s2);
+                    elNote = $"top {elE.TopSetting} linked {elE.LinkedTop}, roof over the top cell before {before?.defName ?? "none"}, roof area {ok.Accepted} ({ok.Reason}), area set {map.areaManager.BuildRoof[s2]}, roof work {work}";
+                    etRoofJob = false;
+                    SeedTicks("et_rf_build");
+                    TickUntil(6000, () =>
+                    {
+                        etRoofJob |= r2P.CurJobDef == JobDefOf.BuildRoof && r2P.CurJob.targetA.Cell == s2;
+                        return map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed;
+                    }, "et_rf_built", 1);
+                    return true;
+                }
+                case "et_rf_built":
+                {
+                    tickWatch = null;
+                    EtWork(r2P, false);
+                    IntVec3 s1 = ElL(19, 13, 1, map), s2 = ElL(19, 13, 2, map);
+                    Result("RF top Floor 3: the roof area may be drawn over the shaft's top cell on level 2 and a colonist builds the roof there (a BuildRoof job), an ordinary visible roof; the shaft keeps its own roof under level 2, the elevator still serves 0-2",
+                        elE.TopSetting == 2 && elE.LinkedTop == 2 && etRoofJob && map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(s1) == PZDefOf.PZ_StairwellRoof
+                        && StairGrid.For(map).links.Count(l => l.thing == elE) == 3 && LadderColumn.Reserved(s2, map),
+                        $"{elNote}; job seen {etRoofJob}, roofs L1 {map.roofGrid.RoofAt(s1)?.defName ?? "none"} L2 {map.roofGrid.RoofAt(s2)?.defName ?? "none"}, {ElLinks(map)}");
+                    Teleport(r2P, ElG(26, 13));
+                    ShotAt(map, 3, ElG(19, 13), 6f, true);
+                    Wait(5, "et_rf_shot");
+                    return true;
+                }
+                case "et_rf_shot":
+                    Capture("elevroof_roofed_3d");
+                    ShotAt(map, 2, ElG(19, 13), 6f, true);
+                    Wait(5, "et_rf_shot2");
+                    return true;
+                case "et_rf_shot2":
+                    Capture("elevroof_roofed_3d_floor3");
+                    ShotAt(map, 4, ElG(19, 13), 7f, true);
+                    Wait(5, "et_rf_shot3");
+                    return true;
+                case "et_rf_shot3":
+                {
+                    Capture("elevroof_roofed_3d_floor5");
+                    Draft(r2P, true);
+                    elPawns.Clear();
+                    elPawns.Add(r2P);
+                    ElResetRides();
+                    elDest = ElL(24, 13, 2, map);
+                    GoTo(r2P, elDest);
+                    SeedTicks("et_rf_ride");
+                    TickUntil(3000, () =>
+                    {
+                        ElWatch(map);
+                        return r2P.Position == elDest;
+                    }, "et_rf_ride", 1);
+                    return true;
+                }
+                case "et_rf_ride":
+                {
+                    tickWatch = null;
+                    List<ElRide> rides = RidesOf(r2P);
+                    IntVec3 s2 = ElL(19, 13, 2, map);
+                    Result("RF the roofed-over elevator still works: a colonist rides from the ground to level 2",
+                        r2P.Position == elDest && rides.Count == 1 && rides[0].link.kind == LinkKind.Elevator && rides[0].link.span == 2 && rides[0].arrived,
+                        $"{string.Join("; ", rides.Select(RideStr))}, at {r2P.Position}");
+                    etInt = ElevatorRule.TopRefused;
+                    bool done = ElevatorRule.TrySetTop(elE, 4);
+                    List<string> msgs = EtMessages();
+                    Result("RF raising to Floor 5 with that roof there: refused with 'clear the shaft first', setting and roof unchanged",
+                        !done && ElevatorRule.TopRefused == etInt + 1 && elE.TopSetting == 2 && elE.LinkedTop == 2 && map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed && msgs.Contains("PZ_ElevatorTopBlocked".Translate(FloorView.Label(4))),
+                        $"result {done}, setting {elE.TopSetting}, roof {map.roofGrid.RoofAt(s2)?.defName ?? "none"}, messages [{string.Join(" | ", msgs)}]");
+                    map.areaManager.BuildRoof[s2] = false;
+                    new Designator_AreaNoRoof().DesignateSingleCell(s2);
+                    EtWork(r2P, true);
+                    SeedTicks("et_rf_unroof");
+                    TickUntil(6000, () => map.roofGrid.RoofAt(s2) == null, "et_rf_raise", 5);
+                    return true;
+                }
+                case "et_rf_raise":
+                {
+                    tickWatch = null;
+                    EtWork(r2P, false);
+                    IntVec3 s2 = ElL(19, 13, 2, map), s3 = ElL(19, 13, 3, map), s4 = ElL(19, 13, 4, map);
+                    bool gone = map.roofGrid.RoofAt(s2) == null;
+                    map.areaManager.NoRoof[s2] = false;
+                    bool done = ElevatorRule.TrySetTop(elE, 4);
+                    Result("RF a colonist takes the roof off (no-roof area); raised to Floor 5: 10 links, the shaft's own roof up to the map's top level again (the top cell's on level 4 included)",
+                        gone && done && elE.TopSetting == Building_Elevator.TopAll && elE.LinkedTop == 4 && StairGrid.For(map).links.Count(l => l.thing == elE) == 10
+                        && map.roofGrid.RoofAt(s2) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(s3) == PZDefOf.PZ_StairwellRoof && map.roofGrid.RoofAt(s4) == PZDefOf.PZ_StairwellRoof,
+                        $"roof gone {gone}, raised {done}, {ElLinks(map)}, roofs L2 {map.roofGrid.RoofAt(s2)?.defName ?? "none"} L3 {map.roofGrid.RoofAt(s3)?.defName ?? "none"} L4 {map.roofGrid.RoofAt(s4)?.defName ?? "none"}");
+                    stage = "et_br";
+                    return true;
+                }
+
+                // ------------------------------------------------------------------------------------ BR: roof over a site's top
+                // mirror fixture, the elevator replaced by its blueprint; its button set to Floor 3; a colonist roofs the top
+                // cell on level 2 before it is built; raising the blueprint refused; then built (the setting carried): the
+                // roof stays an ordinary one, the elevator serves 0-2 and a colonist rides it; raising refused
+                case "et_br":
+                    ElFixture(map, "et_br_go", true, true, 4, r2P);
+                    Heal(r2P);
+                    Teleport(r2P, ElG(24, 13));
+                    Draft(r2P, true);
+                    return true;
+                case "et_br_go":
+                {
+                    tickWatch = null;
+                    elE.Destroy(DestroyMode.Vanish);
+                    elE = null;
+                    ResearchProjectDef machining = DefDatabase<ResearchProjectDef>.GetNamedSilentFail("Machining");
+                    if (machining != null && !machining.IsFinished)
+                    {
+                        Find.ResearchManager.FinishProject(machining);
+                    }
+                    AcceptanceReport place = GenConstruct.CanPlaceBlueprintAt(ElevatorDefOf.PZ_Elevator, ElG(19, 13), Rot4.East, map);
+                    etBp = place.Accepted ? GenConstruct.PlaceBlueprintForBuild(ElevatorDefOf.PZ_Elevator, ElG(19, 13), map, Rot4.East, Faction.OfPlayer, null) : null;
+                    if (etBp != null)
+                    {
+                        ElevatorRule.TopOptions(etBp, 0, 4)[1].action();   // Floor 3 = level 2
+                    }
+                    IntVec3 s1 = ElL(19, 13, 1, map), s2 = ElL(19, 13, 2, map);
+                    R2Wall(map, ElL(21, 11, 2, map));
+                    Designator_AreaBuildRoof des = new Designator_AreaBuildRoof();
+                    AcceptanceReport ok = des.CanDesignateCell(s2);
+                    AcceptanceReport inShaft = des.CanDesignateCell(s1);
+                    if (ok.Accepted)
+                    {
+                        des.DesignateSingleCell(s2);
+                    }
+                    elNote = $"blueprint {place.Accepted} ({place.Reason}), set top {(etBp == null ? -1 : ElevatorRule.SetTopOf(etBp))}, roof area over the top cell {ok.Accepted} ({ok.Reason}), in the shaft (level 1) {inShaft.Accepted} ({inShaft.Reason})";
+                    elFlag = etBp != null && ElevatorRule.SetTopOf(etBp) == 2 && ok.Accepted && !inShaft.Accepted;
+                    Teleport(r2P, ElL(24, 13, 2, map));
+                    EtWork(r2P, true);
+                    etRoofJob = false;
+                    SeedTicks("et_br_build");
+                    TickUntil(6000, () =>
+                    {
+                        etRoofJob |= r2P.CurJobDef == JobDefOf.BuildRoof && r2P.CurJob.targetA.Cell == s2;
+                        return map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed;
+                    }, "et_br_roofed", 1);
+                    return true;
+                }
+                case "et_br_roofed":
+                {
+                    tickWatch = null;
+                    EtWork(r2P, false);
+                    IntVec3 s2 = ElL(19, 13, 2, map);
+                    etInt = ElevatorRule.TopRefused;
+                    bool done = etBp != null && ElevatorRule.TrySetTop(etBp, 4);
+                    Result("BR blueprint set to Floor 3: the roof area may be drawn over its top cell on level 2 (not in its shaft below), a colonist builds that roof; raising the blueprint to Floor 5 is then refused, its top stays Floor 3",
+                        elFlag && etRoofJob && map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed && !done && ElevatorRule.TopRefused == etInt + 1 && ElevatorRule.SetTopOf(etBp) == 2,
+                        $"{elNote}; job seen {etRoofJob}, roof {map.roofGrid.RoofAt(s2)?.defName ?? "none"}, raise {done}, set top {(etBp == null ? -1 : ElevatorRule.SetTopOf(etBp))}");
+                    if (etBp == null)
+                    {
+                        stage = "et_sv";
+                        return true;
+                    }
+                    Thing steel = ThingMaker.MakeThing(ThingDefOf.Steel);
+                    steel.stackCount = 250;
+                    GenPlace.TryPlaceThing(steel, ElG(24, 10), map, ThingPlaceMode.Near);
+                    Thing comp = ThingMaker.MakeThing(ThingDefOf.ComponentIndustrial);
+                    comp.stackCount = 10;
+                    GenPlace.TryPlaceThing(comp, ElG(24, 16), map, ThingPlaceMode.Near);
+                    Teleport(r2P, ElG(24, 13));
+                    EtWork(r2P, true);
+                    SeedTicks("et_br_elev");
+                    TickUntil(30000, () =>
+                    {
+                        elE = map.listerThings.ThingsOfDef(ElevatorDefOf.PZ_Elevator).OfType<Building_Elevator>().FirstOrDefault();
+                        return elE != null && elE.LinkedPowered;
+                    }, "et_br_built", 10);
+                    return true;
+                }
+                case "et_br_built":
+                {
+                    tickWatch = null;
+                    EtWork(r2P, false);
+                    IntVec3 s1 = ElL(19, 13, 1, map), s2 = ElL(19, 13, 2, map);
+                    Result("BR built: the frame carried Floor 3, the elevator serves 0-2 (3 links), the roof over its top cell stays an ordinary roof, its own roof under level 2",
+                        elE != null && elE.TopSetting == 2 && elE.LinkedTop == 2 && StairGrid.For(map).links.Count(l => l.thing == elE) == 3
+                        && map.roofGrid.RoofAt(s2) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(s1) == PZDefOf.PZ_StairwellRoof,
+                        $"built {elE != null}, setting {elE?.TopSetting}, {ElLinks(map)}, roofs L1 {map.roofGrid.RoofAt(s1)?.defName ?? "none"} L2 {map.roofGrid.RoofAt(s2)?.defName ?? "none"}");
+                    if (elE == null)
+                    {
+                        stage = "et_sv";
+                        return true;
+                    }
+                    Draft(r2P, true);
+                    elPawns.Clear();
+                    elPawns.Add(r2P);
+                    ElResetRides();
+                    elDest = ElL(24, 13, 2, map);
+                    GoTo(r2P, elDest);
+                    SeedTicks("et_br_ride");
+                    TickUntil(3000, () =>
+                    {
+                        ElWatch(map);
+                        return r2P.Position == elDest;
+                    }, "et_br_ride", 1);
+                    return true;
+                }
+                case "et_br_ride":
+                {
+                    tickWatch = null;
+                    List<ElRide> rides = RidesOf(r2P);
+                    etInt = ElevatorRule.TopRefused;
+                    bool done = ElevatorRule.TrySetTop(elE, 4);
+                    Result("BR a colonist rides it from the ground to level 2; raising the built elevator to Floor 5 is refused while the roof is there",
+                        r2P.Position == elDest && rides.Count == 1 && rides[0].link.kind == LinkKind.Elevator && rides[0].link.span == 2 && rides[0].arrived
+                        && !done && ElevatorRule.TopRefused == etInt + 1 && elE.TopSetting == 2,
+                        $"{string.Join("; ", rides.Select(RideStr))}, at {r2P.Position}; raise {done}, setting {elE.TopSetting}");
                     stage = "et_sv";
                     return true;
+                }
 
                 // ------------------------------------------------------------------------------------ SV / OLD: saves
                 case "et_sv":
