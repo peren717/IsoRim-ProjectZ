@@ -47,7 +47,7 @@ namespace ProjectZ.Dev
         private static IntVec3 sfO;
         private static int sfLeg, sfFrames, sfMarkerSeen, sfShotsTaken, sfUpperRec;
         private static bool sfLandedSeen, sfLandQueued, sfSaved;
-        private static string sfLastStage = "", sfSleeper, sfCarrier, sfUp3, sfGroundP, sfLeft, sfCarried, sfLamp, sfBattery, sfStock;
+        private static string sfLastStage = "", sfSleeper, sfCarrier, sfUp3, sfGroundP, sfLeft, sfCarried, sfLamp, sfBattery, sfStock, sfLampX, sfConduitX;
         private static float sfStageAt, sfTempA, sfTempB;
         private static PlanetTile sfHomeTile = PlanetTile.Invalid, sfNewTile = PlanetTile.Invalid;
         private static IntVec3 sfRoot, sfOldEngine, sfRoomA, sfRoomB, sfOffA, sfOffB;
@@ -272,6 +272,13 @@ namespace ProjectZ.Dev
             bc?.AddEnergy(bc.Props.storedEnergyMax);
             sfLamp = lamp.ThingID;
             sfBattery = battery.ThingID;
+            // a hookup across floors (PowerHookup): a floor-2 lamp on the open deck with no transmitter in range on its
+            // floor, a ground battery + conduit right below in range (the conduit nearer)
+            Thing battery2 = Place(DefDatabase<ThingDef>.GetNamed("Battery"), null, SF(10, 1), map, Rot4.North);
+            CompPowerBattery bc2 = battery2.TryGetComp<CompPowerBattery>();
+            bc2?.AddEnergy(bc2.Props.storedEnergyMax);
+            sfConduitX = Place(conduit, null, SF(11, 1), map).ThingID;
+            sfLampX = Place(DefDatabase<ThingDef>.GetNamed("StandingLamp"), null, SFF(11, 4, 1, map), map).ThingID;
             // floor 2, the open deck east (x 7-12): stockpile, steel, components, dirt, a pilot console
             Zone_Stockpile zone = new Zone_Stockpile(StorageSettingsPreset.DefaultStockpile, map.zoneManager);
             map.zoneManager.RegisterZone(zone);
@@ -403,6 +410,7 @@ namespace ProjectZ.Dev
             sfTempB = rb?.Temperature ?? 0f;
             CompPowerTrader lamp = SfThingById(map, sfLamp)?.TryGetComp<CompPowerTrader>();
             Result("F1 the floor-2 lamp is powered by the ground battery through the riser", lamp != null && lamp.PowerOn && lamp.PowerNet != null && lamp.PowerNet.batteryComps.Any(b => b.parent.ThingID == sfBattery), $"on {lamp?.PowerOn}, net batteries {lamp?.PowerNet?.batteryComps.Count}");
+            SfLampXCheck(map, "F1");
             HashSet<IntVec3> set = e.ValidSubstructure;
             Result("F1 the ship set holds ground + both floors' decks", set.Count == 147 + 143 + 77 && SsOnFloor(set, 1, map) == 143 && SsOnFloor(set, 2, map) == 77, $"{set.Count}: {SsFloors(set, map)}");
             foreach (string id in new[] { sfSleeper, sfCarrier, sfUp3, sfGroundP })
@@ -425,6 +433,19 @@ namespace ProjectZ.Dev
         }
 
         private static Thing SfThingById(Map map, string id) => map?.listerThings.AllThings.FirstOrDefault(t => t.ThingID == id);
+
+        // The floor-2 lamp hooked up to the ground conduit below it (PowerHookup), before and after a flight.
+        private static void SfLampXCheck(Map map, string leg)
+        {
+            if (sfLampX == null)
+            {
+                return;
+            }
+            CompPowerTrader x = SfThingById(map, sfLampX)?.TryGetComp<CompPowerTrader>();
+            Thing p = x?.connectParent?.parent;
+            Result($"{leg} the open-deck lamp on floor 2 is hooked up to the ground conduit below (across floors) and lit", x != null && x.PowerOn && p != null && p.ThingID == sfConduitX,
+                $"lamp {x?.parent.Position} f{(x == null ? 0 : ProjectZ.FloorOf(x.parent.Position, map) + 1)} on {x?.PowerOn}, hooked to {p?.def.defName} {p?.Position} f{(p == null ? 0 : ProjectZ.FloorOf(p.Position, map) + 1)} (want {sfConduitX})");
+        }
 
         // Everything on the ship, by ship offset (the floor in y).
         private static void SfRecord(Map map, Building_GravEngine e)
@@ -941,6 +962,7 @@ namespace ProjectZ.Dev
                 $"A {ra?.Temperature:0.0} (was {sfTempA:0.0}), B {rb?.Temperature:0.0} (was {sfTempB:0.0}), outdoors {map.mapTemperature.OutdoorTemp:0.0}");
             CompPowerTrader lamp = SfThingById(map, sfLamp)?.TryGetComp<CompPowerTrader>();
             Result($"{leg} the floor-2 lamp is powered by the ground battery (riser)", lamp != null && lamp.PowerOn && lamp.PowerNet != null && lamp.PowerNet.batteryComps.Any(b => b.parent.ThingID == sfBattery), $"on {lamp?.PowerOn}, batteries {lamp?.PowerNet?.batteryComps.Count}");
+            SfLampXCheck(map, leg);
             int stock = sfStockOffs.Count(o => map.zoneManager.ZoneAt(SfAt(o, sfRoot, sfRot, map)) is Zone_Stockpile z && z.label == sfStock);
             Result($"{leg} the stockpile on floor 2 came along", sfStockOffs.Count == 12 && stock == 12, $"{stock} of {sfStockOffs.Count}");
             // nothing of the ship off its floors: every deck on the map is a recorded cell

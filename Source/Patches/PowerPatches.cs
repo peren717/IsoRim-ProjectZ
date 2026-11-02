@@ -31,6 +31,26 @@ namespace ProjectZ.Patches
     // between them (3 on a 150 map), so near a band edge a lamp could hook up to a conduit on the next floor. Both
     // searches (PowerConnectionMaker.BestTransmitterForConnector and PotentialConnectorsForTransmitter) clip their rect
     // with CellRect.ClipInsideMap; that call becomes PowerRisers.ClipInsideFloor (also clipped to the centre's band).
+    //
+    // Third rule, built on the second (hookups to the next floor, user decision 2026-10-26; PowerHookup): a building that
+    // finds no transmitter in range on its own floor hooks up to one on the floor directly above or below. The range is
+    // mapped there by the stacked-cell rule (Api.StackedCell of the connector's cell, the same 6 cells around it, clipped
+    // to that band; never a raw rect across the void rows); only +-1 floor; both found -> the nearer by horizontal
+    // distance in the mapped frame (a tie: the floor above). Vanilla picks a transmitter for a connector in exactly two
+    // functions (Assembly-CSharp 1.7), both get the rule:
+    //   a. PowerConnectionMaker.BestTransmitterForConnector (postfix, only when the own-floor search found nothing): used
+    //      by TryConnectToAnyPowerNet (every new, re-spawned or reinstalled connector; one whose transmitter went away or
+    //      stopped transmitting, e.g. a switch flicked off; a gravship connector whose transmitter stayed behind),
+    //      CompPower.TryManualReconnect (the reconnect gizmo; its "skip these nets" list never pushes a connector off its
+    //      own floor: other floors are searched only when the own floor has no transmitter at all) and the build preview
+    //      (BuildDesignatorUtility, its anticipated wire).
+    //   b. PowerConnectionMaker.PotentialConnectorsForTransmitter (postfix, after the own-floor connectors): a new net's
+    //      transmitters pick up waiting connectors; from the floors above and below only a connector whose own pick (rule
+    //      a) is this very transmitter, so both directions agree and own floor first holds.
+    // Not a pick: a load restores the saved connectParent (a reference, any floor), a gravship landing restores its saved
+    // pairs (Gravship.connectParents), RoomPart_ConnectConduits takes the transmitter in the same cell. Nets and
+    // PowerNetGrid are per transmitter cell and do not care where a connector is; the wire to a transmitter on another
+    // floor is drawn as the game draws it (user decision 2026-11-01: no extra marks).
     public static class PowerRisers
     {
         public static bool IsConduit(ThingDef def) => def?.building != null && def.building.isPowerConduit;
@@ -173,6 +193,161 @@ namespace ProjectZ.Patches
         internal static readonly MethodInfo ClipFloor = AccessTools.Method(typeof(PowerRisers), nameof(ClipInsideFloor));
     }
 
+    // The hookup rule (third rule above): own floor first, else the nearer of the floors directly above and below.
+    public static class PowerHookup
+    {
+        public const int Range = 6;   // vanilla's PowerConnectionMaker.ConnectMaxDist
+
+        // Where a connector hooks up from (vanilla: a wall attachment from its wall).
+        public static IntVec3 ConnectorPos(CompPower pc)
+        {
+            ThingWithComps p = pc.parent;
+            if (p.def.building != null && p.def.building.isAttachment)
+            {
+                Thing wall = GenConstruct.GetWallAttachedTo(p);
+                if (wall != null)
+                {
+                    return wall.Position;
+                }
+            }
+            return p.Position;
+        }
+
+        // Vanilla's test (BestTransmitterForConnector) over one rect: the nearest transmitter to 'from' that takes a wire.
+        private static CompPower Scan(CellRect r, IntVec3 from, Map map, List<PowerNet> disallowed, out float best)
+        {
+            best = 999999f;
+            CompPower result = null;
+            for (int z = r.minZ; z <= r.maxZ; z++)
+            {
+                for (int x = r.minX; x <= r.maxX; x++)
+                {
+                    Building t = new IntVec3(x, 0, z).GetTransmitter(map);
+                    if (t == null || t.Destroyed)
+                    {
+                        continue;
+                    }
+                    CompPower pc = t.PowerComp;
+                    if (pc != null && pc.TransmitsPowerNow && (t.def.building == null || t.def.building.allowWireConnection) && (disallowed == null || !disallowed.Contains(pc.transNet)))
+                    {
+                        float d = (t.Position - from).LengthHorizontalSquared;
+                        if (d < best)
+                        {
+                            best = d;
+                            result = pc;
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
+        // The range around c, on c's own floor.
+        private static CellRect Around(IntVec3 c, Map map)
+        {
+            CellRect r = CellRect.SingleCell(c).ExpandedBy(Range);
+            return PowerRisers.ClipInsideFloor(ref r, map);
+        }
+
+        // A transmitter in range on the connector's own floor (vanilla's search, clipped to the band).
+        public static CompPower OwnFloor(IntVec3 pos, Map map, List<PowerNet> disallowed = null)
+        {
+            return Scan(Around(pos, map), pos, map, disallowed, out _);
+        }
+
+        // The nearest transmitter in range on the floor directly above or below (the range mapped by the stacked-cell
+        // rule); null without floors, from a void row, or when there is none.
+        public static CompPower OtherFloors(IntVec3 pos, Map map, List<PowerNet> disallowed = null)
+        {
+            CompPower best = null;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < 2; i++)
+            {
+                IntVec3 s = Api.StackedCell(pos, map, i == 0);
+                if (!s.IsValid)
+                {
+                    continue;
+                }
+                CompPower pc = Scan(Around(s, map), s, map, disallowed, out float d);
+                if (pc != null && d < bestD)
+                {
+                    best = pc;
+                    bestD = d;
+                }
+            }
+            return best;
+        }
+
+        // Rule a, after vanilla's own-floor search found nothing.
+        public static CompPower Fallback(IntVec3 pos, Map map, List<PowerNet> disallowed)
+        {
+            if (ProjectZ.Annex(map) == null || !pos.IsValid || !pos.InBounds(map))
+            {
+                return null;
+            }
+            if (disallowed != null && disallowed.Count > 0 && OwnFloor(pos, map) != null)
+            {
+                return null;   // the own floor has transmitters, only of skipped nets: stay on this floor
+            }
+            return OtherFloors(pos, map, disallowed);
+        }
+
+        // Rule b: the own-floor connectors (vanilla), then the waiting connectors on the floors above and below whose own
+        // pick is t.
+        public static IEnumerable<CompPower> WithOtherFloors(IEnumerable<CompPower> own, CompPower t)
+        {
+            foreach (CompPower c in own)
+            {
+                yield return c;
+            }
+            ThingWithComps p = t?.parent;
+            if (p == null || !p.Spawned)
+            {
+                yield break;
+            }
+            Map map = p.Map;
+            if (ProjectZ.Annex(map) == null)
+            {
+                yield break;
+            }
+            CellRect occ = p.OccupiedRect();
+            for (int i = 0; i < 2; i++)
+            {
+                IntVec3 s = Api.StackedCell(occ.Min, map, i == 0);
+                if (!s.IsValid)
+                {
+                    continue;
+                }
+                CellRect r = new CellRect(s.x, s.z, occ.Width, occ.Height).ExpandedBy(Range);
+                r = PowerRisers.ClipInsideFloor(ref r, map);
+                for (int z = r.minZ; z <= r.maxZ; z++)
+                {
+                    for (int x = r.minX; x <= r.maxX; x++)
+                    {
+                        List<Thing> list = map.thingGrid.ThingsListAt(new IntVec3(x, 0, z));
+                        for (int j = 0; j < list.Count; j++)
+                        {
+                            if (!list[j].def.ConnectToPower || !(list[j] is Building b))
+                            {
+                                continue;
+                            }
+                            CompPower pc = b.PowerComp;
+                            if (pc == null || pc.connectParent != null)
+                            {
+                                continue;
+                            }
+                            IntVec3 pos = ConnectorPos(pc);
+                            if (OwnFloor(pos, map) == null && OtherFloors(pos, map) == t)
+                            {
+                                yield return pc;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Site 1 (sites 1-3 work together: one failing turns the risers off, FailSoft group).
     [HarmonyPatch(typeof(PowerNetMaker), "ContiguousPowerBuildings")]
     [PatchGroup("power risers", key: true)]
@@ -218,6 +393,33 @@ namespace ProjectZ.Patches
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             return FailSoft.Transpile(nameof(PotentialConnectorsForTransmitter_Floor_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 1));
+        }
+    }
+
+    // Hookups to the next floor (PowerHookup; both directions or neither).
+    [HarmonyPatch(typeof(PowerConnectionMaker), nameof(PowerConnectionMaker.BestTransmitterForConnector))]
+    [PatchGroup("power hookup across floors", key: true)]
+    public static class BestTransmitterForConnector_Across_Patch
+    {
+        public static void Postfix(ref CompPower __result, IntVec3 connectorPos, Map map, List<PowerNet> disallowedNets)
+        {
+            if (__result == null)
+            {
+                __result = PowerHookup.Fallback(connectorPos, map, disallowedNets);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(PowerConnectionMaker), "PotentialConnectorsForTransmitter")]
+    [PatchGroup("power hookup across floors", key: true)]
+    public static class PotentialConnectorsForTransmitter_Across_Patch
+    {
+        public static void Postfix(ref IEnumerable<CompPower> __result, CompPower b)
+        {
+            if (b?.parent?.Map != null && ProjectZ.Annex(b.parent.Map) != null)
+            {
+                __result = PowerHookup.WithOtherFloors(__result, b);
+            }
         }
     }
 }

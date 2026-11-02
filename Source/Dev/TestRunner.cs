@@ -99,6 +99,10 @@ namespace ProjectZ.Dev
     //                                   not join, hidden conduits under walls, hookups at the band edge, a colonist
     //                                   deconstructing and rebuilding the riser's ground conduit, save/reload) with
     //                                   power-overlay shots; run with -projectzfloors=3 (TestPower)
+    //                                   powerfloors: lamps hooking up to a conduit on the floor above or below (own floor
+    //                                   first, +-1 floor, the nearer; both directions; a colonist removing and rebuilding
+    //                                   the conduit; the reconnect gizmo; save/reload; shots), -projectzfloors=3
+    //                                   -projectzseed=7; powerfloors1: the same on a map without floors (TestPowerFloors)
     //                                   range: weapon range across floors (3D distance + 1 per floor down): shotguns vs
     //                                   floors 13, 2 and 5, a sniper on floor 5, a turret on floor 2, a raider walking in,
     //                                   a mortar, and the range preview shots; run with -projectzfloors=13 (TestRange)
@@ -441,7 +445,7 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
+            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
             {
                 PatchMouse(h);
             }
@@ -849,6 +853,11 @@ namespace ProjectZ.Dev
                 StepPower(map);
                 return;
             }
+            if (stage.StartsWith("pf_"))
+            {
+                StepPowerFloors(map);
+                return;
+            }
             if (stage.StartsWith("j_"))
             {
                 StepRiser(map);
@@ -1147,7 +1156,7 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    if (!(mode == "locustjump" && FloorsOverride == 1))   // (locustjump without floors: no annex to check)
+                    if (!((mode == "locustjump" || mode == "powerfloors1") && FloorsOverride == 1))   // (locustjump, powerfloors1 without floors: no annex to check)
                     {
                         GenCheck(map, "after generation");
                         FogLidCheck("after generation");
@@ -1317,6 +1326,10 @@ namespace ProjectZ.Dev
                     else if (mode == "power")
                     {
                         stage = "n_setup";
+                    }
+                    else if (mode == "powerfloors" || mode == "powerfloors1")
+                    {
+                        stage = "pf_setup";
                     }
                     else if (mode == "riser")
                     {
