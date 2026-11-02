@@ -14,7 +14,8 @@ namespace ProjectZ
     //     A floor laid on the slab (carpet) is a separate vanilla job first. Half the slab's stuff back, pawns and items moved off.
     //   - Blocker: what keeps a slab from being taken up (built things on it, stairs landing there). A slab above does not
     //     (Q6 (b), user 2026-11-01): it stays, resting on the roof over the new hole (vanilla roof support, SlabCollapse).
-    //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer).
+    //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer); automatic
+    //     work only, a forced order skips it.
     //   - SlabCollapse: the roof under a slab collapses (vanilla support rules), the slab falls with everything on it.
     public static class Slab
     {
@@ -314,6 +315,9 @@ namespace ProjectZ
     // every step is one a pawn can walk). Only the designated slabs farthest away are worked (same distance in
     // parallel), from the cell one step nearer the stairs. A slab's shortest way to the stairs only passes nearer cells,
     // so taking a farthest one up cuts no other designated slab off. Designated slabs no stairs reach are never worked.
+    // The order is for automatic work only: a forced order (the player's right-click) skips it and the stairs-exit
+    // cut-off check (K2), user 2026-11-02; what that cuts off is the player's. Its worker stands on the cell one step
+    // nearer the stairs, else on a cell next to it (WorkSpot).
     // The distances are rebuilt only after slabs, stairs or walkability changed; the farthest designated distance is
     // read again at most once a tick (designations and blockers change it).
     public class SlabPeel : MapComponent
@@ -486,6 +490,14 @@ namespace ProjectZ
         {
             Ensure();
             return dist[map.cellIndices.CellToIndex(c)];
+        }
+
+        // Where the worker of a forced order stands: the cell one step nearer the stairs, else a cell next to it the
+        // pawn can stand on and reach (as for a deck, never c itself). Invalid: none.
+        public static IntVec3 WorkSpot(Pawn pawn, IntVec3 c)
+        {
+            IntVec3 from = For(pawn.Map)?.Parent(c) ?? IntVec3.Invalid;
+            return from.IsValid ? from : ShipDeck.WorkSpot(pawn, c);
         }
     }
 
@@ -807,12 +819,22 @@ namespace ProjectZ
         }
     }
 
-    // Peel order: only the farthest designated slabs have work.
+    // Peel order: only the farthest designated slabs have work. A forced order skips it and K2 (user 2026-11-02): only
+    // the physical rules stand (vanilla's and Slab.Blocker, already in __result) and a spot to stand on next to the cell.
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.HasJobOnCell))]
     public static class RemoveFoundationHasJob_Slab_Patch
     {
-        public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
+        public static void Postfix(Pawn pawn, IntVec3 c, bool forced, ref bool __result)
         {
+            if (__result && forced && Slab.At(c, pawn.Map))
+            {
+                if (!SlabPeel.WorkSpot(pawn, c).IsValid)
+                {
+                    JobFailReason.Is("PZ_NoWorkSpot".Translate());
+                    __result = false;
+                }
+                return;
+            }
             if (__result && Slab.At(c, pawn.Map) && SlabPeel.For(pawn.Map)?.Workable(c) != true)
             {
                 if (SlabPeel.For(pawn.Map)?.Distance(c) > 0)
@@ -837,15 +859,16 @@ namespace ProjectZ
         }
     }
 
-    // ... and the worker stands one step nearer the stairs (job target B), for the covering and for the slab.
+    // ... and the worker stands one step nearer the stairs (job target B), for the covering and for the slab (a forced
+    // order on a cell the stairs don't reach: a cell next to it, SlabPeel.WorkSpot).
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.JobOnCell))]
     public static class RemoveFoundationJob_Slab_Patch
     {
-        public static void Postfix(Pawn pawn, IntVec3 c, Job __result)
+        public static void Postfix(Pawn pawn, IntVec3 c, bool forced, Job __result)
         {
             if (__result != null && Slab.At(c, pawn.Map))
             {
-                IntVec3 from = SlabPeel.For(pawn.Map)?.Parent(c) ?? IntVec3.Invalid;
+                IntVec3 from = forced ? SlabPeel.WorkSpot(pawn, c) : SlabPeel.For(pawn.Map)?.Parent(c) ?? IntVec3.Invalid;
                 if (from.IsValid)
                 {
                     __result.targetB = from;

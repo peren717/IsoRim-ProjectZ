@@ -64,6 +64,8 @@ namespace ProjectZ.Dev
     //                                   under a 4-floor building, save/load and an old save; TestElevTop), -projectzfloors=5 -projectzseed=7
     //                                   slabhole: a slab taken up under a slab (Q6 (b)): the hole, the floor above stays and is walked
     //                                   on, the unsupported case collapses (TestSlabHole), -projectzfloors=3 -projectzseed=7
+    //                                   slabforce: a forced (right-click) order skips the peel order and K2, automatic work keeps
+    //                                   them, the physical rules stand (TestSlabForce), -projectzfloors=3 -projectzseed=7
     //                                   atrium: a roof removed under a covered column is the invisible stairwell roof (indoors, no
     //                                   rain), back to the sky when the cover goes; build roof, save/load, a cave (TestAtrium),
     //                                   -projectzfloors=3 -projectzseed=7
@@ -758,6 +760,11 @@ namespace ProjectZ.Dev
                 StepSlabHole(map);
                 return;
             }
+            if (stage.StartsWith("fo_"))
+            {
+                StepSlabForce(map);
+                return;
+            }
             if (stage.StartsWith("at_"))
             {
                 StepAtrium(map);
@@ -1239,6 +1246,10 @@ namespace ProjectZ.Dev
                     else if (mode == "slabhole")
                     {
                         stage = "hl_setup";
+                    }
+                    else if (mode == "slabforce")
+                    {
+                        stage = "fo_setup";
                     }
                     else if (mode == "elevtop")
                     {
