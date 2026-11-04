@@ -74,6 +74,13 @@ namespace ProjectZ.Dev
                     }
                 }
             }
+            // (the top rock layer's roof: the fill's, RockRoof; here the floor above came after it)
+            foreach (IntVec3 g in r)
+            {
+                map.roofGrid.SetRoof(Levels.Cell(g, H - 1, map), RoofDefOf.RoofRockThin);
+            }
+            // (a ring the planner can't put a ladder through: a roof no rule holds up, so the raiders have to mine up)
+            RockRoof.Off = true;
             foreach (IntVec3 g in r.ExpandedBy(1).EdgeCells)
             {
                 if (g.InBounds(map))
@@ -81,6 +88,7 @@ namespace ProjectZ.Dev
                     map.roofGrid.SetRoof(Levels.Cell(g, 0, map), RoofDefOf.RoofRockThick);
                 }
             }
+            RockRoof.Off = false;
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
         }
 
@@ -342,7 +350,7 @@ namespace ProjectZ.Dev
                         for (int L = 0; L <= 2; L++)
                         {
                             IntVec3 x = Levels.Cell(c, L, m);
-                            if (!(m.roofGrid.RoofAt(x)?.isThickRoof ?? false))
+                            if (!m.roofGrid.Roofed(x))
                             {
                                 roofsLost++;
                             }
@@ -353,8 +361,8 @@ namespace ProjectZ.Dev
                             }
                         }
                     }
-                    Result("V0 explosions from the sky side (on the column tops: the middle and the edge of a mountain top): no shaft, no open-air cell, the thick roofs and all the rock under the top kept", Shaft.Opened == rvShaftAt && open == 0 && roofsLost == 0 && rockGoneBelowTop == 0,
-                        $"{rlNote}; shafts {Shaft.Opened - rvShaftAt}, open-air cells {open}, thick roofs lost {roofsLost}, rock gone under the top level {rockGoneBelowTop}");
+                    Result("V0 explosions from the sky side (on the column tops: the middle and the edge of a mountain top): no shaft, no open-air cell, the roofs and all the rock under the top kept", Shaft.Opened == rvShaftAt && open == 0 && roofsLost == 0 && rockGoneBelowTop == 0,
+                        $"{rlNote}; shafts {Shaft.Opened - rvShaftAt}, open-air cells {open}, roofs lost {roofsLost}, rock gone under the top level {rockGoneBelowTop}");
                 },
             };
             // ---- V1..V6: the mountain colony

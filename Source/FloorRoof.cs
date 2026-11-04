@@ -180,6 +180,7 @@ namespace ProjectZ
             {
                 FloorHeat.Dirty();
                 KeepThick(__instance, c, asked, ref def);
+                FollowRock(map, c, ref def);
                 return;
             }
             if (map == null || ProjectZ.Annex(map) == null)
@@ -200,6 +201,16 @@ namespace ProjectZ
                 def = Stairwell.RoofFor(c, map, def);
             }
             KeepThick(__instance, c, asked, ref def);
+            FollowRock(map, c, ref def);
+        }
+
+        // Last word on a tall-mountain map: thick roofs come from the rock above (RockRoof).
+        private static void FollowRock(Map map, IntVec3 c, ref RoofDef def)
+        {
+            if (map != null && Mountains.On(map))
+            {
+                def = RockRoof.For(c, map, def);
+            }
         }
 
         // The one guard for every path that writes a floor's or a stairwell's roof (slab built, stairs built, landing,

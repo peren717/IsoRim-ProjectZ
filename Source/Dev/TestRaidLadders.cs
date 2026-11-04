@@ -32,6 +32,8 @@ namespace ProjectZ.Dev
     //   R18 a prison break on floor 1 with the stairs taken up: the prisoner gets out down a ladder
     //   R15 a manhunter pack and a shambler assault never place ladders
     //   R16 a base out of the 50-cell (3D) radius from the ground: raiders wander (recorded)
+    //   MT2 (the same with -projectzraidonly=mt2) melee raiders against a base on a top behind the edge rock: a ladder onto the
+    //       edge rock, then one onto the top
     //   MT  (-projectztallmountains -projectzfloors=4 -projectzmapsize=250 -projectzraidonly=mt) a base on a natural
     //       mountain top: the raiders climb
     // Screenshots (3D on): raiders on a ladder (R1), on the second ladder of the moat (R8), a mechanoid on a lift (R12);
@@ -120,7 +122,7 @@ namespace ProjectZ.Dev
             RaidClimb.Off = GenCommandLine.CommandLineArgPassed("projectznoraidladders");
             RaidClimb.RepeatTiming = GenCommandLine.CommandLineArgPassed("projectzraidtiming");
             string only = GenCommandLine.TryGetCommandLineArg("projectzraidonly", out string o) ? o.ToLowerInvariant() : null;
-            rlCases = RlAllCases().Concat(RvCases()).Where(c => only == null ? c.id != "mt" && !c.id.StartsWith("v") : only.Split(',').Contains(c.id)).ToList();
+            rlCases = RlAllCases().Concat(RvCases()).Where(c => only == null ? c.id != "mt" && c.id != "mt2" && !c.id.StartsWith("v") : only.Split(',').Contains(c.id)).ToList();
             ClimbPlanner.NoVertical = GenCommandLine.CommandLineArgPassed("projectznovertical");
             Info($"raidladders: map {map.Size}, levels {Levels.Min(map)}..{Levels.Max(map)}, cases {string.Join(" ", rlCases.Select(c => c.id))}, feature {(RaidClimb.Off ? "OFF" : "on")}, colonists {string.Join(", ", Colonists(map))}");
             rlIdx = 0;
@@ -1011,6 +1013,23 @@ namespace ProjectZ.Dev
                     Result("R16 (recorded) a base beyond 50 cells: raiders without a target in range place no ladder", RaidClimb.NoTarget > 0, $"ladders {rlLadders.Count}, raiders on floor 2 {rlMaxUp}");
                 },
             };
+            // ---- MT2: a natural mountain top behind level-1 edge rock: no ladder from the ground reaches it, two are needed
+            yield return new RlCase
+            {
+                id = "mt2", name = "a base on a mountain top behind the edge rock", maxTicks = 25000,
+                setup = m => RlMountainSetup(m, true),
+                done = m => rlMaxUp > 0 && rlLadders.Count >= 1,
+                check = m =>
+                {
+                    foreach (Pawn r in rlRaiders.Where(x => x.Spawned))
+                    {
+                        IntVec3 f = r.Position, u = FloorRoof.Above(f, m);
+                        AcceptanceReport w = MineSide.CanWork(f, m, MineDir.FromBelow);
+                        Info($"MT2 {r} at {f} job {r.CurJob?.def?.defName}: {TkCell(f, m)}, terrain {f.GetTerrain(m).defName}, things above [{string.Join(",", u.IsValid ? u.GetThingList(m).Select(t => t.def.defName) : new string[0])}], top kind {(u.IsValid ? Floors.KindAt(u, m).ToString() : "-")}, mine up {w.Accepted} '{w.Reason}'");
+                    }
+                    Result($"MT2 a base on a mountain top behind the edge rock (level {rlUpLevel}): the raiders climb onto it", rlLadders.Count >= 1 && rlHostileUp > 0 && rlMaxUp > 0, $"{rlNote}; {RlSummary(m)}");
+                },
+            };
             // ---- MT: a natural mountain top (tall mountains run only)
             yield return new RlCase
             {
@@ -1112,7 +1131,18 @@ namespace ProjectZ.Dev
 
         // MT: a mountain top on level 2 or higher with a ladder site whose foot stands on the open ground near a map edge;
         // the colonists go up there, the raid comes from the nearest edge.
-        private static void RlMountainSetup(Map map)
+        // (case mt2) The ladder foot on the top is a level-1 edge rock top with open ground right beside it, reachable from the map edge.
+        private static bool RlOverLip(IntVec3 foot, Map map)
+        {
+            if (Levels.LevelOf(foot, map) != 1)
+            {
+                return false;
+            }
+            IntVec3 g = Levels.Ground(foot, map);
+            return TkRock(g, map) && GenAdj.CardinalDirections.Any(d => (g + d).InBounds(map) && (g + d).z < ProjectZ.GroundZ(map) && MuOpen(g + d, map) && map.reachability.CanReachMapEdge(g + d, TraverseParms.For(TraverseMode.PassDoors)));
+        }
+
+        private static void RlMountainSetup(Map map, bool overLip = false)
         {
             if (!Mountains.On(map))
             {
@@ -1130,7 +1160,8 @@ namespace ProjectZ.Dev
             int w = map.Size.x, h = a.groundZ;
             IntVec3 bestTop = IntVec3.Invalid, bestFoot = IntVec3.Invalid, bestEdge = IntVec3.Invalid;
             float bestD = float.MaxValue;
-            for (int L = Levels.Max(map); L >= 2; L--)
+            // (level 1 last: edge rock lies round most level-2 tops, so their ladder feet are often no ground cells)
+            for (int L = Levels.Max(map); L >= (overLip ? 2 : 1); L--)
             {
                 for (int z = 2; z < h - 2; z += 1)
                 {
@@ -1148,7 +1179,7 @@ namespace ProjectZ.Dev
                             continue;
                         }
                         Rot4 side = LadderSite.BestSide(top, map, out IntVec3 foot, out int span);
-                        if (!side.IsValid || Levels.LevelOf(foot, map) != 0 || !map.reachability.CanReachMapEdge(foot, TraverseParms.For(TraverseMode.PassDoors)))
+                        if (!side.IsValid || !(overLip ? RlOverLip(foot, map) : Levels.LevelOf(foot, map) == 0 && map.reachability.CanReachMapEdge(foot, TraverseParms.For(TraverseMode.PassDoors))))
                         {
                             continue;
                         }
@@ -1194,7 +1225,20 @@ namespace ProjectZ.Dev
             }
             rlNote = $"top {bestTop} (level {rlUpLevel}), a site with its foot at {bestFoot}, raid from {bestEdge} ({bestD:0.0} cells 3D)";
             Info("MT " + rlNote);
+            if (overLip)
+            {
+                // (the nearest edge cell may be rock: the raid walks in from the nearest open one)
+                bestEdge = Near(bestEdge, 80, map).First(c => (c.x == 0 || c.z == 0 || c.x == w - 1 || c.z == h - 1) && c.Walkable(map));
+            }
             RlRaid(map, RlEnemy(), "ImmediateAttack", PawnsArrivalModeDefOf.EdgeWalkIn, bestEdge, 300f);
+            if (overLip)
+            {
+                // (melee only: raiders who can shoot up from the ground have no need to climb)
+                foreach (Pawn r in rlRaiders)
+                {
+                    r.equipment?.DestroyAllEquipment();
+                }
+            }
         }
     }
 }

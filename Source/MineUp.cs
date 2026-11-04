@@ -169,6 +169,7 @@ namespace ProjectZ
             if (b is Mineable && __instance.map != null && Mountains.On(__instance.map))
             {
                 MineSide.ClearMarks(b.Position, __instance.map);
+                RockRoof.RockChanged(b.Position, __instance.map);   // (mined from any side, blasted, dropped: the cell below follows)
             }
         }
     }
@@ -178,10 +179,10 @@ namespace ProjectZ
     // blueprint's blocking rock, sappers, god mode) opens the boundary the mark names (Shaft.Open on the lower cell: the
     // marked cell under the rock, or the rock's own cell under the marked top). The mark is read before the rock goes (the
     // despawn takes it, DesignationManager_MineMarks_Patch). Rock destroyed any other way (explosions) opens nothing.
-    // The same place opens a bare top over any mined rock (BareTop, user rule 2026-10-23): what stands right above the rock
-    // is a bare natural rock top (no rock above, nothing built, placed or standing on it) -> the top goes too, the rock's
-    // cell opens to the sky (a lone ore vein or outcrop no longer leaves its top hanging). Rock above (a mountain's inside)
-    // keeps its roof; a top with something on it stays.
+    // The same place opens a bare top over any mined rock (BareTop, user rule 2026-10-23, and what follows from RockRoof): what
+    // stands right above the rock is a bare natural rock top (no rock above, nothing built, placed or standing on it) -> the
+    // top goes too, the rock's cell opens to the sky. On the top level, with nothing above, the cell opens the same way. Rock
+    // above (a mountain's inside) keeps its roof; a top with something on it stays.
     [HarmonyPatch(typeof(Mineable), nameof(Mineable.DestroyMined))]
     public static class Mineable_MinedMarked_Patch
     {
@@ -231,6 +232,10 @@ namespace ProjectZ
                 {
                     BareTop.Opened++;
                     Shaft.Open(__state.own, map, pawn);
+                }
+                else if (__state.own.IsValid && !BareTop.Off && !FloorRoof.Above(__state.own, map).IsValid && (map.roofGrid.RoofAt(__state.own)?.isNatural ?? false))
+                {
+                    map.roofGrid.SetRoof(__state.own, null);   // (a map from before RockRoof: the top level's rock had a roof)
                 }
             }
             finally

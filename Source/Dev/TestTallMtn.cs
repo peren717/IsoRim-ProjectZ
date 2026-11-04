@@ -245,6 +245,12 @@ namespace ProjectZ.Dev
                     {
                         lipRoofs++;
                     }
+                    // thick on the ground comes from the rock above (a tall thing's raised edge rock too)
+                    if (thick != (Levels.Cell(g, 1, map).GetEdifice(map)?.def.building?.isNaturalRock ?? false))
+                    {
+                        badGroundRoof++;
+                        first = first ?? $"ground roof {g} H{H} {gRoof?.defName}, level 1 {Levels.Cell(g, 1, map).GetEdifice(map)}";
+                    }
                     // the ground roof under a rise: vanilla's thick or thin kept, none became the floor roof
                     if (H > 0 && gRoof != RoofDefOf.RoofRockThick && gRoof != RoofDefOf.RoofRockThin && gRoof != PZDefOf.PZ_FloorRoof)
                     {
@@ -292,7 +298,9 @@ namespace ProjectZ.Dev
                             badRock++;
                             first = first ?? $"rock {c} L{L} H{H}";
                         }
-                        if ((L < H) != (r == RoofDefOf.RoofRockThick) || L == H && r != null)
+                        // (the rule, RockRoof: thick under rock, the top rock layer thin, nothing on the top level, none on tops)
+                        RoofDef wantRoof = L + 1 < H ? RoofDefOf.RoofRockThick : L < H && L < cap ? RoofDefOf.RoofRockThin : null;
+                        if (r != wantRoof)
                         {
                             badRoof++;
                             first = first ?? $"roof {c} L{L} H{H} {r?.defName}";
@@ -347,7 +355,7 @@ namespace ProjectZ.Dev
                 Result("fill heights are what the map shows (NaturalTop)", mism == 0, $"{mism} differ{(firstM == null ? "" : ", first " + firstM)}");
             }
             Info("heights (cells per top level): " + string.Join(", ", Enumerable.Range(0, cap + 1).Select(L => $"L{L} {hist[L]}")));
-            Result("fill: a top over thick roof and over every ground rock (lips, ore, outcrops), rock below every top, thick roof under every band rock and none on tops, ground roofs kept or the floor roof, rough floor of the column's rock, solid rock over tall things",
+            Result("fill: a top over thick roof and over every ground rock (lips, ore, outcrops), rock below every top, roofs by the rock above (thick under rock, thin top layer, none on tops), ground roofs kept or the floor roof, rough floor of the column's rock, solid rock over tall things",
                 badThick == 0 && badRock == 0 && badRoof == 0 && badDef == 0 && badGroundRoof == 0 && badTall == 0 && hist.Skip(1).Sum() > 0,
                 $"rise {badThick}, rock {badRock}, roof {badRoof}, ground roof {badGroundRoof}, terrain {badDef}, tall-thing columns {tallCols} ({badTall} bad){(first == null ? "" : ", first " + first)}");
             Result("fill counters equal the recount: lips (ground rock without a thick roof), lips given the floor roof",

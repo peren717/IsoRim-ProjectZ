@@ -94,7 +94,8 @@ namespace ProjectZ
         // one asked for, else the one there: vanilla's thick overhead mountain, or the thin roof at a mountain's edge) and
         // otherwise takes the floor roof too (the support roof, as under a slab); none for None. Support follows from it: a
         // floor roof or a thin rock roof needs the game's roof support and falls with its floor (SlabCollapse); a thick roof
-        // never vanishes (vanilla: it drops rocks and stays), so the floor over it stays.
+        // never vanishes (vanilla: it drops rocks and stays), so the floor over it stays. (On a tall-mountain map thick or
+        // thin is the rock above's to say: RockRoof.)
         public static RoofDef CeilingFor(FloorKind k, RoofDef asked = null, RoofDef cur = null)
         {
             switch (k)

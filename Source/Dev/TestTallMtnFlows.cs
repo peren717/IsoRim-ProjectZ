@@ -16,7 +16,7 @@ namespace ProjectZ.Dev
     //      top, and a colonist walks up onto the top;
     //   F2 colonists build a wall and a bed on the top;
     //   F3 a colonist mines a level-1 cliff face, then the cell behind it: rock gone, the rough-hewn floor counts as a
-    //      natural rock floor (R40), the thick roof above stays, the face behind is revealed as vanilla;
+    //      natural rock floor (R40), the natural roof above stays (none on the top level), the face behind is revealed as vanilla;
     //   F4 vanilla collapse under a rock floor: a 15x15 block of band rock taken away, CollapsedRocks fall, the thick
     //      roof and the floor above stay;
     //   F5 a colonist on a level-2 top ordered down to the level-1 top below with no stairs there never jumps (no jumps since 2026-10-19);
@@ -258,8 +258,8 @@ namespace ProjectZ.Dev
                     RoofDef r = map.roofGrid.RoofAt(tfMine1);
                     bool revealed = !map.fogGrid.IsFogged(tfMine2);
                     int chunks = GenRadial.RadialDistinctThingsAround(tfMine1, map, 2f, true).Count(x => x.def.thingCategories?.Contains(ThingCategoryDefOf.StoneChunks) ?? false);
-                    Result("F3 a colonist mined a level-1 cliff face: rock gone, rough-hewn floor is a natural rock floor (R40), thick roof above kept, the rock behind revealed",
-                        gone && t == tfRockDef.building.leaveTerrain && Floors.KindAt(tfMine1, map) == FloorKind.NaturalRock && r == RoofDefOf.RoofRockThick && revealed,
+                    Result("F3 a colonist mined a level-1 cliff face: rock gone, rough-hewn floor is a natural rock floor (R40), natural roof above kept, the rock behind revealed",
+                        gone && t == tfRockDef.building.leaveTerrain && Floors.KindAt(tfMine1, map) == FloorKind.NaturalRock && (r != null && r.isNatural || a.MaxLevel == 1) && revealed,
                         $"{tfMine1}: edifice gone {gone}, terrain {t?.defName} (leave {tfRockDef.building.leaveTerrain?.defName}), kind {Floors.KindAt(tfMine1, map)}, roof {r?.defName}, behind {tfMine2} revealed {revealed}; chunks near {chunks}");
                     // R40: the mined cell is a natural floor for stairs landing and for drops
                     Result("R40 the mined cell counts as natural: stairs may land there, its roof kept against pods like any floor's (rock-top floors)", SlabSupport.LandingBlocked(tfMine1, map) == null && FloorRoof.Kept(FloorRoof.Below(tfMine1, map), map),
@@ -269,7 +269,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "tm_f_mined2":
-                    Result("F3 the cell behind (revealed by the first) mined too: a tunnel into the level-1 rock", tfMine2.GetEdifice(map) == null && map.roofGrid.RoofAt(tfMine2) == RoofDefOf.RoofRockThick,
+                    Result("F3 the cell behind (revealed by the first) mined too: a tunnel into the level-1 rock", tfMine2.GetEdifice(map) == null && ((map.roofGrid.RoofAt(tfMine2)?.isNatural ?? false) || a.MaxLevel == 1),
                         $"{tfMine2}: edifice {tfMine2.GetEdifice(map)?.def.defName ?? "none"}, roof {map.roofGrid.RoofAt(tfMine2)?.defName}");
                     stage = "tm_f_collapse";
                     return true;
@@ -424,6 +424,10 @@ namespace ProjectZ.Dev
                     }
                     IntVec3 eg = ProjectZ.GroundCellOf(exit, map);
                     int he = TH(eg, map);
+                    if (he == 1 && !TmTop(exit, map))
+                    {
+                        continue;   // (solid rock on the top level, no top: a 2-storey world)
+                    }
                     IntVec3 walk = IntVec3.Invalid;
                     int score;
                     if (he == 1)
@@ -1177,17 +1181,17 @@ namespace ProjectZ.Dev
                 Info("F10 no 1x1 tall building without research: skipped");
                 return;
             }
-            // ground faces (revealed natural rock) under a column with top >= 2 and one with top 1
+            // ground faces (revealed natural rock) under a thick-roof column with top >= 3 and one with top 1 (edge rock)
             IntVec3 solid = IntVec3.Invalid, underTop = IntVec3.Invalid;
             IntVec3 home = Centroid(map);
             foreach (IntVec3 g in Near(home, 160, map))
             {
-                if (!g.InBounds(map) || g.z >= a.groundZ - 1 || g.z < 1 || map.fogGrid.IsFogged(g) || !(g.GetEdifice(map) is Mineable m) || !(map.roofGrid.RoofAt(g)?.isThickRoof ?? false))
+                if (!g.InBounds(map) || g.z >= a.groundZ - 1 || g.z < 1 || map.fogGrid.IsFogged(g) || !(g.GetEdifice(map) is Mineable m))
                 {
                     continue;
                 }
                 int H = TH(g, map);
-                if (!solid.IsValid && H >= 3 && Levels.Cell(g, 1, map).GetEdifice(map) is Mineable)
+                if (!solid.IsValid && H >= 3 && (map.roofGrid.RoofAt(g)?.isThickRoof ?? false) && Levels.Cell(g, 1, map).GetEdifice(map) is Mineable)
                 {
                     solid = g;
                 }

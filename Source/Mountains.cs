@@ -8,25 +8,32 @@ namespace ProjectZ
 {
     // Tall mountains, phase 1 (isorim-pz-mountains-design.md §2.1, option A; world setting "Tall mountains", off by
     // default, new worlds only). On a map generated with it, the overhead-mountain (thick-roof) areas rise into the bands:
-    //   - height H per ground column from the elevation captured at generation (NaturalElevation): 1 + one storey per
+    //   - height H per ground column from the elevation captured at generation (NaturalElevation): 2 + one storey per
     //     Step of elevation over the thick-roof threshold (Step 0.10, user 2026-10-17), cut flat at the top level (the top level stays free, so
-    //     every top is standable); every other ground natural rock (the edge lip with a thin roof or none, ore, lone
-    //     outcrops) gets height 1: a walkable level-1 top (rock-top floors, RockTops); a tall thing under a rise gets
-    //     solid rock over it (a small level-2 plateau);
+    //     every top is standable). A thick-roof column has H 2 at least: rock stands above its ground cell, so a tunnel
+    //     under an overhead mountain keeps its roof. With cap 1 (a 2-storey world) H 2 is cap + 1: level 1 is solid rock, no
+    //     top. Every other ground natural
+    //     rock (the edge lip with a thin roof or none, ore, lone outcrops) gets height 1: a walkable level-1 top (rock-top
+    //     floors, RockTops); a tall thing under a rise gets solid rock over it (a small level-2 plateau);
     //   - per level a cleanup like vanilla's: features narrower than 3 cells and level groups under 20 cells go, and
-    //     ledges narrower than Terrace cells are filled up (one sheer cliff instead of 1-2 cell steps);
+    //     ledges narrower than Terrace cells are filled up (one sheer cliff instead of 1-2 cell steps); a thick-roof
+    //     column it lowers under H 2 comes back to H 2;
     //   - levels 1..H-1 of a column hold the column's ground rock (the nearest non-ore natural rock) on its rough
-    //     floor, level H only the rough floor (the mountain top); the cell under every band rock gets the thick rock
-    //     roof; ground roofs stay vanilla's (thick inside, thin at the edge), a ground rock without one gets the floor
-    //     roof (the support roof, as under a slab: Floors.CeilingFor);
+    //     floor, level H only the rough floor (the mountain top); roofs by the one rule (RockRoof): thick under rock, the
+    //     top rock layer thin, none on the top level; ground roofs stay vanilla's where that agrees (thick inside, thin at
+    //     the edge), a ground rock without one gets the floor roof (the support roof, as under a slab: Floors.CeilingFor);
     //   - fog: only a one-cell rim of each top along the open air is revealed, with the rock faces next to it (BandFog);
     //     the plateau behind opens when the player's pawns can walk there (MountainFog.Reveal);
     //   - ore lumps per level: the ground's ore share of its rock, the ground's ore mix, vanilla lump sizes.
-    // Everything else (mining, collapse, temperature, darkness, regions) is vanilla on the Things and roofs made here.
+    // Everything else (mining, collapse, temperature, darkness, regions) is vanilla on the Things and roofs made here; mining
+    // rock with no rock above opens the sky (BareTop), with rock above the roof stays.
     public static class Mountains
     {
         // Elevation per storey (tests: -projectzmtnstep=X).
         public static float Step = 0.10f;
+        // Lowest H of a thick-roof column (tests: 1, with RockRoof.Off: the fixtures that need a bare level-1 top over a wide
+        // block of thick-roofed ground rock, a map from before the rule).
+        public static int ThickMin = 2;
         public const int MinGroup = 20;
         public const int Terrace = 3;
 
@@ -42,10 +49,14 @@ namespace ProjectZ
         // ---------------------------------------------------------------- heights
 
         // H per ground cell (index z * sx + x), 0 = no rise; cap = the highest level a top may have.
+        // The fill is spawning rock (its roofs follow in one pass, Building_SpawnRock_Patch stays out).
+        internal static bool Filling;
+
         public static byte[] Heights(Map map, AnnexMapComponent a, int cap)
         {
             int sx = map.Size.x, gz = a.groundZ, n = sx * gz;
             byte[] h = new byte[n];
+            bool[] thick = new bool[n];
             if (cap < 1 || a.elevation == null || a.elevation.Length != n)
             {
                 return h;
@@ -55,7 +66,8 @@ namespace ProjectZ
                 if (map.roofGrid.RoofAt(new IntVec3(i % sx, 0, i / sx))?.isThickRoof ?? false)
                 {
                     float over = Mathf.Max(0f, NaturalElevation.Dequantise(a.elevation[i]) - NaturalElevation.ThickRoof + 0.0001f);
-                    h[i] = (byte)Mathf.Clamp(1 + Mathf.FloorToInt(over / Step), 1, cap);
+                    h[i] = (byte)Mathf.Clamp(ThickMin + Mathf.FloorToInt(over / Step), ThickMin, Mathf.Max(cap, ThickMin));
+                    thick[i] = true;
                 }
             }
             bool[] up = new bool[n], bas = new bool[n];
@@ -87,6 +99,15 @@ namespace ProjectZ
                     }
                 }
             }
+            // what the cleanup lowered keeps rock above its ground cell (before RockTops: its raise over tall things reads
+            // the final mountain)
+            for (int i = 0; i < n; i++)
+            {
+                if (thick[i] && h[i] < ThickMin)
+                {
+                    h[i] = (byte)ThickMin;
+                }
+            }
             RockTops(map, h, sx, gz);
             return h;
         }
@@ -97,8 +118,7 @@ namespace ProjectZ
         //     with a thin roof or none is walkable on top, like the rest of the mountain;
         //   - a tall thing under a rise (ancient dangers; HeightRule.TallThingAt) gets solid rock on level 1 over it, raised
         //     as a small plateau at least 3 cells wide (user Q2: the 3x3 round it, where the mountain rises): H 2, a top on
-        //     level 2. In a 2-storey world (cap 1) that H is cap + 1: level 1 is solid rock with its thick roof and no top
-        //     (decided 2026-10-18).
+        //     level 2. In a 2-storey world (cap 1) that H is cap + 1: level 1 is solid rock and no top (decided 2026-10-18).
         private static void RockTops(Map map, byte[] h, int sx, int gz)
         {
             int n = sx * gz;
@@ -522,8 +542,8 @@ namespace ProjectZ
                 Rand.PopState();
             }
             double tOre = sw.Elapsed.TotalSeconds - tFill;
-            // rock Things and the thick roof under every rock floor
-            RoofDef thick = RoofDefOf.RoofRockThick;
+            // rock Things, then their roofs: the rule asks for the rock above
+            Filling = true;
             for (int L = 1; L <= cap; L++)
             {
                 for (int i = 0; i < n; i++)
@@ -550,12 +570,24 @@ namespace ProjectZ
                     }
                     GenSpawn.Spawn(ThingMaker.MakeThing(def), c, map, WipeMode.Vanish);
                     tSpawn += part.Elapsed.TotalSeconds;
-                    part.Restart();
-                    map.roofGrid.SetRoof(c, thick);
-                    tRoof += part.Elapsed.TotalSeconds;
                     LastRock++;
                 }
             }
+            Filling = false;
+            part.Restart();
+            for (int L = 1; L <= cap; L++)
+            {
+                RoofDef without = RockRoof.Off ? RoofDefOf.RoofRockThick : L < cap ? RoofDefOf.RoofRockThin : null;
+                for (int i = 0; i < n; i++)
+                {
+                    if (h[i] > L)
+                    {
+                        IntVec3 c = Levels.Cell(new IntVec3(i % sx, 0, i / sx), L, map);
+                        map.roofGrid.SetRoof(c, RockRoof.For(c, map, without));
+                    }
+                }
+            }
+            tRoof = part.Elapsed.TotalSeconds;
             // the ground cell under a new top without a natural rock roof gets the floor roof (the support roof, as under a
             // slab); vanilla's thin and thick rock roofs stay
             for (int i = 0; i < n; i++)
@@ -565,6 +597,10 @@ namespace ProjectZ
                 {
                     map.roofGrid.SetRoof(g, PZDefOf.PZ_FloorRoof);
                     LastLipRoofs++;
+                }
+                if (h[i] >= 1)
+                {
+                    RockRoof.Apply(g, map);
                 }
             }
             LastSeconds = sw.Elapsed.TotalSeconds;
@@ -706,7 +742,7 @@ namespace ProjectZ
             List<ThingDef> defs = mix.Keys.ToList();
             List<int> cand = new List<int>();
             List<IntVec3> centres = new List<IntVec3>();
-            for (int L = 1; L < cap; L++)
+            for (int L = 1; L <= cap; L++)   // (solid rock on the top level only with H cap + 1)
             {
                 cand.Clear();
                 centres.Clear();
