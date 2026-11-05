@@ -469,6 +469,10 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
+            if (mode == "slabdrag")
+            {
+                PatchDragTimer(h);
+            }
             if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
             {
                 PatchMouse(h);

@@ -280,9 +280,16 @@ namespace ProjectZ
             }
             // (before the walk: sorting the drag's cells asks this method again)
             HashSet<IntVec3> drag = countPlanned ? SlabDrag.Cells(map) : null;
-            if (drag != null && SlabDrag.NoHolderNear(root))
+            if (drag != null)
             {
-                return false;
+                if (ignore == null && SlabDrag.Answer(root, out bool known))
+                {
+                    return known;
+                }
+                if (SlabDrag.NoHolderNear(root))
+                {
+                    return false;
+                }
             }
             open.Clear();
             seen.Clear();
@@ -318,6 +325,10 @@ namespace ProjectZ
             }
             open.Clear();
             seen.Clear();
+            if (drag != null && ignore == null)
+            {
+                SlabDrag.Remember(root, found);
+            }
             return found;
         }
 
@@ -338,8 +349,14 @@ namespace ProjectZ
     //     same cells StairShape.Above gives for the walk's cells below.
     //   - Only cells a slab could really go on count, or a drag would reach over a stairwell or a tall building to cells
     //     no builder could ever get to. That is the designator's own check with the support part answered yes (Sorting).
-    //   - Sorted once per frame and drag, not per cell. With it the holders in reach of the drag are marked: a cell far from
-    //     any would otherwise walk its whole 6.9 circle of dragged cells before it is refused, every frame.
+    //   - Sorted once per drag shape, not per cell. With it the holders in reach of the drag are marked: a cell far from any
+    //     would otherwise walk its whole 6.9 circle of dragged cells before it is refused.
+    //   - While the drag does not change, the sorted cells, the mark and each cell's support answer are kept (M163): the game
+    //     asks every dragged cell every frame. They are renewed every RefreshFrames, so what is built or removed during an
+    //     unpaused drag shows in the preview. "Does not change" is the whole cell list, compared once a frame: count and
+    //     ends alone can match for two shapes (two ovals, an angled line drawn the other way).
+    //   - The release never uses them: the game's mouse-up takes DragCells, which DrawPanelReadout may already have
+    //     filled this frame, then asks each cell again. Release drops everything first, the dragger's list too.
     public static class SlabDrag
     {
         // (test switch: the old rule, for comparison runs)
@@ -348,14 +365,47 @@ namespace ProjectZ
         // The drag's cells are being sorted: Supported answers yes, so only the other rules decide.
         public static bool Sorting { get; private set; }
 
+        // How long the kept answers last, in frames (the tests hold them longer to prove the release).
+        public static int RefreshFrames = 30;
+
+        private static readonly AccessTools.FieldRef<DesignationDragger, int> draggerFrame = AccessTools.FieldRefAccess<DesignationDragger, int>("lastUpdateFrame");
         private static readonly HashSet<IntVec3> cells = new HashSet<IntVec3>();
-        private static int frame = -1;
-        private static int count;
-        private static IntVec3 first, last;
+        private static readonly List<IntVec3> shape = new List<IntVec3>();
+        private static readonly Dictionary<IntVec3, bool> answers = new Dictionary<IntVec3, bool>();
+        private static int sortedFrame, comparedFrame = -1;
+        private static Map keptMap;
         private static Designator designator;
         private static DrawStyleDef style;
         private static bool[] near = new bool[0];
         private static int nearX, nearZ, nearW, nearH;
+
+        // The kept support answer for a cell under the drag.
+        public static bool Answer(IntVec3 below, out bool supported) => answers.TryGetValue(below, out supported);
+
+        public static void Remember(IntVec3 below, bool supported) => answers[below] = supported;
+
+        // The drag ended: nothing is kept for the next one.
+        public static void Clear()
+        {
+            keptMap = null;
+            designator = null;
+            style = null;
+            shape.Clear();
+            cells.Clear();
+            answers.Clear();
+            nearW = nearH = 0;
+            comparedFrame = -1;
+        }
+
+        // The mouse-up of a slab drag: what it asks next is answered from the map as it is now.
+        public static void Release(DesignationDragger dragger)
+        {
+            if (designator != null)
+            {
+                Clear();
+                draggerFrame(dragger) = -1;
+            }
+        }
 
         // A cell under the drag with no holder within 6.9 cells (no walk can find one).
         public static bool NoHolderNear(IntVec3 below)
@@ -381,18 +431,42 @@ namespace ProjectZ
             {
                 return null;
             }
-            if (frame != UnityEngine.Time.frameCount || designator != d || style != dm.SelectedStyle || count != buffer.Count || first != buffer[0] || last != buffer[buffer.Count - 1])
+            int now = UnityEngine.Time.frameCount;
+            if (keptMap != map || designator != d || style != dm.SelectedStyle || now - sortedFrame >= RefreshFrames || !SameShape(buffer, now))
             {
-                frame = UnityEngine.Time.frameCount;
+                keptMap = map;
                 designator = d;
                 style = dm.SelectedStyle;
-                count = buffer.Count;
-                first = buffer[0];
-                last = buffer[buffer.Count - 1];
+                sortedFrame = comparedFrame = now;
+                shape.Clear();
+                shape.AddRange(buffer);
+                answers.Clear();
                 Sort(d, buffer);
                 MarkHolders(map);
             }
             return cells;
+        }
+
+        // This is asked for every cell: the whole list once a frame (the mouse moves between frames), else its ends.
+        private static bool SameShape(List<IntVec3> buffer, int now)
+        {
+            if (shape.Count != buffer.Count || shape[0] != buffer[0] || shape[shape.Count - 1] != buffer[buffer.Count - 1])
+            {
+                return false;
+            }
+            if (comparedFrame == now)
+            {
+                return true;
+            }
+            comparedFrame = now;
+            for (int i = 0; i < buffer.Count; i++)
+            {
+                if (shape[i] != buffer[i])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static void Sort(Designator d, List<IntVec3> buffer)
@@ -466,6 +540,26 @@ namespace ProjectZ
                         }
                     }
                 }
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(DesignationDragger), nameof(DesignationDragger.EndDrag))]
+    public static class EndDrag_SlabDrag_Patch
+    {
+        public static void Postfix() => SlabDrag.Clear();
+    }
+
+    // (the only place a drag is released: the left mouse-up in the game's designator input)
+    [HarmonyPatch(typeof(DesignatorManager), nameof(DesignatorManager.ProcessInputEvents))]
+    public static class ProcessInputEvents_SlabDrag_Patch
+    {
+        public static void Prefix(DesignatorManager __instance)
+        {
+            UnityEngine.Event e = UnityEngine.Event.current;
+            if (e != null && e.type == UnityEngine.EventType.MouseUp && e.button == 0 && __instance.Dragger.Dragging)
+            {
+                SlabDrag.Release(__instance.Dragger);
             }
         }
     }

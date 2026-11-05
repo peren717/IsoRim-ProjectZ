@@ -24,7 +24,9 @@ namespace ProjectZ.Dev
     //   C7 second to third floor, built by colonists up two stairs
     //   C8 ship deck drag over open substructure from the hull, built by colonists
     //   C9 a drag cancelled by right click leaves nothing; single clicks behave as before
-    //   C10 cost of a frame of a large drag, also over a grid of columns (timings only)
+    //   C11 support changing under a held drag, unpaused: a wall finished by a colonist, a wall taken down by one. The preview
+    //       follows within the refresh; with the answers held stale on purpose the release still decides from the map as it is
+    //   C10 cost of a frame of a large drag, also over a grid of columns, mouse still and moving (timings only)
     public static partial class TestRunner
     {
         private const int DgHouseX0 = 20, DgHouseX1 = 28, DgZ0 = 12, DgZ1 = 18;
@@ -44,6 +46,89 @@ namespace ProjectZ.Dev
         private static readonly List<Pawn> dgCrewAll = new List<Pawn>();
         private static readonly List<double> dgUpdateMs = new List<double>();
         private static readonly List<double> dgCellsMs = new List<double>();
+        private static readonly List<double> dgMoveMs = new List<double>();
+        private static readonly List<double> dgReleaseMs = new List<double>();
+        private static List<double> dgTimeInto;
+        private static readonly Stopwatch dgWatch = new Stopwatch();
+        private static string dgHold;
+        private static int dgChangeFrame, dgStillPreview;
+        private static bool dgMoveFlip;
+        private static int dgAccFrame = -1;
+        private static double dgAcc;
+        private static readonly List<int> dgMoveShapes = new List<int>();
+
+        internal static void PatchDragTimer(Harmony h)
+        {
+            h.Patch(AccessTools.Method(typeof(DesignationDragger), nameof(DesignationDragger.DraggerUpdate)),
+                prefix: new HarmonyMethod(typeof(TestRunner), nameof(DgTimeStart)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(DgTimeEndUpdate)));
+            h.Patch(AccessTools.Method(typeof(DesignationDragger), nameof(DesignationDragger.UpdateDragCellsIfNeeded)),
+                prefix: new HarmonyMethod(typeof(TestRunner), nameof(DgTimeStart)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(DgTimeEnd)));
+        }
+
+        // The game's own dragger work of a frame, timed: its update, and the full list the build panel's cost readout asks for.
+        private static void DgTimeStart() => dgWatch.Restart();
+
+        private static void DgTimeEnd()
+        {
+            dgWatch.Stop();
+            if (dgTimeInto == null)
+            {
+                return;
+            }
+            if (Time.frameCount != dgAccFrame)
+            {
+                if (dgAccFrame >= 0)
+                {
+                    dgTimeInto.Add(dgAcc);
+                }
+                dgAcc = 0;
+                dgAccFrame = Time.frameCount;
+            }
+            dgAcc += dgWatch.Elapsed.TotalMilliseconds;
+        }
+
+        private static void DgTimeEndUpdate()
+        {
+            DgTimeEnd();
+            if (dgTimeInto == dgMoveMs)
+            {
+                // (a new cell under the mouse for every frame)
+                dgMoveShapes.Add(Find.DesignatorManager.Dragger.CellBuffer.Count);
+                dgMoveFlip = !dgMoveFlip;
+                fakeMouse = ScreenOf(dgMoveFlip ? dgTo + new IntVec3(-1, 0, 0) : dgTo, 1);
+            }
+        }
+
+        private static int DgPreview() => Traverse.Create(Find.DesignatorManager.Dragger).Field("numSelectedCells").GetValue<int>();
+
+        private static string DgStats(List<double> l, int skip = 0)
+        {
+            List<double> s = l.Skip(skip).OrderBy(x => x).ToList();
+            return s.Count == 0 ? "-" : $"median {s[s.Count / 2]:0.00} max {s[s.Count - 1]:0.00}";
+        }
+
+        // C11's fixture: open ground, one wall site east of the dragged rectangle.
+        private static void DgC11(Map map, string check, bool wall)
+        {
+            DgFresh(map);
+            dgCheck = check;
+            IntVec3 site = RG(20, 22);
+            if (wall)
+            {
+                R2Wall(map, site);
+            }
+            else
+            {
+                GenConstruct.PlaceBlueprintForBuild(ThingDefOf.Wall, site, map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
+            }
+            DgCrew(map, RG(26, 22), ThingDefOf.WoodLog, 75);
+            DgSetWant(DgRect(14, 20, 19, 24));
+        }
+
+        private static bool DgWallUp(Map map) => RG(20, 22).GetEdifice(map)?.def == ThingDefOf.Wall;
+
+        private static void DgC11Drag(Map map, string hold) =>
+            DgDrag(map, DgFloor(), typeof(DrawStyle_FilledRectangle), RG(10, 20), RG(19, 24), 1, hold + "_done", hold: hold);
 
         private static bool StepSlabDrag(Map map)
         {
@@ -77,8 +162,9 @@ namespace ProjectZ.Dev
         }
 
         // Select d with a draw style and drag from one ground cell to another on the floor; goes on at stage next.
-        private static void DgDrag(Map map, Designator_Build d, Type style, IntVec3 from, IntVec3 to, int floor, string next, bool cancel = false, float size = 30f)
+        private static void DgDrag(Map map, Designator_Build d, Type style, IntVec3 from, IntVec3 to, int floor, string next, bool cancel = false, float size = 30f, string hold = null)
         {
+            dgHold = hold;
             dgDes = d;
             dgStyle = style;
             dgFrom = from;
@@ -320,7 +406,7 @@ namespace ProjectZ.Dev
                 }
                 case "dg_move":
                     fakeMouse = ScreenOf(dgTo, dgFloor);
-                    Wait(5, "dg_hold");
+                    Wait(5, dgHold ?? "dg_hold");
                     return true;
                 case "dg_hold":
                 {
@@ -623,6 +709,117 @@ namespace ProjectZ.Dev
                     return true;
                 case "dg_c9_click4":
                     DgExpect(map, "C9 a single click one cell off the blueprints is refused, as before", 1);
+                    stage = "dg_c11a";
+                    return true;
+
+                // ---- C11 support changes while the mouse holds still, the game running
+                case "dg_c11a":
+                    DgC11(map, "C11a", false);
+                    DgC11Drag(map, "dg_c11a_hold");
+                    return true;
+                case "dg_c11a_hold":
+                    Result("C11a before the wall: the preview shows nothing", DgPreview() == 0, $"preview {DgPreview()}");
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    TickUntil(30000, () => DgWallUp(map), "dg_c11a_up", 1);
+                    return true;
+                case "dg_c11a_up":
+                    tickWatch = null;
+                    Result("C11a a colonist finished the wall during the drag", DgWallUp(map) && Find.DesignatorManager.Dragger.Dragging, $"wall {DgWallUp(map)}, dragging {Find.DesignatorManager.Dragger.Dragging}, speed {Find.TickManager.CurTimeSpeed}, {ticksTotal} ticks");
+                    dgChangeFrame = Time.frameCount;
+                    stage = "dg_c11a_watch";
+                    return true;
+                case "dg_c11a_watch":
+                    if (DgPreview() != dgWant.Count && Time.frameCount - dgChangeFrame <= 90)
+                    {
+                        Wait(1, "dg_c11a_watch");
+                        return true;
+                    }
+                    Result("C11a the preview takes the new wall within the refresh", DgPreview() == dgWant.Count && Time.frameCount - dgChangeFrame <= SlabDrag.RefreshFrames + 3, $"preview {DgPreview()}/{dgWant.Count} after {Time.frameCount - dgChangeFrame} frames");
+                    stage = "dg_hold";
+                    return true;
+                case "dg_c11a_hold_done":
+                    DgExpect(map, "C11a release: the cells the new wall holds are planned", 1);
+                    stage = "dg_c11b";
+                    return true;
+                case "dg_c11b":
+                    DgC11(map, "C11b", false);
+                    DgC11Drag(map, "dg_c11b_hold");
+                    return true;
+                case "dg_c11b_hold":
+                    SlabDrag.RefreshFrames = int.MaxValue;
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    TickUntil(30000, () => DgWallUp(map), "dg_c11b_up", 1);
+                    return true;
+                case "dg_c11b_up":
+                    tickWatch = null;
+                    dgChangeFrame = Time.frameCount;
+                    Wait(40, "dg_c11b_stale");
+                    return true;
+                case "dg_c11b_stale":
+                    dgStillPreview = DgPreview();
+                    Result("C11b wall up, answers held: the preview is still the old one after 40 frames", DgWallUp(map) && dgStillPreview == 0, $"wall {DgWallUp(map)}, preview {dgStillPreview}");
+                    stage = "dg_hold";
+                    return true;
+                case "dg_c11b_hold_done":
+                    SlabDrag.RefreshFrames = 30;
+                    Result("C11b the dragger's list of that frame was the stale one (so the release had to redo it)", dgDragged.Count == 0, $"{dgDragged.Count}");
+                    DgExpect(map, "C11b release decides fresh: a cell that gained support is accepted", 1);
+                    stage = "dg_c11c";
+                    return true;
+                case "dg_c11c":
+                    DgC11(map, "C11c", true);
+                    DgC11Drag(map, "dg_c11c_hold");
+                    return true;
+                case "dg_c11c_hold":
+                    Result("C11c with the wall: the preview shows the cells it holds", DgPreview() == dgWant.Count, $"preview {DgPreview()}/{dgWant.Count}");
+                    map.designationManager.AddDesignation(new Designation(RG(20, 22).GetEdifice(map), DesignationDefOf.Deconstruct));
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    TickUntil(30000, () => !DgWallUp(map), "dg_c11c_gone", 1);
+                    return true;
+                case "dg_c11c_gone":
+                    tickWatch = null;
+                    Result("C11c a colonist took the wall down during the drag", !DgWallUp(map) && Find.DesignatorManager.Dragger.Dragging, $"wall {DgWallUp(map)}, dragging {Find.DesignatorManager.Dragger.Dragging}, {ticksTotal} ticks");
+                    dgChangeFrame = Time.frameCount;
+                    stage = "dg_c11c_watch";
+                    return true;
+                case "dg_c11c_watch":
+                    if (DgPreview() != 0 && Time.frameCount - dgChangeFrame <= 90)
+                    {
+                        Wait(1, "dg_c11c_watch");
+                        return true;
+                    }
+                    Result("C11c the preview drops the cells within the refresh", DgPreview() == 0 && Time.frameCount - dgChangeFrame <= SlabDrag.RefreshFrames + 3, $"preview {DgPreview()} after {Time.frameCount - dgChangeFrame} frames");
+                    stage = "dg_hold";
+                    return true;
+                case "dg_c11c_hold_done":
+                    dgWant = new HashSet<IntVec3>();
+                    DgExpect(map, "C11c release: nothing planned", 1);
+                    stage = "dg_c11d";
+                    return true;
+                case "dg_c11d":
+                    DgC11(map, "C11d", true);
+                    DgC11Drag(map, "dg_c11d_hold");
+                    return true;
+                case "dg_c11d_hold":
+                    SlabDrag.RefreshFrames = int.MaxValue;
+                    map.designationManager.AddDesignation(new Designation(RG(20, 22).GetEdifice(map), DesignationDefOf.Deconstruct));
+                    Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
+                    TickUntil(30000, () => !DgWallUp(map), "dg_c11d_gone", 1);
+                    return true;
+                case "dg_c11d_gone":
+                    tickWatch = null;
+                    Wait(40, "dg_c11d_stale");
+                    return true;
+                case "dg_c11d_stale":
+                    dgStillPreview = DgPreview();
+                    Result("C11d wall gone, answers held: the preview is still the old one after 40 frames", !DgWallUp(map) && dgStillPreview == dgWant.Count, $"wall {DgWallUp(map)}, preview {dgStillPreview}/{dgWant.Count}");
+                    stage = "dg_hold";
+                    return true;
+                case "dg_c11d_hold_done":
+                    SlabDrag.RefreshFrames = 30;
+                    Result("C11d the dragger's list of that frame was the stale one", dgDragged.Count == dgWant.Count, $"{dgDragged.Count}/{dgWant.Count}");
+                    dgWant = new HashSet<IntVec3>();
+                    DgExpect(map, "C11d release decides fresh: a cell that lost support is refused", 1);
                     stage = "dg_c8";
                     return true;
 
@@ -749,34 +946,55 @@ namespace ProjectZ.Dev
                     fakeMouse = ScreenOf(dgTo, 1);
                     dgUpdateMs.Clear();
                     dgCellsMs.Clear();
-                    dgPerfLeft = 24;
-                    Wait(3, "dg_c10_time");
+                    dgMoveMs.Clear();
+                    dgMoveShapes.Clear();
+                    dgReleaseMs.Clear();
+                    dgPerfLeft = 95;
+                    Wait(3, "dg_c10_still");
+                    dgTimeInto = dgUpdateMs;
                     return true;
-                case "dg_c10_time":
+                case "dg_c10_still":
                 {
-                    DesignatorManager dm = Find.DesignatorManager;
-                    // (each timing starts with no set for the frame, as the first ask of a frame does)
-                    Traverse frameField = Traverse.Create(typeof(SlabDrag)).Field("frame");
-                    frameField.SetValue(-1);
-                    Stopwatch sw = Stopwatch.StartNew();
-                    dm.Dragger.DraggerUpdate();
-                    sw.Stop();
-                    dgUpdateMs.Add(sw.Elapsed.TotalMilliseconds);
-                    frameField.SetValue(-1);
-                    Traverse.Create(dm.Dragger).Field("lastUpdateFrame").SetValue(-1);
-                    sw.Restart();
-                    int n = dm.Dragger.DragCells.Count;
-                    sw.Stop();
-                    dgCellsMs.Add(sw.Elapsed.TotalMilliseconds);
                     if (--dgPerfLeft > 0)
                     {
-                        Wait(1, "dg_c10_time");
+                        Wait(1, "dg_c10_still");
                         return true;
                     }
-                    List<double> u = dgUpdateMs.Skip(4).OrderBy(x => x).ToList();
-                    List<double> c = dgCellsMs.Skip(4).OrderBy(x => x).ToList();
+                    dgTimeInto = dgMoveMs;
+                    dgPerfLeft = 40;
+                    stage = "dg_c10_moving";
+                    return true;
+                }
+                case "dg_c10_moving":
+                {
+                    if (--dgPerfLeft > 0)
+                    {
+                        Wait(1, "dg_c10_moving");
+                        return true;
+                    }
+                    dgTimeInto = null;
+                    fakeMouse = ScreenOf(dgTo, 1);
+                    dgPerfLeft = 6;
+                    Wait(3, "dg_c10_release");
+                    return true;
+                }
+                case "dg_c10_release":
+                {
+                    // (what the mouse-up costs: everything dropped, the whole list again)
+                    DesignatorManager dm = Find.DesignatorManager;
+                    Traverse.Create(dm.Dragger).Field("lastUpdateFrame").SetValue(-1);
+                    Stopwatch sw = Stopwatch.StartNew();
+                    SlabDrag.Release(dm.Dragger);
+                    int n = dm.Dragger.DragCells.Count;
+                    sw.Stop();
+                    dgReleaseMs.Add(sw.Elapsed.TotalMilliseconds);
+                    if (--dgPerfLeft > 0)
+                    {
+                        Wait(1, "dg_c10_release");
+                        return true;
+                    }
                     Result($"{dgCheck} drag timed (SlabDrag off {SlabDrag.Off})", true,
-                        $"buffer {dm.Dragger.CellBuffer.Count}, accepted {n}; per frame, the dragger's update (cells on screen): median {u[u.Count / 2]:0.00} ms, max {u[u.Count - 1]:0.00}; the full drag list (mouse up): median {c[c.Count / 2]:0.00} ms, max {c[c.Count - 1]:0.00}");
+                        $"buffer {dm.Dragger.CellBuffer.Count}, accepted {n}; dragger work per frame ms: still {DgStats(dgUpdateMs, 5)} ({dgUpdateMs.Count} frames), moving {DgStats(dgMoveMs, 3)} ({dgMoveMs.Count} frames, buffer sizes {string.Join(" ", dgMoveShapes.Take(4))}); release {DgStats(dgReleaseMs)}");
                     DgEvent(EventType.MouseDown, 1);
                     Wait(3, "dg_c10_next");
                     return true;
