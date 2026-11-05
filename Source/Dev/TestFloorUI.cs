@@ -19,8 +19,8 @@ namespace ProjectZ.Dev
     //   2. every designator in the architect menu keeps the pointer on the viewed floor;
     //   3. refusals: an upper floor while viewing the ground, too far from a wall below, over the stairwell; a wall
     //      on open air;
-    //   4. dragging the upper floor over house A's open part on floor 2: blueprints on floor 2 (past the roof only next to
-    //      the wall), colonists build them;
+    //   4. dragging the upper floor over house A's open part on floor 2: blueprints on floor 2 (past the house as far as
+    //      the drag goes, within the wall's reach: mode slabdrag has the limits), colonists build them;
     //   5. a wall line and a bed on the new floor, a stockpile and the home area on floor 2;
     //   6. no designator again: a drafted move order on open air goes to the ground;
     //   7. screenshots of the floor button, the inspect pane, the architect menu and the mod settings (language check).
@@ -323,10 +323,11 @@ namespace ProjectZ.Dev
                     List<Thing> placed = PlannedOn(map, uFloorCells, PZDefOf.PZ_UpperFloor);
                     List<Thing> wrong = PlannedOn(map, past, PZDefOf.PZ_UpperFloor);
                     List<Thing> ground = PlannedOn(map, new CellRect(sHouseA.minX - 1, sHouseA.minZ, sHouseA.Width + 1, sHouseA.Height).Cells, PZDefOf.PZ_UpperFloor);
-                    // (removal design §7: past the roof only where a roof could be held, i.e. right next to the house wall)
-                    Result("dragged upper floor: blueprints on every open cell over the room on floor 2, past the roof only where the wall holds it, none on the ground",
-                        placed.Count == uFloorCells.Count && wrong.All(t => SlabSupport.Supported(FloorRoof.Below(t.Position, map), map)) && ground.Count == 0,
-                        $"{placed.Count}/{uFloorCells.Count} placed, {wrong.Count} past the roof (all held by the wall: {wrong.All(t => SlabSupport.Supported(FloorRoof.Below(t.Position, map), map))}), {ground.Count} on the ground; drag had {drag.Count} cells");
+                    // (SlabDrag: the drag's cells count as planned, so every cell of it within the wall's 6.9 cells goes down; this
+                    // drag ends one column past the house)
+                    Result("dragged upper floor: blueprints on every open cell over the room on floor 2 and on every dragged cell past the house, none on the ground",
+                        placed.Count == uFloorCells.Count && wrong.Count == past.Count && ground.Count == 0,
+                        $"{placed.Count}/{uFloorCells.Count} placed, {wrong.Count}/{past.Count} past the house, {ground.Count} on the ground; drag had {drag.Count} cells");
                     Wait(20, "u_bp_shot");
                     return true;
                 }

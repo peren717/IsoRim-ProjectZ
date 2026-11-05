@@ -851,7 +851,7 @@ namespace ProjectZ
     }
 
     // An upper floor cell (§7): a roof could be held under it (the game's support rules: a wall, column or stairs within
-    // 6.9 cells over roofed cells, the slabs planned next to it counting as roofs), the cell below not a stairwell (§1),
+    // 6.9 cells over roofed cells, the slabs planned or being dragged next to it counting as roofs), the cell below not a stairwell (§1),
     // and nothing there too tall for the storey (the slab height rule, HeightRule). The slab brings the roof under it.
     public class PlaceWorker_UpperFloor : PlaceWorker
     {

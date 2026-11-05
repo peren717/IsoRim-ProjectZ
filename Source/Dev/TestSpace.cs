@@ -187,8 +187,8 @@ namespace ProjectZ.Dev
                     Result("E2 an upper floor far from any support is refused", !far.Accepted && far.Reason == "PZ_NoSupportBelow".Translate() && cf == UpS(eFar, map), $"{cf}: '{far.Reason}'");
                     AcceptanceReport first = RefusalAt(d, ScreenOf(eRow[0], 1), out IntVec3 c0);
                     Result("E2 an upper floor next to the landing is accepted (the stairs hold it)", first.Accepted && c0 == UpS(eRow[0], map), $"{c0}: {(first.Accepted ? "accepted" : first.Reason)}");
-                    // The row out to the column: one drag reaches only the cells held now (the game checks each dragged cell
-                    // before any is placed); a player drags again from the planned ones, as vanilla roofs are built out.
+                    // The row out to the column: each drag plans its cells within the holders' reach (SlabDrag); repeated for
+                    // whatever needs the cells the other drag planned.
                     List<IntVec3> want = eRow.Concat(eRing).Distinct().Select(g => UpS(g, map)).ToList();
                     List<string> passes = new List<string>();
                     for (int pass = 0; pass < 10 && want.Any(u => !PlaceWorker_Stairs.FloorPlanned(u, map)); pass++)
@@ -200,7 +200,7 @@ namespace ProjectZ.Dev
                     }
                     Find.DesignatorManager.Deselect();
                     int planned = want.Count(u => PlaceWorker_Stairs.FloorPlanned(u, map));
-                    Result("E2 the dragged upper floors are planned (drags repeated outward from the support)", planned == want.Count, $"{planned}/{want.Count} planned; new cells per pass of the two drags: {string.Join(",", passes)}");
+                    Result("E2 the dragged upper floors are planned", planned == want.Count, $"{planned}/{want.Count} planned; new cells per pass of the two drags: {string.Join(",", passes)}");
                     FloorView.Set(0);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Normal;
                     TickUntil(60000, () => want.All(u => SlabDefs.Is(u.GetTerrain(map))), "e_slabs_built", 120);

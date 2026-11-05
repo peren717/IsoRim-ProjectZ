@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using RimWorld;
@@ -265,11 +266,21 @@ namespace ProjectZ
 
         // The game's "a roof could be held here" (RoofCollapseUtility.WithinRangeOfRoofHolder, as JobDriver_BuildRoof
         // checks it): a roof holder (wall, column, stairs) within 6.9 cells, reached over roofed cells. For planning,
-        // cells with a slab planned above count as roofed (a floor dragged out from a wall); 'ignore' is a holder about
-        // to go (stairs being taken down).
+        // cells with a slab planned above count as roofed (a floor dragged out from a wall), also the cells of the drag in
+        // progress (SlabDrag); 'ignore' is a holder about to go (stairs being taken down).
         public static bool Supported(IntVec3 root, Map map, Thing ignore = null, bool countPlanned = false)
         {
             if (!root.IsValid || !root.InBounds(map))
+            {
+                return false;
+            }
+            if (countPlanned && SlabDrag.Sorting)
+            {
+                return true;
+            }
+            // (before the walk: sorting the drag's cells asks this method again)
+            HashSet<IntVec3> drag = countPlanned ? SlabDrag.Cells(map) : null;
+            if (drag != null && SlabDrag.NoHolderNear(root))
             {
                 return false;
             }
@@ -298,7 +309,7 @@ namespace ProjectZ
                 {
                     IntVec3 n = x + GenAdj.CardinalDirections[i];
                     if (n.InBounds(map) && !seen.Contains(n) && n.InHorDistOf(root, RoofCollapseUtility.RoofMaxSupportDistance)
-                        && (map.roofGrid.Roofed(n) || countPlanned && (PlaceWorker_Stairs.FloorPlanned(StairShape.Above(n, map), map) || ShipDeck.Planned(StairShape.Above(n, map), map))))
+                        && (map.roofGrid.Roofed(n) || countPlanned && PlannedAbove(n, map, drag)))
                     {
                         seen.Add(n);
                         open.Enqueue(n);
@@ -308,6 +319,154 @@ namespace ProjectZ
             open.Clear();
             seen.Clear();
             return found;
+        }
+
+        private static bool PlannedAbove(IntVec3 n, Map map, HashSet<IntVec3> drag)
+        {
+            IntVec3 up = StairShape.Above(n, map);
+            return drag != null && drag.Contains(up) || PlaceWorker_Stairs.FloorPlanned(up, map) || ShipDeck.Planned(up, map);
+        }
+    }
+
+    // The slabs of the drag in progress (user 2026-11-05: one drag lays the whole area a holder reaches). The game checks
+    // every dragged cell before it places any, so without this only the ring next to a holder, a roof or an older
+    // blueprint passed and the player dragged again ring by ring. For the support walk the drag's cells count as planned.
+    // Only while the player drags a slab or a ship deck on this map; the 6.9 cell limit and the builders' rule (actual
+    // support, CanConstruct) stay: pawns still build outward from the holders.
+    //   - Cells: the dragger's raw cell buffer. DragCells is no use here: it is filtered through the very check that asks.
+    //     Every dragger path refreshes the buffer before it asks a cell, so it is current; on the viewed upper floor, the
+    //     same cells StairShape.Above gives for the walk's cells below.
+    //   - Only cells a slab could really go on count, or a drag would reach over a stairwell or a tall building to cells
+    //     no builder could ever get to. That is the designator's own check with the support part answered yes (Sorting).
+    //   - Sorted once per frame and drag, not per cell. With it the holders in reach of the drag are marked: a cell far from
+    //     any would otherwise walk its whole 6.9 circle of dragged cells before it is refused, every frame.
+    public static class SlabDrag
+    {
+        // (test switch: the old rule, for comparison runs)
+        public static bool Off;
+
+        // The drag's cells are being sorted: Supported answers yes, so only the other rules decide.
+        public static bool Sorting { get; private set; }
+
+        private static readonly HashSet<IntVec3> cells = new HashSet<IntVec3>();
+        private static int frame = -1;
+        private static int count;
+        private static IntVec3 first, last;
+        private static Designator designator;
+        private static DrawStyleDef style;
+        private static bool[] near = new bool[0];
+        private static int nearX, nearZ, nearW, nearH;
+
+        // A cell under the drag with no holder within 6.9 cells (no walk can find one).
+        public static bool NoHolderNear(IntVec3 below)
+        {
+            int x = below.x - nearX, z = below.z - nearZ;
+            return x >= 0 && z >= 0 && x < nearW && z < nearH && !near[z * nearW + x];
+        }
+
+        // The upper-floor cells of the slab drag in progress on this map; null when there is none.
+        public static HashSet<IntVec3> Cells(Map map)
+        {
+            if (Off || !(Find.UIRoot is UIRoot_Play))
+            {
+                return null;
+            }
+            DesignatorManager dm = Find.DesignatorManager;
+            if (!dm.Dragger.Dragging || !(dm.SelectedDesignator is Designator_Build d) || d.Map != map || !(SlabDefs.Is(d.PlacingDef) || ShipDeck.Is(d.PlacingDef)))
+            {
+                return null;
+            }
+            List<IntVec3> buffer = dm.Dragger.CellBuffer;
+            if (buffer.Count == 0)
+            {
+                return null;
+            }
+            if (frame != UnityEngine.Time.frameCount || designator != d || style != dm.SelectedStyle || count != buffer.Count || first != buffer[0] || last != buffer[buffer.Count - 1])
+            {
+                frame = UnityEngine.Time.frameCount;
+                designator = d;
+                style = dm.SelectedStyle;
+                count = buffer.Count;
+                first = buffer[0];
+                last = buffer[buffer.Count - 1];
+                Sort(d, buffer);
+                MarkHolders(map);
+            }
+            return cells;
+        }
+
+        private static void Sort(Designator d, List<IntVec3> buffer)
+        {
+            cells.Clear();
+            Sorting = true;
+            try
+            {
+                for (int i = 0; i < buffer.Count; i++)
+                {
+                    if (d.CanDesignateCell(buffer[i]).Accepted)
+                    {
+                        cells.Add(buffer[i]);
+                    }
+                }
+            }
+            finally
+            {
+                Sorting = false;
+            }
+        }
+
+        private static void MarkHolders(Map map)
+        {
+            nearW = nearH = 0;
+            int minX = int.MaxValue, minZ = int.MaxValue, maxX = int.MinValue, maxZ = int.MinValue;
+            foreach (IntVec3 c in cells)
+            {
+                IntVec3 b = FloorRoof.Below(c, map);
+                if (b.IsValid)
+                {
+                    minX = Math.Min(minX, b.x);
+                    minZ = Math.Min(minZ, b.z);
+                    maxX = Math.Max(maxX, b.x);
+                    maxZ = Math.Max(maxZ, b.z);
+                }
+            }
+            if (minX > maxX)
+            {
+                return;
+            }
+            nearX = minX;
+            nearZ = minZ;
+            nearW = maxX - minX + 1;
+            nearH = maxZ - minZ + 1;
+            if (near.Length < nearW * nearH)
+            {
+                near = new bool[nearW * nearH];
+            }
+            Array.Clear(near, 0, nearW * nearH);
+            float reach = RoofCollapseUtility.RoofMaxSupportDistance;
+            int pad = (int)reach + 1;
+            int pattern = GenRadial.NumCellsInRadius(reach);
+            for (int z = minZ - pad; z <= maxZ + pad; z++)
+            {
+                for (int x = minX - pad; x <= maxX + pad; x++)
+                {
+                    IntVec3 h = new IntVec3(x, 0, z);
+                    Building e = h.InBounds(map) ? h.GetEdifice(map) : null;
+                    if (e == null || !e.def.holdsRoof)
+                    {
+                        continue;
+                    }
+                    for (int i = 0; i < pattern; i++)
+                    {
+                        IntVec3 o = GenRadial.RadialPattern[i];
+                        int ox = x + o.x - nearX, oz = z + o.z - nearZ;
+                        if (ox >= 0 && oz >= 0 && ox < nearW && oz < nearH)
+                        {
+                            near[oz * nearW + ox] = true;
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -251,7 +251,7 @@ namespace ProjectZ
             {
                 return "PZ_TallBelow".Translate(tall.LabelShort);
             }
-            // roof support as for any upper floor (the game's roof rules; decks planned next to it count)
+            // roof support as for any upper floor (the game's roof rules; decks planned or being dragged next to it count)
             if (!SlabSupport.Supported(below, map, countPlanned: true))
             {
                 return "PZ_NoSupportBelow".Translate();

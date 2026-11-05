@@ -367,7 +367,7 @@ namespace ProjectZ.Dev
                     }
                     foreach (Thing t in c.GetThingList(map).ToList())
                     {
-                        if (!(t is Pawn) && !t.Destroyed)
+                        if (!(t is Pawn) && !t.Destroyed && t.def.destroyable)
                         {
                             t.Destroy();
                         }

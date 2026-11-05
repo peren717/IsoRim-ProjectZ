@@ -360,6 +360,7 @@ namespace ProjectZ.Dev
             Patches.Dist3D.Off = GenCommandLine.CommandLineArgPassed("projectznodist3d");
             ShipSet.Off = GenCommandLine.CommandLineArgPassed("projectznoshipset");
             JumpAcross.Off = GenCommandLine.CommandLineArgPassed("projectznojumpacross");
+            SlabDrag.Off = GenCommandLine.CommandLineArgPassed("projectznoslabdrag");
             FloorFlight.Off = GenCommandLine.CommandLineArgPassed("projectznoflight");
             OpenAirSkip.Off = GenCommandLine.CommandLineArgPassed("projectznoairskip");
             Patches.BillRadius3D.Off = GenCommandLine.CommandLineArgPassed("projectznobillradius");
@@ -468,7 +469,7 @@ namespace ProjectZ.Dev
             {
                 PatchVoidProbe(h);
             }
-            if (mode == "floorui" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
+            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
             {
                 PatchMouse(h);
             }
@@ -772,6 +773,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("hl_"))
             {
                 StepSlabHole(map);
+                return;
+            }
+            if (stage.StartsWith("dg_"))
+            {
+                StepSlabDrag(map);
                 return;
             }
             if (stage.StartsWith("fo_"))
@@ -1265,6 +1271,10 @@ namespace ProjectZ.Dev
                     else if (mode == "slabhole")
                     {
                         stage = "hl_setup";
+                    }
+                    else if (mode == "slabdrag")
+                    {
+                        stage = "dg_setup";
                     }
                     else if (mode == "slabforce")
                     {
