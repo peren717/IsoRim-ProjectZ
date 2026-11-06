@@ -83,6 +83,10 @@
   <PZ_StairsPart3>end block</PZ_StairsPart3>
   <PZ_LadderColumnOpen>Keep the space along the ladder open</PZ_LadderColumnOpen>
   <PZ_LadderColumnBlocked>Something is in the way down</PZ_LadderColumnBlocked>
+  <PZ_LadderNoLedge>Needs a ledge above on its facing side</PZ_LadderNoLedge>
+  <PZ_LadderUpBlocked>Something is in the way up</PZ_LadderUpBlocked>
+  <PZ_LadderRoofInWay>A roof is in the way</PZ_LadderRoofInWay>
+  <PZ_LadderLinkTaken>Another ladder or stairs is here</PZ_LadderLinkTaken>
   <PZ_ElevatorShaftOpen>Keep the elevator shaft open</PZ_ElevatorShaftOpen>
   <PZ_ElevatorShaftBlocked>The shaft above is blocked</PZ_ElevatorShaftBlocked>
   <PZ_ElevatorNoFloorAbove>No floor above</PZ_ElevatorNoFloorAbove>

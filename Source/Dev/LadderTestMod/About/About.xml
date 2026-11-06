@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>ProjectZ ladder test Defs</name>
+  <author>Lin</author>
+  <packageId>Peren.PZLadderTest</packageId>
+  <supportedVersions>
+    <li>1.7</li>
+  </supportedVersions>
+  <description>Test Defs for ProjectZ mode customladders. Never shipped.</description>
+</ModMetaData>

@@ -13,7 +13,7 @@ namespace ProjectZ
     //     .LinkedTop: a cap ends it), then the top piece on the last segment; under a cap (the shaft ends below the map's
     //     top level, a floor or building over it) the top piece hangs inside the last storey instead of poking through.
     //     The rider's platform: ElevatorDraw.
-    //   - a ladder (raiders' or the player's emergency one): the foot and one segment per storey up the column from the
+    //   - a ladder (raiders', the player's emergency one, any other mod's: LadderDefs): the foot and one segment per storey up the column from the
     //     foot, the top hooks at the top's level, on the column's cell of each level; the lift: base on the foot's level,
     //     a mast segment on each level up to the top, the top piece at the top's level. Turned so the model's north is
     //     the side the ladder leans on (toward the top cell). The building's own sprite is not printed while these show
@@ -110,9 +110,11 @@ namespace ProjectZ
                     }
                 }
             }
-            n += Ladders(PZDefOf.PZ_SiegeLadder, map, view, storey);
-            n += Ladders(PZDefOf.PZ_EmergencyLadder, map, view, storey);
-            n += Ladders(PZDefOf.PZ_SiegeLift, map, view, storey);
+            List<ThingDef> ladders = LadderDefs.All;
+            for (int i = 0; i < ladders.Count; i++)
+            {
+                n += Ladders(ladders[i], map, view, storey);
+            }
             Pieces = n;
             LastFrame = Time.frameCount;
         }
@@ -135,10 +137,6 @@ namespace ProjectZ
 
         private static int Ladders(ThingDef def, Map map, int view, float storey)
         {
-            if (def == null)
-            {
-                return 0;
-            }
             List<Thing> list = map.listerThings.ThingsOfDef(def);
             int n = 0;
             for (int i = 0; i < list.Count; i++)

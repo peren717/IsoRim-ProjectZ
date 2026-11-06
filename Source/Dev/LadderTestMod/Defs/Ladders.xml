@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ProjectZ mode customladders (Dev/TestCustomLadders.cs). Written as another mod would: no ProjectZ parent Def, no
+       comp (no countdown), a cost-free building that can be uninstalled. -->
+  <ThingDef Name="PZT_LadderBase" ParentName="BuildingBase" Abstract="True">
+    <thingClass>ProjectZ.Dev.TestLadderBuilding</thingClass>
+    <label>test ladder</label>
+    <description>Test.</description>
+    <altitudeLayer>Building</altitudeLayer>
+    <passability>Standable</passability>
+    <pathCost>4</pathCost>
+    <fillPercent>0.1</fillPercent>
+    <rotatable>true</rotatable>
+    <size>(1,1)</size>
+    <graphicData>
+      <texPath>ProjectZ/SiegeLadder</texPath>
+      <graphicClass>Graphic_Single</graphicClass>
+      <drawSize>(1,1)</drawSize>
+    </graphicData>
+    <uiIconPath>ProjectZ/SiegeLadder</uiIconPath>
+    <building>
+      <isInert>true</isInert>
+      <ai_chillDestination>false</ai_chillDestination>
+    </building>
+    <statBases>
+      <MaxHitPoints>60</MaxHitPoints>
+      <WorkToBuild>300</WorkToBuild>
+      <Mass>5</Mass>
+    </statBases>
+    <minifiedDef>MinifiedThing</minifiedDef>
+    <thingCategories>
+      <li>BuildingsMisc</li>
+    </thingCategories>
+    <designationCategory>Structure</designationCategory>
+  </ThingDef>
+
+  <ThingDef ParentName="PZT_LadderBase">
+    <defName>PZT_FootLadder</defName>
+    <placeWorkers>
+      <li>ProjectZ.PlaceWorker_LadderFromFoot</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <ThingDef ParentName="PZT_LadderBase">
+    <defName>PZT_FootLadderSub</defName>
+    <placeWorkers>
+      <li>ProjectZ.Dev.TestFootWorker</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <ThingDef ParentName="PZT_LadderBase">
+    <defName>PZT_TopLadder</defName>
+    <placeWorkers>
+      <li>ProjectZ.Dev.TestTopWorker</li>
+    </placeWorkers>
+  </ThingDef>
+
+  <!-- buildable, neither worker: only drawn -->
+  <ThingDef ParentName="PZT_LadderBase">
+    <defName>PZT_PlainLadder</defName>
+  </ThingDef>
+
+</Defs>

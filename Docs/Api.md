@@ -1,7 +1,8 @@
 # ProjectZ Api notes
 
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
-does not fit there: the combat parts (Api 6) with the inventory of their patches, and the rules for the 3D queries.
+does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries, and
+other mods' ladders (Api 7).
 
 ## Version checks
 
@@ -148,3 +149,64 @@ cells over that floor's floor. `WallHeight` is IsoRim's locked wall height; `Sto
 | `WalkLine3D(from, to, map, into, stopAtSolidPlane)` | `Los3D.Walk` (the same walker) | `Api.LineStep` per column; consecutive steps' height ranges meet (`PartEnd`), so a plane crossed at or beside a cell corner is reported on one step (`FirstPlane`); `into` cleared; no allocation |
 | `ExplosionCells3D(center, map, radius, sameFloorCells, into, centreHeight, angle)` | `Explosions3D.CellsToHit` | adds to `into` (not cleared); centreHeight in cells (< 0: ProjectZ's default) |
 | `ClipRadialLoops(method, mapPath)` | `BandRadial` (an extra row) | before ProjectZ's constructor: queued; the row syntax of `BandRadialList` |
+
+## Other mods' ladders (Api 7)
+
+Any ThingDef whose `thingClass` is `ProjectZ.Building_SiegeLadder` or a subclass is a ladder. It gets a normal ladder
+link (`LinkKind.Ladder`, anyone may climb it, one pawn at a time) and is drawn with ProjectZ's ladder pieces; its own
+sprite shows only while it has no link or 3D is off. There are no per-Def models, no custom lifts, and raiders never
+place another mod's ladder. They may climb one that stands, as they climb any link.
+
+### Defining a ladder
+
+1. A class deriving from `Building_SiegeLadder` (the class itself will do). Call `base` in `ExposeData`, `SpawnSetup`
+   and `DeSpawn`.
+2. A 1x1 ThingDef with `<passability>Standable</passability>` and, for a placed ladder, `<rotatable>true</rotatable>`.
+   Add `minifiedDef` if it should be uninstallable.
+3. A PlaceWorker. It alone decides how the ladder is placed. `designationCategory` plays no part:
+
+| `placeWorkers` holds | Stands on | Rotation | Link |
+|---|---|---|---|
+| `ProjectZ.PlaceWorker_LadderFromFoot` or a subclass | the foot | toward the top | worked out when it spawns |
+| `ProjectZ.PlaceWorker_EmergencyLadder` or a subclass | the top cell | toward the open side | worked out when it spawns; can be built from either end |
+| neither | wherever its code spawns it | any | only drawn: its code sets `top` and `span` (`foot` defaults to its position) before spawning, as `LadderSite.Spawn` does for raid ladders |
+
+The lookup is cached per Def (`LadderDefs.PlacementOf`), so `placeWorkers` must not change after the game has loaded.
+
+```xml
+<ThingDef ParentName="BuildingBase">
+  <defName>MyMod_RopeLadder</defName>
+  <thingClass>MyMod.Building_RopeLadder</thingClass>
+  <passability>Standable</passability>
+  <rotatable>true</rotatable>
+  <designationCategory>Structure</designationCategory>
+  <placeWorkers>
+    <li>ProjectZ.PlaceWorker_LadderFromFoot</li>
+  </placeWorkers>
+  <!-- graphicData, statBases, costList, minifiedDef, ... -->
+</ThingDef>
+```
+
+### What ProjectZ does for a placed ladder
+
+- Its blueprint, frame and install blueprint keep the shaft open, as the built ladder does (`LadderColumn`).
+- The placing ghost marks the other end of the ladder.
+- Each time it is newly placed, also when reinstalled, the link is worked out from where it stands. Anything already in
+  `top`, `foot` and `span` is dropped, so a subclass of a placed ladder can't preset them.
+- On load the saved link stays; a ladder saved without a link looks for one.
+- If the site went bad between placing and finishing, the ladder stands without a link and shows its sprite.
+
+### `LadderSite`
+
+`LadderSite.FindFromFoot(foot, rot, map, out top, out span, out why, allowBlocker = false)` looks up from `foot` toward
+`rot` and returns the lowest level with a valid top. Each candidate goes through `LadderSite.Find`, so both directions
+run the same checks, and it counts only if `Find` lands on this foot. `why` is not translated and is meant for logs.
+
+Both also have an overload ending in `Thing ignore`: a ladder that is moving, whose frame on the foot or own old link
+must not count against the new site.
+
+### What stays with the addon
+
+ProjectZ does not touch cost, refund, work, stats or the ladder's lifetime. A Def without `CompProperties_SiegeLadder`
+stands until it is destroyed. With it, it falls apart after `ticks` (`raidGate` false: counted from when it is built;
+true: counted after the raid). If the ladder is destroyed while someone climbs, the climber falls.

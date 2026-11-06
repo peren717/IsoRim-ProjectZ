@@ -627,6 +627,7 @@ namespace ProjectZ.Dev
                 Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                 Out($"new game after load: map {Find.CurrentMap} size {Find.CurrentMap.Size}");
             }
+            CxGhostFrame();
             try
             {
                 Step(Find.CurrentMap);
@@ -802,6 +803,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("el_"))
             {
                 StepElevator(map);
+                return;
+            }
+            if (stage.StartsWith("cx_"))
+            {
+                StepCustomLadders(map);
                 return;
             }
             if (stage.StartsWith("lm_"))
@@ -1291,6 +1297,10 @@ namespace ProjectZ.Dev
                     else if (mode == "elevator")
                     {
                         stage = "el_setup";
+                    }
+                    else if (mode == "customladders")
+                    {
+                        stage = "cx_setup";
                     }
                     else if (mode == "liftmodels")
                     {

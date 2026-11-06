@@ -111,7 +111,8 @@ namespace ProjectZ.Patches
             return i >= 0 && sg.links[i].IsLadder && sg.links[i].span >= 2 && !LadderPerch.OnLink(sg.links[i], map);
         }
 
-        // K2: stairs being taken up (deconstruct or uninstall designated): +1 when their top side would be cut off from
+        // K2: stairs being taken up (deconstruct or uninstall designated, or to be reinstalled): +1 when their top side
+        // would be cut off from
         // the map edge (touch them only from their own floor), -1 when their low side would be (only from the floor above,
         // the rim), 0 otherwise.
         public static int RemovalSide(Thing t)
@@ -121,7 +122,7 @@ namespace ProjectZ.Patches
                 return 0;
             }
             DesignationManager dm = s.Map.designationManager;
-            if (dm.DesignationOn(s, DesignationDefOf.Deconstruct) == null && dm.DesignationOn(s, DesignationDefOf.Uninstall) == null)
+            if (dm.DesignationOn(s, DesignationDefOf.Deconstruct) == null && dm.DesignationOn(s, DesignationDefOf.Uninstall) == null && !(s.def.Minifiable && s.Map.listerBuildings.TryGetReinstallBlueprint(s, out _)))
             {
                 return 0;
             }
@@ -302,6 +303,21 @@ namespace ProjectZ.Patches
             if (__result && target.HasThing && (target.Thing is Building_Stairs || target.Thing is Building_SiegeLadder) && !StairTouch.TouchAllowedFrom(root, target.Thing))
             {
                 __result = false;
+            }
+        }
+    }
+
+    // A ladder being taken up from the side that stays joined (K2) is touched, never stood on: ClosestTouch means standing
+    // on a standable thing, so the haul of a reinstall would climb to a top-placed ladder and take it up from above.
+    [HarmonyPatch(typeof(GenPath), nameof(GenPath.ResolvePathMode))]
+    [PatchGroup(FailSoft.StairRouting)]
+    public static class ResolvePathMode_LadderTakenUp_Patch
+    {
+        public static void Prefix(TargetInfo dest, ref PathEndMode peMode)
+        {
+            if (peMode == PathEndMode.ClosestTouch && dest.Thing is Building_SiegeLadder && StairTouch.RemovalSide(dest.Thing) != 0)
+            {
+                peMode = PathEndMode.Touch;
             }
         }
     }

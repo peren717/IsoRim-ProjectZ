@@ -20,10 +20,12 @@ namespace ProjectZ
         //     RequestFogRefresh, RegisterDeckTerrain; 5: ShipCells, the ship's cells on every floor without the substructure limit;
         //  6: combat parts (CombatPart, ForeignCombatSystem, KeepCombatParts, ReleaseCombatParts, CombatPartOn) and 3D space
         //     queries (WallHeight, FloorRowShift, ToVirtual, FromVirtual, HasFloorAt, PlaneSolid, CeilingSolid, SightBlockerAt,
-        //     ColumnTop, LineClear3D, WalkLine3D, ExplosionCells3D, ClipRadialLoops)).
+        //     ColumnTop, LineClear3D, WalkLine3D, ExplosionCells3D, ClipRadialLoops);
+        //  7: other mods' ladders, see Docs/Api.md (any Def of class Building_SiegeLadder, PlaceWorker_LadderFromFoot,
+        //     LadderSite.FindFromFoot)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 6;
+        public static int Version => 7;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
