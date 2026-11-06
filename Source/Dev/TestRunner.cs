@@ -71,6 +71,9 @@ namespace ProjectZ.Dev
     //                                   -projectzfloors=3 -projectzseed=7
     //                                   stairs4: the 1x4 stairs (ramp + solid end) in all four rotations, placement, built from a
     //                                   blueprint, shots (TestStairs4), -projectzfloors=3 -projectzseed=7
+    //                                   stairapi: Api 8, TryGetFloorFor and TryGetStairGeometry: planned, refused, a colonist
+    //                                   building stairs (TestStairApi), -projectzfloors=3 -projectzseed=7; -projectzfloors=1:
+    //                                   the map-without-floors checks only
     //                                   oldstairs: a 1x3 save loaded with the 1x4 stairs (-projectzoldmake with the 1x3 build to
     //                                   write it; -projectzsave=pz_oldstairs to load it; TestOldStairs), -projectzfloors=3 -projectzseed=7
     //                                   dist3d: 3D distance for the game's "nearest" choices (food, storage, work, same-level
@@ -810,6 +813,11 @@ namespace ProjectZ.Dev
                 StepCustomLadders(map);
                 return;
             }
+            if (stage.StartsWith("sg_"))
+            {
+                StepStairApi(map);
+                return;
+            }
             if (stage.StartsWith("lm_"))
             {
                 StepLiftModels(map);
@@ -1220,7 +1228,7 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    if (!((mode == "locustjump" || mode == "powerfloors1") && FloorsOverride == 1))   // (locustjump, powerfloors1 without floors: no annex to check)
+                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi without floors: no annex to check)
                     {
                         GenCheck(map, "after generation");
                         FogLidCheck("after generation");
@@ -1301,6 +1309,10 @@ namespace ProjectZ.Dev
                     else if (mode == "customladders")
                     {
                         stage = "cx_setup";
+                    }
+                    else if (mode == "stairapi")
+                    {
+                        stage = "sg_setup";
                     }
                     else if (mode == "liftmodels")
                     {

@@ -55,6 +55,14 @@ namespace ProjectZ
         // The slab of a stuff (the wood slab when the stuff has none).
         public static TerrainDef For(ThingDef stuff) => stuff != null && byStuff.TryGetValue(stuff, out TerrainDef t) ? t : PZDefOf.PZ_UpperFloor;
 
+        // The stuff's own buildable slab: false with null when it has none (null stuff too). No wood fallback, unlike For;
+        // never a damaged slab.
+        public static bool TryFor(ThingDef stuff, out TerrainDef slab)
+        {
+            slab = null;
+            return stuff != null && byStuff.TryGetValue(stuff, out slab);
+        }
+
         public static ThingDef StuffOf(TerrainDef t) => t != null && stuffOf.TryGetValue(t, out ThingDef s) ? s : null;
 
         // A slab that burns (FloorFire): a buildable slab of a Woody stuff, modded woods too. Stone, metal and damaged: never.

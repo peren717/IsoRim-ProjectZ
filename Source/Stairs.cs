@@ -77,6 +77,22 @@ namespace ProjectZ
         }
     }
 
+    // Where the parts of stairs are (StairShape.TryGeometry). All are map cells: center, footprint, ramp, solid, low and high
+    // on floor 'floor', exit and well on the floor above.
+    public struct StairGeometry
+    {
+        public IntVec3 center;
+        public Rot4 rot;
+        public int floor;              // k
+        public CellRect footprint;     // the ramp and the solid end
+        public List<IntVec3> ramp;     // L0, L1, H
+        public IntVec3 solid;          // the solid end, under the exit
+        public IntVec3 low;            // L0, where the ramp starts
+        public IntVec3 high;           // H (VLink.bottom)
+        public IntVec3 exit;           // E (VLink.top), floor k + 1
+        public List<IntVec3> well;     // the ramp cells on floor k + 1: the opening, in ramp order
+    }
+
     // Where the parts of a stairs thing are, for a stairs thing or a placement (centre + rotation). The footprint is 1x4
     // (user 2026-10-20): the 3 ramp cells (low end L0 = centre - facing, middle L1 = centre, high end H = centre + facing)
     // and the solid end S = centre + 2 x facing, right under the exit E. S is part of the stairs: not walkable
@@ -155,6 +171,62 @@ namespace ProjectZ
         {
             int k = ProjectZ.FloorOf(c, map);
             return k < 0 ? IntVec3.Invalid : ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), k + 1, map);
+        }
+
+        // The parts of stairs at centre + rotation, nothing built needed. False where the shape can't stand: PlaceWorker_Stairs's
+        // floor rules (no floors, a gap row, the top floor), a footprint cell off floor k or out of bounds, no exit. Shape
+        // only: blockers, fog, terrain, thick roofs and anything else that can change are not asked, so true does not mean
+        // stairs can be placed there. Ship stairs have this same shape; their deck rule (the whole footprint on the ship's
+        // deck, ShipStairs.Check) is not asked either, so this is also true off a deck, where ship stairs are refused.
+        public static bool TryGeometry(IntVec3 center, Rot4 rot, Map map, out StairGeometry g)
+        {
+            g = default;
+            if (map == null || !rot.IsValid || !center.InBounds(map))
+            {
+                return false;
+            }
+            int k = ProjectZ.FloorOf(center, map);
+            if (PlaceWorker_Stairs.FloorRefusal(ProjectZ.Annex(map), k) != null)
+            {
+                return false;
+            }
+            CellRect footprint = Footprint(center, rot);
+            foreach (IntVec3 c in footprint)
+            {
+                if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) != k)
+                {
+                    return false;
+                }
+            }
+            IntVec3 exit = Exit(center, rot, map);
+            if (!exit.IsValid)
+            {
+                return false;
+            }
+            List<IntVec3> ramp = Ramp(center, rot).ToList();
+            List<IntVec3> well = new List<IntVec3>(ramp.Count);
+            foreach (IntVec3 c in ramp)
+            {
+                IntVec3 up = Above(c, map);
+                if (!up.IsValid)
+                {
+                    return false;
+                }
+                well.Add(up);
+            }
+            g = new StairGeometry { center = center, rot = rot, floor = k, footprint = footprint, ramp = ramp, solid = Solid(center, rot), low = ramp[0], high = High(center, rot), exit = exit, well = well };
+            return true;
+        }
+
+        // The same for a spawned stairs thing of any state (built, blueprint, frame; ship stairs too). False for anything else.
+        public static bool TryGeometry(Thing t, out StairGeometry g)
+        {
+            if (!Stairwell.IsStairThing(t) || !t.Spawned)
+            {
+                g = default;
+                return false;
+            }
+            return TryGeometry(t.Position, t.Rotation, t.Map, out g);
         }
 
         // How far up the ramp a footprint cell is: 0 (low end) .. 2 (high end); 3 is the solid end.

@@ -1,8 +1,8 @@
 # ProjectZ Api notes
 
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
-does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries, and
-other mods' ladders (Api 7).
+does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries,
+other mods' ladders (Api 7), and floors and stairs for other mods (Api 8).
 
 ## Version checks
 
@@ -210,3 +210,40 @@ must not count against the new site.
 ProjectZ does not touch cost, refund, work, stats or the ladder's lifetime. A Def without `CompProperties_SiegeLadder`
 stands until it is destroyed. With it, it falls apart after `ticks` (`raidGate` false: counted from when it is built;
 true: counted after the raid). If the ladder is destroyed while someone climbs, the climber falls.
+
+## Floors and stairs for other mods (Api 8)
+
+Two read-only queries. Check `Api.Version >= 8` first and call them from a `NoInlining` method of their own (see
+Version checks); `StairGeometry` is missing on an older ProjectZ too.
+
+### `TryGetFloorFor`
+
+`TryGetFloorFor(stuff, out floor)` gives the buildable floor (slab) of that stuff. It is false with `floor` null when
+the stuff has none, and for a null stuff: there is no wood fallback and it never gives a damaged slab.
+
+### `TryGetStairGeometry`
+
+`TryGetStairGeometry(center, rot, map, out geometry)` works for a planned position, with nothing built.
+`TryGetStairGeometry(stairs, out geometry)` takes a spawned stairs thing of any state (built, blueprint, frame), ship
+stairs too. Both give false and no exception for a null map or thing; the Thing overload gives false for an unspawned
+thing or anything that is not stairs. On false, `geometry` is empty.
+
+The result is shape only. The position overload is false where the shape can't stand: a map without floors, a gap row,
+the top floor, a footprint cell off the floor or out of bounds, no exit. It does not ask about blockers, fog, terrain,
+thick roofs or anything else that can change, so true does not mean stairs can be placed there. Placement still has the
+last word (`GenConstruct.CanPlaceBlueprintAt`). Ship stairs have the same shape, but must also stand on the ship's
+deck, which is not asked either: the position overload is true off a deck, where they are refused.
+
+| `StairGeometry` field | What | Floor |
+|---|---|---|
+| `center`, `rot` | the stairs' position and rotation | `floor` |
+| `floor` | k, the floor the stairs stand on | |
+| `footprint` | the 1x4 rect: the ramp and the solid end | `floor` |
+| `ramp` | the 3 ramp cells in the order low, middle, high | `floor` |
+| `solid` | the solid end past the high cell, not walkable | `floor` |
+| `low` | where the ramp starts | `floor` |
+| `high` | the top of the ramp (`VLink.bottom` on built stairs) | `floor` |
+| `exit` | where the stairs come out, over `solid` (`VLink.top` on built stairs) | `floor` + 1 |
+| `well` | the ramp cells on the floor above, in ramp order: the opening kept free | `floor` + 1 |
+
+All cells are ordinary map cells, each in the rows of its own floor. To compare cells of two floors use `GroundCellOf`.

@@ -22,10 +22,11 @@ namespace ProjectZ
         //     queries (WallHeight, FloorRowShift, ToVirtual, FromVirtual, HasFloorAt, PlaneSolid, CeilingSolid, SightBlockerAt,
         //     ColumnTop, LineClear3D, WalkLine3D, ExplosionCells3D, ClipRadialLoops);
         //  7: other mods' ladders, see Docs/Api.md (any Def of class Building_SiegeLadder, PlaceWorker_LadderFromFoot,
-        //     LadderSite.FindFromFoot)).
+        //     LadderSite.FindFromFoot);
+        //  8: floors and stairs for other mods, see Docs/Api.md (TryGetFloorFor, TryGetStairGeometry, StairGeometry)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 7;
+        public static int Version => 8;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -471,6 +472,21 @@ namespace ProjectZ
         // comp, verb, Map...), "arg:<parameter>", "this.<field or property>..." or "current". Call from a Mod constructor
         // or StaticConstructorOnStartup. False: no method body, the clip is off, or the patch failed (logged).
         public static bool ClipRadialLoops(System.Reflection.MethodBase method, string mapPath) => BandRadial.AddExternal(method, mapPath);
+
+        // ---- floors and stairs for other mods (8)
+
+        // The stuff's own buildable floor (slab). False with null when it has none, null stuff too: no wood fallback, never
+        // a damaged slab.
+        public static bool TryGetFloorFor(ThingDef stuff, out TerrainDef floor) => SlabDefs.TryFor(stuff, out floor);
+
+        // Where the parts of stairs at center + rot would be; nothing needs to be built. False where the shape can't stand
+        // (no floors, a gap row, the top floor, a footprint cell off the floor or out of bounds, no exit) and for a null map.
+        // Shape only: true does not mean stairs can be placed there (blockers, fog, terrain, thick roofs, the deck rule of ship
+        // stairs are not asked). Cells are map cells, see StairGeometry.
+        public static bool TryGetStairGeometry(IntVec3 center, Rot4 rot, Map map, out StairGeometry geometry) => StairShape.TryGeometry(center, rot, map, out geometry);
+
+        // The same for a spawned stairs thing, ship stairs too: built, blueprint or frame. False for anything else, null too.
+        public static bool TryGetStairGeometry(Thing stairs, out StairGeometry geometry) => StairShape.TryGeometry(stairs, out geometry);
 
         private static bool OnGround(IntVec3 g, Map map) => map != null && g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.GroundRect(map).maxZ + 1;
     }

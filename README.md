@@ -94,6 +94,8 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - 6 (details and the patch inventory in [`Docs/Api.md`](Docs/Api.md)):
   - Combat parts: `CombatPart`, `ForeignCombatSystem`, `KeepCombatParts` (an addon bridging another combat system keeps parts on), `ReleaseCombatParts` (an addon that does a part itself), `CombatPartOn`.
   - 3D space: `WallHeight`, `FloorRowShift`, `ToVirtual` / `FromVirtual`, `HasFloorAt`, `PlaneSolid`, `CeilingSolid`, `SightBlockerAt`, `ColumnTop`, `LineClear3D`, `WalkLine3D`, `ExplosionCells3D`, `ClipRadialLoops`.
+- 7: other mods' ladders: any Def of class `Building_SiegeLadder` is a ladder, its PlaceWorker decides how it is placed (`PlaceWorker_LadderFromFoot`, `PlaceWorker_EmergencyLadder`), `LadderSite.FindFromFoot`; see [`Docs/Api.md`](Docs/Api.md).
+- 8: floors and stairs for other mods: `TryGetFloorFor` (the floor of a stuff), `TryGetStairGeometry` (where the parts of stairs are, for a position or a stairs thing); see [`Docs/Api.md`](Docs/Api.md).
 
 Ground-only buildings: add a `GroundOnlyDef` or patch `Defs/Misc/PZ_GroundOnly.xml`. Jump abilities: see `JumpAcross` in the source. Flying between floors: every animal the game lets fly does it; mods that fly their own way add a `FloorFlyersDef` (`fly`, `noFly` race lists) or patch `Defs/Misc/PZ_FloorFlyers.xml`.
 

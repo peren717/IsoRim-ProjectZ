@@ -273,7 +273,7 @@ namespace ProjectZ.Dev
                 && LadderDefs.PlacementOf(CxNone) == LadderPlacement.None && LadderDefs.PlacementOf(ThingDefOf.Wall) == LadderPlacement.None, kinds);
             Result("D the sites: blueprint, frame, install blueprint of placed ladders only", LadderDefs.Sites.Contains(CxFoot.blueprintDef) && LadderDefs.Sites.Contains(CxFoot.frameDef) && LadderDefs.Sites.Contains(CxFoot.installBlueprintDef)
                 && LadderDefs.Sites.Contains(PZDefOf.PZ_EmergencyLadder.blueprintDef) && !LadderDefs.Sites.Contains(CxNone.blueprintDef), string.Join(", ", LadderDefs.Sites.Select(d => d.defName)));
-            Result("D Api 7", Api.Version == 7, $"{Api.Version}");
+            Result("D Api 7 or later", Api.Version >= 7, $"{Api.Version}");
             Info($"customladders: area {r2Area}, worker {r2P}, levels {Levels.Min(map)}..{Levels.Max(map)}");
             stage = "cx_lowest";
         }
