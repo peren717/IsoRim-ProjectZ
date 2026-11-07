@@ -127,7 +127,7 @@ namespace ProjectZ.Dev
                 new SgCase { rot = Rot4.West, stuff = ThingDefOf.WoodLog },
             };
             Info($"stairapi: area {r2Area}, builder {r2P}, map {map.Size}, groundZ {an?.groundZ}, stride {an?.stride}, levels {Levels.Min(map)}..{Levels.Max(map)}");
-            Result("Api.Version is 8", Api.Version == 8, $"{Api.Version}");
+            Result("Api 8 or later", Api.Version >= 8, $"{Api.Version}");
             stage = "sg_f";
         }
 

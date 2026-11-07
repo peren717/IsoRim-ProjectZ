@@ -23,10 +23,12 @@ namespace ProjectZ
         //     ColumnTop, LineClear3D, WalkLine3D, ExplosionCells3D, ClipRadialLoops);
         //  7: other mods' ladders, see Docs/Api.md (any Def of class Building_SiegeLadder, PlaceWorker_LadderFromFoot,
         //     LadderSite.FindFromFoot);
-        //  8: floors and stairs for other mods, see Docs/Api.md (TryGetFloorFor, TryGetStairGeometry, StairGeometry)).
+        //  8: floors and stairs for other mods, see Docs/Api.md (TryGetFloorFor, TryGetStairGeometry, StairGeometry);
+        //  9: a floor plan per generated map, see Docs/Api.md (RegisterMapFloorPlanner, UnregisterMapFloorPlanner, MapFloorPlan,
+        //     TryBeginFullMapSize, EndFullMapSize)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 8;
+        public static int Version => 9;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -71,6 +73,23 @@ namespace ProjectZ
 
         // Views floor k of the current map (clamped to the map's floors), as the floor keys do.
         public static void SetViewedFloor(int floor) => FloorView.Set(floor);
+
+        // ---- a floor plan per generated map (9)
+        // How many floors a generated map gets is the game's (picked with the world). A planner can decide it per map: asked
+        // once at the start of each map's generation, it gives the map's ground size and floors, or null to leave the map to
+        // the game. Pocket maps are never planned. The first planner with an answer decides; one that throws is logged and
+        // ignored. Details in Docs/Api.md. Add once (e.g. from a StaticConstructorOnStartup or the Mod constructor).
+        public static void RegisterMapFloorPlanner(Func<RimWorld.Planet.MapParent, MapFloorPlan?> planner) => MapPlans.Register(planner);
+
+        public static void UnregisterMapFloorPlanner(Func<RimWorld.Planet.MapParent, MapFloorPlan?> planner) => MapPlans.Unregister(planner);
+
+        // During generation a map is shrunk to its ground: Size, InBounds and AllCells see the ground only. This opens the
+        // full size for a moment, so code that writes to the floors' rows reaches them. True: the map is being generated and
+        // now has its full size; call EndFullMapSize in a finally. False: nothing was opened (not generating, no floors).
+        public static bool TryBeginFullMapSize(Map map) => Patches.AnnexGen.BeginFull(map);
+
+        // Always safe, also after a failed generation or without a matching begin.
+        public static void EndFullMapSize(Map map) => Patches.AnnexGen.EndFull(map);
 
         // ---- stacked cells (3)
         // The column rule other mods' nets can use to join across floors (the rule power conduits use: a conduit touches a

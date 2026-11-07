@@ -818,6 +818,11 @@ namespace ProjectZ.Dev
                 StepStairApi(map);
                 return;
             }
+            if (stage.StartsWith("fp_"))
+            {
+                StepFloorPlan(map);
+                return;
+            }
             if (stage.StartsWith("lm_"))
             {
                 StepLiftModels(map);
@@ -1228,7 +1233,7 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi without floors: no annex to check)
+                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi" || mode == "floorplan") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi, floorplan without floors: no annex to check)
                     {
                         GenCheck(map, "after generation");
                         FogLidCheck("after generation");
@@ -1313,6 +1318,10 @@ namespace ProjectZ.Dev
                     else if (mode == "stairapi")
                     {
                         stage = "sg_setup";
+                    }
+                    else if (mode == "floorplan")
+                    {
+                        stage = "fp_setup";
                     }
                     else if (mode == "liftmodels")
                     {

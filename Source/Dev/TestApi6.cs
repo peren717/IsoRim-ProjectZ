@@ -86,7 +86,7 @@ namespace ProjectZ.Dev
         {
             bool foreign = CombatGate.Foreign;
             Info($"parts: foreign combat system {foreign}, kept {(p6KeepAsked ? p6Keep.ToString() : "none")}, released {p6Release}; Api.Version {Api.Version}");
-            Result("parts: Api.Version 6, ForeignCombatSystem as loaded", Api.Version == 6 && Api.ForeignCombatSystem == foreign && foreign == ModsConfig.ActiveModsInLoadOrder.Any(m => m.PackageIdPlayerFacing.ToLowerInvariant().Contains("combatextended")),
+            Result("parts: Api 6 or later, ForeignCombatSystem as loaded", Api.Version >= 6 && Api.ForeignCombatSystem == foreign && foreign == ModsConfig.ActiveModsInLoadOrder.Any(m => m.PackageIdPlayerFacing.ToLowerInvariant().Contains("combatextended")),
                 $"version {Api.Version}, foreign {Api.ForeignCombatSystem}");
             // P1 every part as the rule says
             List<string> wrong = new List<string>();

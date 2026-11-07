@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using RimWorld.Planet;
 using Verse.AI;
 using Verse;
 
@@ -23,9 +24,41 @@ namespace ProjectZ.Patches
             public byte[] elevation;   // F5, captured during the genSteps; given to the component after GridFixer
             public bool shrunk;
             public bool mountains;     // tall mountains (Mountains.cs), filled in the FinalizeInit prefix
+            public bool keepUpper;     // a plan's keepUpperContent: what generation put on the annex stays (no second fill)
+            public int fullDepth;      // how many full-size windows are open while shrunk (BeginFull, EndFull)
+            public IntVec3 FullSize => new IntVec3(groundSize.x, groundSize.y, floors * stride);
         }
 
         internal static Pending pending;
+
+        // A moment at the full size on a map shrunk for generation. Every caller goes through these two, so that the windows
+        // nest (a pathfinder call inside an addon's window must not shrink the map under it). False: the map isn't being
+        // generated shrunk, there is nothing to end. Ending is always safe: after the size was restored (FinalizeInit, the
+        // GenerateMap finalizer), or for another map, it does nothing.
+        internal static bool BeginFull(Map map)
+        {
+            Pending p = pending;
+            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map))
+            {
+                return false;
+            }
+            p.fullDepth++;
+            map.info.Size = p.FullSize;
+            return true;
+        }
+
+        internal static void EndFull(Map map)
+        {
+            Pending p = pending;
+            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map) || p.fullDepth <= 0)
+            {
+                return;
+            }
+            if (--p.fullDepth == 0)
+            {
+                map.info.Size = p.groundSize;
+            }
+        }
 
         // Mountains foundation F6: what one annex cell (any upper band or void row) gets at generation.
         internal struct AnnexCell
@@ -83,28 +116,47 @@ namespace ProjectZ.Patches
     public static class MapGenerator_GenerateMap_Patch
     {
         [HarmonyPriority(Priority.Last)]
-        public static void Prefix(ref IntVec3 mapSize, MapGeneratorDef mapGenerator, bool isPocketMap, bool stepDebugger)
+        public static void Prefix(ref IntVec3 mapSize, MapParent parent, MapGeneratorDef mapGenerator, bool isPocketMap, bool stepDebugger, out object __state)
         {
+            // (a map generated during another's generation, an addon's pocket map: the finalizer gives the outer one back)
+            __state = AnnexGen.pending;
             AnnexGen.pending = null;
             int floors = ProjectZ.FloorsForNewMaps;
+            // A plan (MapPlans.cs) overrides the game's floors and the size for this one map. Never for a pocket map.
+            MapFloorPlan? plan = isPocketMap || stepDebugger ? null : MapPlans.For(parent);
+            if (plan != null)
+            {
+                floors = plan.Value.floors;
+                if (plan.Value.groundSize.x > 0 && plan.Value.groundSize.z > 0)
+                {
+                    mapSize = new IntVec3(plan.Value.groundSize.x, mapSize.y, plan.Value.groundSize.z);
+                }
+            }
             if (floors <= 1 || isPocketMap || stepDebugger || mapSize.z <= 0)
             {
                 return;
             }
             int stride = ProjectZ.StrideFor(mapSize.z);
-            AnnexGen.pending = new AnnexGen.Pending { groundSize = mapSize, stride = stride, floors = floors, mountains = ProjectZ.TallMountainsForNewMaps };
+            AnnexGen.pending = new AnnexGen.Pending
+            {
+                groundSize = mapSize,
+                stride = stride,
+                floors = floors,
+                mountains = plan == null && ProjectZ.TallMountainsForNewMaps,   // (a plan's map: its own layout, no rock rising through it)
+                keepUpper = plan != null && plan.Value.keepUpperContent,
+            };
             ProjectZ.DebugLog($"generating {mapGenerator?.defName} map: ground {mapSize.x}x{mapSize.z}, stride {stride}, floors {floors} -> {mapSize.x}x{floors * stride}");
             mapSize = new IntVec3(mapSize.x, mapSize.y, floors * stride);
         }
 
-        public static void Finalizer(Exception __exception)
+        public static void Finalizer(Exception __exception, object __state)
         {
             AnnexGen.Pending p = AnnexGen.pending;
-            AnnexGen.pending = null;
+            AnnexGen.pending = __state as AnnexGen.Pending;
             if (p?.map != null && p.shrunk)
             {
                 // Generation threw before FinalizeInit: put the real size back so the grids and Size agree.
-                p.map.info.Size = new IntVec3(p.groundSize.x, p.groundSize.y, p.floors * p.stride);
+                p.map.info.Size = p.FullSize;
                 Log.Warning("[ProjectZ] map generation ended early; restored the full map size.");
             }
         }
@@ -146,21 +198,14 @@ namespace ProjectZ.Patches
 
         public static void Prefix(PathFinder __instance, out bool __state)
         {
-            __state = false;
-            AnnexGen.Pending p = AnnexGen.pending;
-            if (p != null && p.shrunk && ReferenceEquals(p.map, MapRef(__instance)))
-            {
-                p.map.info.Size = new IntVec3(p.groundSize.x, p.groundSize.y, p.floors * p.stride);
-                __state = true;
-            }
+            __state = AnnexGen.BeginFull(MapRef(__instance));
         }
 
-        public static void Finalizer(bool __state)
+        public static void Finalizer(PathFinder __instance, bool __state)
         {
-            AnnexGen.Pending p = AnnexGen.pending;
-            if (__state && p?.map != null)
+            if (__state)
             {
-                p.map.info.Size = p.groundSize;
+                AnnexGen.EndFull(MapRef(__instance));
             }
         }
     }
@@ -225,7 +270,7 @@ namespace ProjectZ.Patches
             }
             p.shrunk = false;
             Map map = __instance;
-            map.info.Size = new IntVec3(p.groundSize.x, p.groundSize.y, p.floors * p.stride);
+            map.info.Size = p.FullSize;
             int groundZ = p.groundSize.z;
             ProjectZ.Invalidate();
             // Lazily built during generation from the ground size: rebuild over the full map, before anything
@@ -241,8 +286,8 @@ namespace ProjectZ.Patches
             RemapRiverFlow(map, groundZ);
             // Again after generation (nothing should have touched it): path costs, regions and section meshes are
             // all rebuilt right after this in FinalizeInit.
-            int changed = AnnexGen.FillAnnex(map, groundZ, withPathCosts: false);
-            ProjectZ.DebugLog($"annex checked: {changed} cell(s) changed during generation, {fixedGrids} ground-sized grid(s) resized, map size now {map.Size}");
+            int changed = p.keepUpper ? 0 : AnnexGen.FillAnnex(map, groundZ, withPathCosts: false);
+            ProjectZ.DebugLog($"annex {(p.keepUpper ? "kept (plan)" : "checked")}: {changed} cell(s) changed during generation, {fixedGrids} ground-sized grid(s) resized, map size now {map.Size}");
             if (p.mountains && comp != null && comp.elevation != null)
             {
                 Mountains.Generate(map, comp);

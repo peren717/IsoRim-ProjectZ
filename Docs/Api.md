@@ -2,7 +2,7 @@
 
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
 does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries,
-other mods' ladders (Api 7), and floors and stairs for other mods (Api 8).
+other mods' ladders (Api 7), floors and stairs for other mods (Api 8), and floor plans per map (Api 9).
 
 ## Version checks
 
@@ -247,3 +247,66 @@ deck, which is not asked either: the position overload is true off a deck, where
 | `well` | the ramp cells on the floor above, in ramp order: the opening kept free | `floor` + 1 |
 
 All cells are ordinary map cells, each in the rows of its own floor. To compare cells of two floors use `GroundCellOf`.
+
+## Floor plans per map (Api 9)
+
+How many floors a generated map gets is the game's: picked with the world, the same for every map. A floor planner
+decides it per map, for maps that bring their own layout (a quest map saved with floors, say).
+
+### `RegisterMapFloorPlanner`
+
+`RegisterMapFloorPlanner(Func<MapParent, MapFloorPlan?>)` adds a planner, `UnregisterMapFloorPlanner` takes it away.
+Add it once, from a `StaticConstructorOnStartup` or the Mod constructor. It is asked at the start of a map's
+generation, in ProjectZ's `MapGenerator.GenerateMap` prefix (the last one, so after other mods have set the size), and
+gets the map's parent. Return null to leave the map to the game.
+
+| `MapFloorPlan` field | What |
+|---|---|
+| `groundSize` | the ground's size; x or z of 0 or less keeps the size the map was asked with |
+| `floors` | storeys, the ground counted, 1 to `ProjectZSettings.MaxFloors`; 1 = no floors above the ground |
+| `keepUpperContent` | what generation put on the upper floors stays; without it they are filled with open air after the genSteps |
+
+- A plan replaces the game's floor count for that map, both more and fewer, also in a game with one floor. It has no
+  effect on `WorldFloors` or on other maps.
+- Tall mountains are off on a planned map.
+- Pocket maps are never planned: no planner is asked.
+- The first planner with an answer decides. One that throws, or gives a floor count out of range, is logged and passed
+  over. No planner, or null from all: exactly the game's rules.
+- A plan is only about generation. The map keeps its layout in its save like any other map, whether the planner is still
+  there or not.
+
+### `TryBeginFullMapSize`, `EndFullMapSize`
+
+A map is shrunk to its ground during generation: `Size`, `InBounds` and `AllCells` see the ground only, so the floors'
+rows are out of bounds. Code in a genStep that writes to them opens the full size for a moment:
+
+```csharp
+bool open = ProjectZ.Api.TryBeginFullMapSize(map);
+try
+{
+    // cells of every floor are in bounds here
+}
+finally
+{
+    if (open)
+    {
+        ProjectZ.Api.EndFullMapSize(map);
+    }
+}
+```
+
+`TryBeginFullMapSize` is true while the map is being generated with floors, and false without changing anything for any
+other map, a map without floors, or a finished one. Windows nest. `EndFullMapSize` is always safe: without a matching
+begin, on another map, or after a failed generation it does nothing. A generation that throws with a window open still
+ends with the full size, as any failed generation does. A genStep that throws inside a window is caught by the game,
+which goes on with the next step: end the window in a `finally`, or the next steps run at the full size.
+
+Use `keepUpperContent` with it: without it, what the window wrote on the upper floors' terrain is wiped.
+
+### What assumes one floor count
+
+ProjectZ reads the game's count at one place, the `GenerateMap` prefix, through `MapPlans`. Everything else works per
+map, from the map's own `AnnexMapComponent`: floors, stride, ground height, levels. Between maps: a gravship lands only
+where the map has its floors (`PZ_ShipNotEnoughFloors`), and the viewed floor is clamped to the map on view.
+
+`PZ_WorldFloorsTip` still says "for every map in this game": true unless a planner is at work.
