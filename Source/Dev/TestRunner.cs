@@ -197,6 +197,9 @@ namespace ProjectZ.Dev
     //                                   minimap: Dubs Mint Minimap compat (ground-only texture, aspect, upstairs marker, dirty
     //                                   refresh, drag to the camera); -projectzfloors=3, the minimap mod loaded, or not
     //                                   (compat off), or -projectzmintbreak=<member> (a missing target: off) (TestMinimap)
+    //                                   smartcon: Smarter Construction compat (enclose check across floors, 3D frame order,
+    //                                   the stuck rule on stairs; a control with the compat off); -projectzfloors=2 (or 1: ground
+    //                                   checks only), the mod loaded, or not, or -projectzsmartconbreak=<member> (TestSmartCon)
     //                                   tallmtn: tall mountains (phase 1): the fill's checks, real flows on the generated
     //                                   mountains (stairs onto a top, building and mining up there, collapse, jump-down,
     //                                   jump pack, sight, explosions, mortar, drops, Anomaly structures, tall things,
@@ -371,6 +374,10 @@ namespace ProjectZ.Dev
             if (GenCommandLine.TryGetCommandLineArg("projectzmintbreak", out string mb))
             {
                 MintBreak = mb;
+            }
+            if (GenCommandLine.TryGetCommandLineArg("projectzsmartconbreak", out string scb))
+            {
+                SmartConBreak = scb;
             }
             if (mode == "plain")
             {
@@ -848,6 +855,11 @@ namespace ProjectZ.Dev
                 StepDist3D(map);
                 return;
             }
+            if (stage.StartsWith("sc_"))
+            {
+                StepSmartCon(map);
+                return;
+            }
             if (stage.StartsWith("p6_"))
             {
                 StepApi6(map);
@@ -1233,7 +1245,7 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi" || mode == "floorplan") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi, floorplan without floors: no annex to check)
+                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi" || mode == "floorplan" || mode == "smartcon") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi, floorplan, smartcon without floors: no annex to check)
                     {
                         GenCheck(map, "after generation");
                         FogLidCheck("after generation");
@@ -1342,6 +1354,10 @@ namespace ProjectZ.Dev
                     else if (mode == "dist3d")
                     {
                         stage = "d3_setup";
+                    }
+                    else if (mode == "smartcon")
+                    {
+                        stage = "sc_setup";
                     }
                     else if (mode == "parts")
                     {
