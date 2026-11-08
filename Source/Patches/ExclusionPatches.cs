@@ -15,8 +15,12 @@ namespace ProjectZ.Patches
     // game's own drop checks: CanPhysicallyDropInto (every drop finder and IsGoodDropSpot go through it),
     // SkyfallerCanLandAt (big skyfallers) and ShuttleCanLandHere (every shuttle landing cell: the call-shuttle and
     // call-laborers permits, a player shuttle's landing spot, shuttles arriving at a cell; it checks cells itself and only
-    // refuses natural and thick roofs, so a shuttle could come down under a slab). The roof-punch itself already skips
-    // kept roofs (FloorRoof.cs, DropRoofCells_Patch).
+    // refuses natural and thick roofs, so a shuttle could come down under a slab), CellFinderLoose.TryFindSkyfallerCell
+    // (ship chunks, meteorites, warped obelisks, the golden cube, lava rock and orbital debris: its own validator only
+    // refuses thick roofs, and ship chunks search near the map centre over the whole map, every floor's rows included)
+    // and the last-resort random cell of a pod drop that found no spot near its centre (DropPodUtility and the
+    // specific-location drop: RandomCellWith "walkable, no thick roof"). The roof-punch itself already skips kept roofs
+    // (FloorRoof.cs, DropRoofCells_Patch).
     public static class DropRules
     {
         // Test only (-projectznoshuttlefix): ShuttleCanLandHere without the rule, to show the old behaviour.
@@ -58,6 +62,8 @@ namespace ProjectZ.Patches
             yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.FindRaidDropCenterDistant));
             yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.TryFindRaidDropCenterClose));
             yield return AccessTools.Method(typeof(DropCellFinder), nameof(DropCellFinder.RandomDropSpot));
+            // (the game's own skyfaller events, never aimed by the player: SkyfallerCell_Patch)
+            yield return AccessTools.Method(typeof(CellFinderLoose), nameof(CellFinderLoose.TryFindSkyfallerCell));
         }
 
         [HarmonyPriority(Priority.First)]
@@ -104,6 +110,84 @@ namespace ProjectZ.Patches
                 }
             }
             return true;
+        }
+    }
+
+    // The game's skyfaller cell finder: the rule over the skyfaller's footprint, added to the finder's own extra
+    // validator (its own validator checks the same footprint, OccupiedRect(cell, North, size), and calls the extra one
+    // last). Its searches are left as they are: the near search (ship chunks) samples, then scans its whole rect, so it
+    // still finds any allowed cell, upper floors included; when there is none it fails as vanilla's does (the incident
+    // doesn't fire, a ship chunk's follow-up chunk is skipped).
+    [HarmonyPatch(typeof(CellFinderLoose), nameof(CellFinderLoose.TryFindSkyfallerCell))]
+    public static class SkyfallerCell_Patch
+    {
+        public static void Prefix(ThingDef skyfaller, Map map, ref System.Predicate<IntVec3> extraValidator)
+        {
+            if (ProjectZ.Annex(map) == null || skyfaller == null)
+            {
+                return;
+            }
+            System.Predicate<IntVec3> own = extraValidator;
+            IntVec2 size = skyfaller.size;
+            extraValidator = c => !FootprintBlocked(c, map, size) && (own == null || own(c));
+        }
+
+        private static bool FootprintBlocked(IntVec3 c, Map map, IntVec2 size)
+        {
+            foreach (IntVec3 x in GenAdj.OccupiedRect(c, Rot4.North, size))
+            {
+                if (DropRules.Blocked(x, map))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    // A pod drop's last resort: when no drop spot near its centre is found, the game drops on a random cell that is only
+    // walkable and not under a thick roof (DropPodUtility.DropThingGroupsNear, which DropThingsNear goes through, and the
+    // specific-location drop's own copy). Inside them that random cell (CellFinderLoose.TryGetRandomCellWith, under
+    // RandomCellWith) obeys the rule too. First, so the ground-only random cell (CellFinderLoose_TryGetRandomCellWith_Patch)
+    // gets the wrapped validator.
+    [HarmonyPatch]
+    public static class PodFallback_Scope_Patch
+    {
+        [System.ThreadStatic]
+        internal static int depth;
+
+        public static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(DropPodUtility), nameof(DropPodUtility.DropThingGroupsNear));
+            System.Reflection.MethodInfo specific = AccessTools.DeclaredMethod(typeof(PawnsArrivalModeWorker_SpecificLocationDrop), "DropThingGroupsNear");
+            if (specific != null)
+            {
+                yield return specific;
+            }
+        }
+
+        public static void Prefix()
+        {
+            depth++;
+        }
+
+        public static void Finalizer()
+        {
+            depth--;
+        }
+    }
+
+    [HarmonyPatch(typeof(CellFinderLoose), nameof(CellFinderLoose.TryGetRandomCellWith))]
+    public static class PodFallback_RandomCell_Patch
+    {
+        [HarmonyPriority(Priority.First)]
+        public static void Prefix(Map map, ref System.Predicate<IntVec3> validator)
+        {
+            if (PodFallback_Scope_Patch.depth > 0 && validator != null && ProjectZ.Annex(map) != null)
+            {
+                System.Predicate<IntVec3> own = validator;
+                validator = c => !DropRules.Blocked(c, map) && own(c);
+            }
         }
     }
 

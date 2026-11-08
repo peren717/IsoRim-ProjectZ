@@ -992,6 +992,23 @@ namespace ProjectZ.Dev
                 StepShipStairs(map);
                 return;
             }
+            if (stage.StartsWith("xd_"))
+            {
+                // (reprodrops: each stage under a fixed random state; fires and ticks seeded per run inside)
+                Rand.PushState((int)(StableHash("reprodrops_" + stage) ^ (uint)(SeedArg ?? 717)));
+                try
+                {
+                    if (!StepReproDropsScene(map))
+                    {
+                        StepReproDrops(map);
+                    }
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
+                return;
+            }
             if (stage.StartsWith("sk_"))
             {
                 StepSkyDrop(map);
@@ -1496,6 +1513,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipstairs")
                     {
                         stage = "sp_setup";
+                    }
+                    else if (mode == "reprodrops")
+                    {
+                        stage = "xd_setup";
                     }
                     else if (mode == "skydrop")
                     {
