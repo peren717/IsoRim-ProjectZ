@@ -483,7 +483,7 @@ namespace ProjectZ.Dev
             {
                 PatchDragTimer(h);
             }
-            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
+            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "m228" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
             {
                 PatchMouse(h);
             }
@@ -940,6 +940,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("pf_"))
             {
                 StepPowerFloors(map);
+                return;
+            }
+            if (stage.StartsWith("m228_"))
+            {
+                StepM228(map);
                 return;
             }
             if (stage.StartsWith("j_"))
@@ -1455,6 +1460,10 @@ namespace ProjectZ.Dev
                     else if (mode == "powerfloors" || mode == "powerfloors1")
                     {
                         stage = "pf_setup";
+                    }
+                    else if (mode == "m228")
+                    {
+                        stage = "m228_setup";
                     }
                     else if (mode == "riser")
                     {
