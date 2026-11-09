@@ -43,7 +43,9 @@ namespace ProjectZ.Patches
                 }
                 if (center.GetTerrain(map) != PZDefOf.PZ_OpenAir)
                 {
-                    __result = "PZ_AlreadyFloor".Translate();
+                    // (a slab of another stuff is replaced, SlabReplace; the same slab under a laid floor: the game's
+                    // own words for the same terrain)
+                    __result = SlabDefs.Is(entDef) && SlabDamage.SlabAt(center, map) == entDef ? "TerrainIsAlready".Translate(entDef.label) : "PZ_AlreadyFloor".Translate();
                     return;
                 }
                 AcceptanceReport r = ShipDeck.Is(entDef) ? ShipDeck.Check(center, map) : PlaceWorker_UpperFloor.Check(center, map);

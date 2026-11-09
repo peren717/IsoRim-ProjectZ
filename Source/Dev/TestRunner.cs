@@ -885,6 +885,11 @@ namespace ProjectZ.Dev
                 StepStairColour(map);
                 return;
             }
+            if (stage.StartsWith("sw_"))
+            {
+                StepSlabReplace(map);
+                return;
+            }
             if (stage.StartsWith("p_"))
             {
                 StepSlabStuff(map);
@@ -1413,6 +1418,10 @@ namespace ProjectZ.Dev
                     else if (mode == "staircolour")
                     {
                         stage = "q_setup";
+                    }
+                    else if (mode == "slabreplace")
+                    {
+                        stage = "sw_setup";
                     }
                     else if (mode == "slabstuff")
                     {

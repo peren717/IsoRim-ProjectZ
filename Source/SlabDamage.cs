@@ -16,8 +16,9 @@ namespace ProjectZ
     //   - breaking is the support-loss collapse (Break: the game's collapse buffer): built things on the slab destroyed,
     //     pawns and items fall, the roof under it drops and crushes what is below, the game's letter; the floor below is
     //     then open to whatever is above;
-    //   - nothing is laid on a damaged slab (its def is not changeable: the game's own refusal; PlaceMessages says why) and
-    //     it is never repaired: it is taken up with the remove tool (Slab.At counts it) and laid again;
+    //   - nothing is laid on a damaged slab (its def is not changeable: the game's own refusal; PlaceMessages says why)
+    //     except a slab: a slab blueprint over it replaces it, of its own stuff too (the repair; SlabReplace, no refund);
+    //     or it is taken up with the remove tool (Slab.At counts it) and laid again;
     //   - the landing of stairs is part of the stairs: hits leave it alone.
     public static class SlabDamage
     {

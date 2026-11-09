@@ -929,6 +929,12 @@ namespace ProjectZ
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
         {
+            // (over a slab of another stuff: a replacement, SlabReplace; the floor is already there, so the open-air
+            // cover and support rules don't apply)
+            if (SlabReplace.Over(checkingDef, loc, map))
+            {
+                return AcceptanceReport.WasAccepted;
+            }
             return Check(loc, map);
         }
 
