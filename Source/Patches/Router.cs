@@ -461,7 +461,9 @@ namespace ProjectZ.Patches
                 return e;
             }
             e = new Edge { kind = kind, est = est, from = from, target = target, mode = mode };
-            if (kind == KindLeg && !c.estimatesOnly)
+            // (a leg this traveller ran lately counts as it is, in Find and in option C's lower bound alike: the bound then
+            // stays the least the router itself could pay, but near trap corridors and doors it is no longer octile alone)
+            if (kind == KindLeg && (!c.estimatesOnly || !OldBound && !TestBoundNoCache))
             {
                 RouteGraph.LegResult known = c.g.KnownLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, from, target, mode);
                 if (known != null)
@@ -473,7 +475,10 @@ namespace ProjectZ.Patches
                     else
                     {
                         e.cost = known.cost;
-                        e.nodes = WalkOrder(known.nodes);
+                        if (!c.estimatesOnly)
+                        {
+                            e.nodes = WalkOrder(known.nodes);
+                        }
                     }
                 }
             }
@@ -829,8 +834,9 @@ namespace ProjectZ.Patches
         public static float LastCost;
         public static List<int> LastRoute = new List<int>();
 
-        // The joined path, or null. knownDirect: the game's own same-floor path (option C's check): kept when the stairs
-        // are no cheaper (the same object is returned).
+        // The joined path, or null. knownDirect: the game's own same-floor path (option C's check, both callers: the
+        // deferred follower requests and the paths found at once): every exit returns it (the same object) unless Build
+        // finds a route with a stair step that really costs less (StairsRouteWins).
         public static PawnPath Find(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp, PathFinderCostTuning? tuning, PawnPath knownDirect = null)
         {
             if (busy || RouteGraph.For(map) == null)
@@ -979,10 +985,48 @@ namespace ProjectZ.Patches
             return null;
         }
 
+        // Option C's one rule, checked at the single exit of every route Search returns (all-real and final alike): with the
+        // game's own same-floor path known, the route over the stairs is walked only when it really takes the stairs (at
+        // least one stair step) and its real cost (every leg real by now: the game's FindPathNow costs with the same
+        // TraverseParms and tuning, plus the ramp cells and step costs) is strictly lower than that path's. Otherwise the
+        // game's path stays: a final route cut short by ExtraLegs can be far dearer (pathbug: 2090 against 1166, a walk
+        // out to a stairs foot and back, asked again at the same cell forever), and a same-floor detour without a step is
+        // the game's own business.
+        private static bool StairsRouteWins(Ctx c, List<int> r)
+        {
+            float cost = 0;
+            bool step = false;
+            for (int i = 0; i + 1 < r.Count; i++)
+            {
+                Edge e = c.edges[Key(r[i], r[i + 1])];
+                if (e.cost < 0 || e.banned)
+                {
+                    return false;
+                }
+                cost += e.cost;
+                step |= e.kind == KindStep;
+            }
+            return step && cost < c.knownDirect.TotalCost;
+        }
+
+        // Finds where Search had a route over the stairs but the game's own path stayed (option C's rule; tests, stats).
+        public static int KeptDirect;
+
+        // Test only (before/after numbers, Dev mode pathsave): -projectzoldkeep = the rule before pathfix (a route Search
+        // returned was walked as it was), -projectzoldbound = the lower bound from estimates only (no cached legs).
+        private static bool? oldKeep, oldBound;
+        internal static bool TestBoundNoCache;   // (set around one StairLowerBound call by the pathsave diagnostics)
+        private static bool OldKeep => oldKeep ?? (oldKeep = Dev.TestRunner.Active && GenCommandLine.CommandLineArgPassed("projectzoldkeep")).Value;
+        private static bool OldBound => oldBound ?? (oldBound = Dev.TestRunner.Active && GenCommandLine.CommandLineArgPassed("projectzoldbound")).Value;
+
         private static PawnPath Build(Ctx c, List<int> r)
         {
-            if (c.knownDirect != null && r.Count == 2)
+            if (c.knownDirect != null && (r.Count == 2 || !OldKeep && !StairsRouteWins(c, r)))
             {
+                if (r.Count != 2)
+                {
+                    KeptDirect++;
+                }
                 LastCost = c.knownDirect.TotalCost;
                 LastRoute = new List<int>(r);
                 return c.knownDirect;   // the game's own path stays
@@ -1013,8 +1057,10 @@ namespace ProjectZ.Patches
 
         // ------------------------------------------------------------------------------------------------ option C
 
-        // The lower bound of any route over the stairs from start to dest (estimates only, no leg is run), or
-        // float.MaxValue when no stairs route can exist. Used before a same-floor path is taken as it is.
+        // The lower bound of any route over the stairs from start to dest (no leg is run: estimates, or the real cost of a
+        // leg this traveller ran lately, still in RouteGraph's leg cache, as Find itself would take it), or float.MaxValue
+        // when no stairs route can exist. Used before a same-floor path is taken as it is. (A route back to the start's
+        // floor already pays both its stair steps here: the goal hangs only off the goal floor's nodes.)
         public static float StairLowerBound(Map map, IntVec3 start, LocalTargetInfo dest, PathEndMode peMode, TraverseParms tp)
         {
             RouteGraph g = RouteGraph.For(map);

@@ -68,9 +68,10 @@ namespace ProjectZ.Patches
     }
 
     // Option C (user 2026-10-19): a same-floor path the game found is compared, when it comes back, with the lower bound of
-    // any route over the stairs (estimates only: no leg is run). Only when it costs more than DetourFactor x that bound is
-    // the stairs route worked out (deferred, within the budget), and the cheaper of the two is walked. The common case
-    // costs one small A* over estimates at request time and nothing else.
+    // any route over the stairs (estimates, or this traveller's real legs still in the leg cache: no leg is run). Only when
+    // it costs more than DetourFactor x that bound is the stairs route worked out (deferred, within the budget), and the
+    // cheaper of the two is walked: the stairs route only when it takes a stair step and really costs less, else the
+    // game's own path (StairRouter.Build). The common case costs one small A* over estimates at request time and nothing else.
     [HarmonyPatch(typeof(Pawn_PathFollower), nameof(Pawn_PathFollower.PatherTick))]
     [PatchGroup(FailSoft.StairRouting, key: true)]
     public static class PatherTick_Detour_Patch

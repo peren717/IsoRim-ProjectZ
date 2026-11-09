@@ -740,6 +740,11 @@ namespace ProjectZ.Dev
                 StepLight(map);
                 return;
             }
+            if (stage.StartsWith("ps_"))
+            {
+                StepPathSave(map);
+                return;
+            }
             if (stage.StartsWith("v_"))
             {
                 StepSave(map);
@@ -1249,7 +1254,7 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "outcroptop" ? "ot_setup" : mode == "thickrock" ? (GenCommandLine.CommandLineArgPassed("projectztkold") ? "tk_old_load" : "tk_setup") : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "mineabove2" ? "ma_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
+                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "pathsave" ? "ps_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "outcroptop" ? "ot_setup" : mode == "thickrock" ? (GenCommandLine.CommandLineArgPassed("projectztkold") ? "tk_old_load" : "tk_setup") : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "mineabove2" ? "ma_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : "gencheck");
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node

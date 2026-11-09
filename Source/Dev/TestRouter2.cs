@@ -20,7 +20,8 @@ namespace ProjectZ.Dev
     //       compared with every route over the stairs enumerated with real legs (StairRouter.OracleCost): between floors
     //       the cost must equal the cheapest (never more), on one floor be within option C's 20 %; a walk per layout;
     //   A   admissibility: every real leg cost >= its estimate (counted over the whole run);
-    //   B   floor-bridge shortcut, below and above the 20 % threshold;  T  turn-around only at departure;
+    //   B   floor-bridge shortcut, below and above the 20 % threshold; B3 a game's path dearer than octile (mud) but
+    //       cheaper than the stairs: it stays (pathfix);  T  turn-around only at departure;
     //   W   wasted work in a busy two-floor colony (same-floor requests that ran the stairs route);
     //   U   an unreachable target (no freeze, no job loop); D  dead-end staircases; DR  a door forbidden and allowed;
     //   PB  a pawn on a stair end; F  burning stairs; FG  stairs in fog; M  melee across a stair step;
@@ -78,6 +79,12 @@ namespace ProjectZ.Dev
                     return true;
                 case "r2_b2_check":
                     R2BridgeCheck(map, true);
+                    return true;
+                case "r2_b3":
+                    R2DearDirect(map);
+                    return true;
+                case "r2_b3_check":
+                    R2DearDirectCheck(map);
                     return true;
                 case "r2_t":
                     R2Turn(map);
@@ -770,13 +777,92 @@ namespace ProjectZ.Dev
             if (far)
             {
                 Result("B above the threshold, walked: the pawn takes the bridge (2 stair steps) and arrives", r2P.Position == r2Dest && steps == 2 && routed >= 1, $"at {r2P.Position}, steps {steps}, same-floor checks over the stairs {routed}; {R2Stats()}");
-                stage = "r2_t";
+                stage = "r2_b3";
             }
             else
             {
                 Result("B below the threshold, walked: the pawn walks round on the ground (no stairs, no stairs route worked out)", r2P.Position == r2Dest && steps == 0 && routed == 0, $"at {r2P.Position}, steps {steps}, same-floor checks over the stairs {routed}; {R2Stats()}");
                 stage = "r2_b2";
             }
+        }
+
+        // ------------------------------------------------------------------------------------------------ B3: dear direct path
+
+        private static int r2KeptAt;
+
+        // pathfix (the user's trap corridor): the game's own path costs far more than octile (mud on the whole ground), so
+        // it is above 1.2 x the stairs' octile lower bound and the stairs route is worked out; but the bridge floor has a
+        // wall across it with its gap at the far west end, so the stairs route really costs more still. The game's path
+        // must stay (no stair step), when asked at once and when walked (the deferred follower requests).
+        private static void R2DearDirect(Map map)
+        {
+            R2Clear(map);
+            R2Park(map, r2P);
+            R2Feed(map);
+            int wallZ = 16, gapX = 26;
+            for (int x = 0; x < 44; x++)
+            {
+                if (x != gapX && x != gapX + 1)
+                {
+                    R2Wall(map, RG(x, wallZ));
+                }
+            }
+            R2Floor(map, new CellRect(RG(0, 10).x, RG(0, 10).z, 44, 13), 1);
+            Building_Stairs up = R2Stairs(map, RG(31, 8), Rot4.North);     // exit (31, 11) on the floor
+            Building_Stairs down = R2Stairs(map, RG(31, 25), Rot4.South);  // exit (31, 22) on the floor
+            for (int x = 1; x < 44; x++)
+            {
+                R2Wall(map, RL(x, wallZ, 1, map));   // (the floor's gap: x 0, far west)
+            }
+            TerrainDef mud = DefDatabase<TerrainDef>.GetNamedSilentFail("Mud");
+            int muddy = 0;
+            if (mud != null)
+            {
+                foreach (IntVec3 g in r2Area)
+                {
+                    if (g.InBounds(map) && g.GetEdifice(map) == null)
+                    {
+                        map.terrainGrid.SetTerrain(g, mud);
+                        muddy++;
+                    }
+                }
+            }
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            IntVec3 s = RG(31, 5), d = RG(31, 28);
+            Teleport(r2P, s);
+            Draft(r2P, true);
+            TraverseParms tp = TraverseParms.For(r2P);
+            StairRouter.busy = true;
+            PawnPath v = map.pathFinder.FindPathNow(s, d, tp, PathFinderCostTuning.For(r2P), PathEndMode.OnCell);
+            StairRouter.busy = false;
+            float vc = v != null && v.Found ? v.TotalCost : float.MaxValue;
+            v?.Dispose();
+            float lb = StairRouter.StairLowerBound(map, s, d, PathEndMode.OnCell, tp);
+            float best = StairRouter.OracleCost(map, s, d, PathEndMode.OnCell, tp, PathFinderCostTuning.For(r2P), out string bestName);
+            int routedAt = PZStats.sameFloorRouted, keptAt = StairRouter.KeptDirect;
+            float got = R2Path(map, r2P, s, d, PathEndMode.OnCell, out List<IntVec3> steps, out bool valid);
+            int routed = PZStats.sameFloorRouted - routedAt, kept = StairRouter.KeptDirect - keptAt;
+            Result("B3 dear direct path: fixture valid (mud: the game's path > 1.2 x the stairs' lower bound; the stairs really dearer still)",
+                up != null && down != null && muddy > 0 && vc > StairRouter.DetourFactor * lb && bestName == "direct",
+                $"stairs {up?.Position} {down?.Position}, mud cells {muddy}; game path {vc:0}, lower bound {lb:0} (ratio {vc / lb:0.00}), oracle {best:0} ({bestName})");
+            Result("B3 dear direct path: asked at once, the stairs route is worked out but the game's own path stays (no stair step, its cost)",
+                steps.Count == 0 && valid && Math.Abs(got - vc) < 0.5f && routed >= 1,
+                $"got {got:0} (steps {steps.Count}), game path {vc:0}; checked over the stairs {routed}, kept by the rule {kept}");
+            r2Dest = d;
+            R2Mark();
+            r2KeptAt = StairRouter.KeptDirect;
+            GoTo(r2P, d);
+            TickUntil(4000, () => r2P.Position == r2Dest, "r2_b3_check", 15);
+        }
+
+        private static void R2DearDirectCheck(Map map)
+        {
+            tickWatch = null;
+            int steps = climbsColonists - r2ClimbsAt;
+            int routed = PZStats.sameFloorRouted - r2SameRoutedAt;
+            Result("B3 dear direct path, walked: the pawn walks the game's path through the mud (no stairs) and arrives", r2P.Position == r2Dest && steps == 0,
+                $"at {r2P.Position}, steps {steps}, same-floor checks over the stairs {routed}, kept by the rule {StairRouter.KeptDirect - r2KeptAt}; {R2Stats()}");
+            stage = "r2_t";
         }
 
         // ------------------------------------------------------------------------------------------------ T: turn-around
