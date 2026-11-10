@@ -194,6 +194,7 @@ namespace ProjectZ.Dev
 
         private static CellRect p6Field;
         private static IntVec3 p6Stairwell = IntVec3.Invalid;
+        private static string p6Next = "p6_check";   // (mode scope3d: its own checks on the same fixture)
 
         private static IntVec3 PG(int x, int z) => new IntVec3(p6Field.minX + x, 0, p6Field.minZ + z);
 
@@ -285,7 +286,7 @@ namespace ProjectZ.Dev
             {
                 Find.TickManager.DoSingleTick();   // real ticks: nothing falls, nothing collapses
             }
-            Wait(10, "p6_check");
+            Wait(10, p6Next);
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

@@ -58,6 +58,9 @@ namespace ProjectZ.Combat
     // The one line-of-sight check behind every shot: AI target picking, CanHitTarget, TryFindShootLineFromTo (targeting,
     // warm-up, cast spots, the shot report). Between floors Los3D (with the game's corner walks for full-fill targets),
     // none for a shot declared lobbed (Lobbed); on one floor the game's own code. Final say between floors (FinalSay).
+    // Between floors the game's own method decides (its original body, GameOriginal: no patch on it runs, ours neither)
+    // inside the 3D scope (Scope3DCore, Api 10): its sight walks are Los3D's, its open-ground rule is the game's. A shot
+    // declared lobbed runs it with the sight clear; one declared direct also needs the line when its verb needs none.
     [HarmonyPatch(typeof(Verb), "CanHitCellFromCellIgnoringRange")]
     [PatchGroup(FailSoft.Combat, key: true)]
     [CombatPartOf(CombatPart.Sight)]
@@ -70,6 +73,63 @@ namespace ProjectZ.Combat
             {
                 return FinalSay.Pass;
             }
+            if (!UnityData.IsInMainThread || !GameReady())
+            {
+                System.Threading.Interlocked.Increment(ref Fallbacks);
+                return Fallback(verb, from, to, corners, map);
+            }
+            bool? lobbed = Lobbed.Declared(verb, from, to);
+            bool hit;
+            using (Scope3DCore.Open(map, from, to, sightClear: lobbed == true))
+            {
+                hit = GameOriginal(verb, from, to, corners);
+            }
+            if (hit && lobbed == false && !verb.verbProps.requireLineOfSight)
+            {
+                hit = Los3D.CanSee(from, to, map, corners);
+            }
+            return FinalSay.Of(hit);
+        }
+
+        // (tests) answers given without the game's method: off the main thread, or its copy failed
+        // The copy is built at startup (ProjectZMod); GameReady only reports it (a missed startup builds it then).
+        public static int Fallbacks;
+
+        // The game's Verb.CanHitCellFromCellIgnoringRange, original body with the 3D scope's swaps (Scope3DCore).
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public static bool GameOriginal(Verb instance, IntVec3 sourceSq, IntVec3 targetLoc, bool includeCorners)
+        {
+            throw new NotImplementedException("Verb_CanHitCell_Patch.GameOriginal: reverse patch missing");
+        }
+
+        private static int gameState;   // 0 not tried, 1 ready, -1 failed
+        private static readonly object gameLock = new object();
+
+        public static bool GameReady()
+        {
+            if (gameState == 0)
+            {
+                lock (gameLock)
+                {
+                    if (gameState == 0)
+                    {
+                        MethodBase original = AccessTools.Method(typeof(Verb), "CanHitCellFromCellIgnoringRange");
+                        gameState = original != null && Scope3DCore.OriginalWithScope(original, AccessTools.Method(typeof(Verb_CanHitCell_Patch), nameof(GameOriginal))) != null ? 1 : -1;
+                        if (gameState < 0)
+                        {
+                            Log.Warning("[ProjectZ] shots between floors: the game's line-of-sight rule could not be copied; ProjectZ's own version answers.");
+                        }
+                    }
+                }
+            }
+            return gameState > 0;
+        }
+
+        // Copied from vanilla Verb.CanHitCellFromCellIgnoringRange (fallback only): used without the game's method (off the main
+        // thread, where the scope does nothing, or when its copy failed), with Los3D for the sight walks and the lobbed rule.
+        // TODO: register this copy with IsoRim's method-change watch once that Api is merged.
+        private static byte Fallback(Verb verb, IntVec3 from, IntVec3 to, bool corners, Map map)
+        {
             VerbProperties vp = verb.verbProps;
             if (vp.mustCastOnOpenGround && (!to.Standable(map) || map.thingGrid.CellContains(to, ThingCategory.Pawn)))
             {

@@ -57,6 +57,8 @@ namespace ProjectZ
             BandRadial.Patch(harmony);
             // directional effects (flame spews, sprays, beams) aimed at another floor: laid out on the target's floor
             Combat.CombatGate.OnSettle(() => Combat.AimFloor.Patch(harmony));
+            // the game's own sight rule for shots between floors, run in the 3D scope (built now; logged once if it fails)
+            Combat.Verb_CanHitCell_Patch.GameReady();
             IsoRimBridge.Init();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, default floors for new worlds=" + Settings.floors + " (effective " + WorldFloors.Default + ")");

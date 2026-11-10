@@ -25,10 +25,12 @@ namespace ProjectZ
         //     LadderSite.FindFromFoot);
         //  8: floors and stairs for other mods, see Docs/Api.md (TryGetFloorFor, TryGetStairGeometry, StairGeometry);
         //  9: a floor plan per generated map, see Docs/Api.md (RegisterMapFloorPlanner, UnregisterMapFloorPlanner, MapFloorPlan,
-        //     TryBeginFullMapSize, EndFullMapSize)).
+        //     TryBeginFullMapSize, EndFullMapSize);
+        // 10: the 3D scope, see Docs/Api.md (Scope3D, Scope3DMethod, InScope3D, Scope3DHandle) and ProjectZ's layout values
+        //     (AimHeights, EyeHeight, FloorStride, OpenAirTerrain)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 9;
+        public static int Version => 10;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -506,6 +508,60 @@ namespace ProjectZ
 
         // The same for a spawned stairs thing, ship stairs too: built, blueprint or frame. False for anything else, null too.
         public static bool TryGetStairGeometry(Thing stairs, out StairGeometry geometry) => StairShape.TryGeometry(stairs, out geometry);
+
+        // ---- the 3D scope (10)
+        // Runs another mod's own rule (or the game's) between floors instead of a copy of it: inside a scope the vanilla
+        // questions that rule asks are answered in 3D (Docs/Api.md, "The 3D scope"):
+        //   using (ProjectZ.Api.Scope3D(map, source, target)) { result = TheirOwnMethod(...); }
+        // Only calls in methods registered with Scope3DMethod are answered (once, at startup); without a scope they are the
+        // game's own calls. In a scope, for two cells on two floors: GenSight.LineOfSight (all overloads) and
+        // LineOfSightToEdges are ProjectZ's sight between floors (CanSeeBetweenFloors); IntVec3Utility.DistanceTo,
+        // DistanceToSquared and IntVec3.InHorDistOf the 3D distance (Distance3D). When the scope's source and target are on
+        // two floors, Roofed (GridsUtility, RoofGrid) is "not OpenSkyOver". In any scope, GenRadial.RadialCellsAround and
+        // CellFinder.TryFindRandomCellNear stay on the centre's floor. Pairs on one floor: the game's answers. Main thread only
+        // (opened elsewhere it does nothing; other threads always get the game's answers). Scopes nest: the innermost answers.
+
+        // Opens a scope for a rule about source and target (cells on map). Dispose the handle (a using block) to close it.
+        // On a map without floors the scope answers as the game does.
+        public static Scope3DHandle Scope3D(Map map, IntVec3 source, IntVec3 target) => Scope3DCore.Open(map, source, target);
+
+        // The same for a thing (its map and position, where it is held) and its target.
+        public static Scope3DHandle Scope3D(Thing source, LocalTargetInfo target)
+        {
+            Map map = source?.MapHeld;
+            return Scope3DCore.Open(map, map == null ? IntVec3.Invalid : source.PositionHeld, target.IsValid ? target.Cell : IntVec3.Invalid);
+        }
+
+        // Makes a method answer in 3D inside a scope: its calls of the primitives above (and those of its lambdas, local
+        // functions and iterator) are swapped for ProjectZ's (a transpiler; the method is otherwise untouched). Call once
+        // per method, from a StaticConstructorOnStartup or the Mod constructor. Returns the calls swapped: 0 when it has none
+        // (or no body, or the patch failed; logged). A method registered before returns its count again. Distances are the
+        // geometric Distance3D (rules, ranges); a method ProjectZ already gives its walking measure for "nearest" choices is
+        // refused (0, logged).
+        public static int Scope3DMethod(System.Reflection.MethodBase method) => Scope3DCore.Register(method);
+
+        // A scope is open on this (the main) thread, on a map with floors.
+        public static bool InScope3D => Scope3DCore.Active;
+
+        // ---- ProjectZ's layout values (10)
+
+        // The heights ProjectZ aims at on a target cell, in cells over the target's floor, in the order tried (head, chest,
+        // waist): any clear one is a line of sight between floors (CanSeeBetweenFloors).
+        public static IReadOnlyList<float> AimHeights => Los3D.AimHeights;
+
+        // The height a shooter's sight line starts at, in cells over its floor (pawns, turrets, animals).
+        public static float EyeHeight => Los3D.Eye;
+
+        // Rows from one floor's band to the next (FloorRowShift(1)); map.Size.z on a map without floors. The map is
+        // FloorCount bands of this many rows (a band's ground rows, then void rows).
+        public static int FloorStride(Map map)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            return a != null ? a.stride : (map == null ? 0 : map.Size.z);
+        }
+
+        // The terrain of an upper floor's cell with no floor on it (open air: impassable, not drawn).
+        public static TerrainDef OpenAirTerrain => PZDefOf.PZ_OpenAir;
 
         private static bool OnGround(IntVec3 g, Map map) => map != null && g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.GroundRect(map).maxZ + 1;
     }

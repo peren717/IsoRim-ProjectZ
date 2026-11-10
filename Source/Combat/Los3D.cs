@@ -30,6 +30,9 @@ namespace ProjectZ.Combat
         private static readonly float[] Aims = { AimHead, AimChest, AimWaist };
         private const int AllAims = 7;
 
+        // The aim heights above, in the order tried (Api.AimHeights, Api 10).
+        public static readonly IReadOnlyList<float> AimHeights = Array.AsReadOnly(Aims);
+
         public static int Calls;   // test counter (cheap, always on)
 
         public static bool CanSee(IntVec3 src, IntVec3 dst, Map map, bool includeCorners = false, Func<IntVec3, bool> validator = null)
@@ -42,16 +45,7 @@ namespace ProjectZ.Combat
         {
             aim = 0f;
             Calls++;
-            AnnexMapComponent a = ProjectZ.Annex(map);
-            if (a == null)
-            {
-                return false;
-            }
-            int ks = Levels.LevelOf(src, map);
-            int kt = Levels.LevelOf(dst, map);
-            IntVec3 gs = ProjectZ.GroundCellOf(src, map);
-            IntVec3 gt = ProjectZ.GroundCellOf(dst, map);
-            if (ks == Levels.None || kt == Levels.None || !gs.IsValid || !gt.IsValid)
+            if (!Ends(src, dst, map, out AnnexMapComponent a, out IntVec3 gs, out int ks, out IntVec3 gt, out int kt))
             {
                 return false;
             }
@@ -74,6 +68,33 @@ namespace ProjectZ.Combat
                 }
             }
             return false;
+        }
+
+        // One walk toward a half-cell offset of the target (GenSight.LineOfSight's halfXOffset / halfZOffset: the walks of
+        // LineOfSightToEdges), every aim height; 0, 0 is CanSee's first walk (Scope3D, Api 10).
+        public static bool CanSeeTowards(IntVec3 src, IntVec3 dst, Map map, int halfX, int halfZ, Func<IntVec3, bool> validator = null)
+        {
+            Calls++;
+            return Ends(src, dst, map, out AnnexMapComponent a, out IntVec3 gs, out int ks, out IntVec3 gt, out int kt)
+                && Trace(map, a, gs, ks, gt, kt, halfX, halfZ, validator, out _);
+        }
+
+        // The two ends of a sight line between floors (CanSee, CanSeeTowards): the map's annex, each end's ground cell and
+        // level. False without floors or for a void row end.
+        private static bool Ends(IntVec3 src, IntVec3 dst, Map map, out AnnexMapComponent a, out IntVec3 gs, out int ks, out IntVec3 gt, out int kt)
+        {
+            a = ProjectZ.Annex(map);
+            ks = kt = Levels.None;
+            gs = gt = IntVec3.Invalid;
+            if (a == null)
+            {
+                return false;
+            }
+            ks = Levels.LevelOf(src, map);
+            kt = Levels.LevelOf(dst, map);
+            gs = ProjectZ.GroundCellOf(src, map);
+            gt = ProjectZ.GroundCellOf(dst, map);
+            return ks != Levels.None && kt != Levels.None && gs.IsValid && gt.IsValid;
         }
 
         // The ground columns the walk visits from a to b (both included), the game's sequence (tests).

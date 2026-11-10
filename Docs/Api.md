@@ -2,7 +2,8 @@
 
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
 does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries,
-other mods' ladders (Api 7), floors and stairs for other mods (Api 8), and floor plans per map (Api 9).
+other mods' ladders (Api 7), floors and stairs for other mods (Api 8), floor plans per map (Api 9), and the 3D scope with
+ProjectZ's layout values (Api 10).
 
 ## Version checks
 
@@ -310,3 +311,72 @@ map, from the map's own `AnnexMapComponent`: floors, stride, ground height, leve
 where the map has its floors (`PZ_ShipNotEnoughFloors`), and the viewed floor is clamped to the map on view.
 
 `PZ_WorldFloorsTip` still says "for every map in this game": true unless a planner is at work.
+
+## The 3D scope (Api 10)
+
+A rule that another mod (or the game) decides on one floor can be run between floors as it is, instead of a copy of it
+that answers in 3D. Inside a scope, the vanilla questions such a rule asks are answered in 3D:
+
+```csharp
+// once, at startup (a StaticConstructorOnStartup or the Mod constructor): the methods whose calls the scope answers
+ProjectZ.Api.Scope3DMethod(AccessTools.Method("SomeMod.SomeClass:SomeRule"));
+
+// when asking the rule about two cells (main thread)
+using (ProjectZ.Api.Scope3D(map, source, target))
+{
+    result = SomeClass.SomeRule(...);   // the other mod's own method, unchanged
+}
+```
+
+### What a scope answers
+
+Only calls written in a registered method (and in its lambdas, local functions and iterator) are answered: registering
+swaps them for ProjectZ's (a transpiler). Calls deeper down, in methods it calls, are not; register those too when they
+ask. Nothing else in the game is patched. With no scope open, a swapped call is the game's own call after one static
+test, so registered methods behave and cost as before.
+
+| Game call | In a scope | ProjectZ's answer |
+|---|---|---|
+| `GenSight.LineOfSight` (all three overloads), `GenSight.LineOfSightToEdges` | the two cells on two floors | ProjectZ's sight between floors (`Los3D`, `CanSeeBetweenFloors`): the game's walk over the ground with a height; half offsets and edge walks as the game's; ends exempt; the validator asked per column; the rect overload's rects are not used |
+| `IntVec3Utility.DistanceTo`, `DistanceToSquared`, `IntVec3.InHorDistOf` | the two cells on two floors | the true 3D distance (`Distance3D`); the squared one rounded to an int |
+| `GridsUtility.Roofed`, `RoofGrid.Roofed(IntVec3)` | the scope's source and target on two floors | not `OpenSkyOver`: a roof or a floor built anywhere above; a stairwell's opening is open |
+| `GenRadial.RadialCellsAround` (both overloads), `CellFinder.TryFindRandomCellNear` | any scope | the centre's (root's) floor only: other floors' rows and void rows are left out |
+
+Which distance: the scope answers with the geometric 3D distance (`Distance3D`: over the ground, `StoreyHeight` per floor),
+the measure of rule and range checks (weapon ranges, reach, "within N cells"). ProjectZ's own swap of the game's "nearest"
+choices (food, storage, work, the `Dist3D` list) uses a walking measure instead (a storey counts as the stairs' climb),
+because it orders candidates by how far a pawn must go. One method never gets both: `Scope3DMethod` refuses a method
+that list already measures (it returns 0 and logs one line).
+
+A pair on one floor, or a cell in a void row, gets the game's answer; so does `Roofed` in a scope whose source and
+target are on one floor. `Standable`, `Walkable` and `InBounds` are not swapped: every cell is a real cell on its floor,
+and open air and void rows are impassable, so the game already answers them per floor.
+
+Not answered (use the Api's 3D queries, or keep the rule's own code): `IntVec3 - IntVec3` and its `LengthHorizontal`,
+`CellRect` distances, `RoofGrid.RoofAt`, `GenSight.LineOfSightToThing`, `GenGrid.CanBeSeenOver` (a single cell has no 3D
+answer), and rules that walk cells with their own heights or rays (a line walker of their own).
+
+### The scope's rules
+
+- `Scope3D(map, source, target)` or `Scope3D(thing, target)` returns a `Scope3DHandle` (a struct, `IDisposable`; opening
+  allocates nothing). Close it with `Dispose` (a `using` block).
+- Scopes nest; the innermost answers. Closing a scope also closes any opened inside it and left open; a handle closed
+  before closes nothing (`Scope3DHandle.Open` says whether it is still open).
+- On a map without floors (or with a null map) the scope answers as the game, also over an outer scope.
+- Main thread only. Opened off the main thread a scope does nothing (`Open` false); a swapped call on any other thread
+  always gets the game's answer, also while the main thread has a scope open.
+- `InScope3D`: a scope is open on this thread on a map with floors.
+- `Scope3DMethod(method)` returns the calls it swapped (0: none, no body, or the patch failed; logged). Registering a
+  method again returns its count.
+
+ProjectZ uses it itself: between floors, `Verb.CanHitCellFromCellIgnoringRange` (every shot's sight check) runs the
+game's own method body in a scope, with a lobbed shot's sight clear.
+
+### ProjectZ's layout values
+
+| Call | Value |
+|---|---|
+| `AimHeights` | the heights ProjectZ aims at on a target cell, in cells over its floor, in the order tried (head, chest, waist: 1.10, 0.80, 0.50); read-only |
+| `EyeHeight` | where a shooter's sight line starts, in cells over its floor (1.10) |
+| `FloorStride(map)` | rows from one floor's band to the next (`FloorRowShift(1)`); the map is `FloorCount` bands of this many rows; `map.Size.z` without floors |
+| `OpenAirTerrain` | the terrain of an upper floor's cell with no floor on it (`PZ_OpenAir`) |

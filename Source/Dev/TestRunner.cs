@@ -88,6 +88,10 @@ namespace ProjectZ.Dev
     //                                   parts: the combat part switch (Api 6; -projectztestkeep[=A,B], -projectztestrelease=A,B;
     //                                   run with and without Combat Extended); api6: the Api 6 3D space queries on a two-floor
     //                                   fixture, -projectzfloors=3 -projectzseed=N (TestApi6)
+    //                                   scope3d: Api 10, the 3D scope (every swapped primitive in and out of a scope against
+    //                                   ProjectZ's own 3D answers and the game's, nesting, threads, cost), the layout getters and
+    //                                   the trial (Verb_CanHitCell_Patch on the game's own method) on the api6 fixture,
+    //                                   -projectzfloors=3 -projectzseed=N (TestScope3D)
     //                                   failsoft: the patch state after -projectzfailpatch=<names> made those patches fail
     //                                   (FailSoft; any other mode runs with that switch too; TestFailSoft)
     //                                   deadend: two stairs, the nearer one up onto a one-cell floor; a bed upstairs
@@ -874,6 +878,11 @@ namespace ProjectZ.Dev
                 StepSmartCon(map);
                 return;
             }
+            if (stage.StartsWith("z3_"))
+            {
+                StepScope3D(map);
+                return;
+            }
             if (stage.StartsWith("p6_"))
             {
                 StepApi6(map);
@@ -1416,6 +1425,10 @@ namespace ProjectZ.Dev
                     else if (mode == "api6")
                     {
                         stage = "p6_setup";
+                    }
+                    else if (mode == "scope3d")
+                    {
+                        stage = "z3_setup";
                     }
                     else if (mode == "failsoft")
                     {
