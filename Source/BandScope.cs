@@ -310,11 +310,21 @@ namespace ProjectZ
         }
     }
 
-    // The mechanitor's command range: the true 3D distance between floors (vanilla: flat squared distance < 620.01).
+    // The mechanitor's command range: the true 3D distance between floors. Its flat reach is the game's own (GameRange,
+    // probing CanCommandTo on the mechanitor's floor, so a mod that changes the range is followed between floors too).
     [HarmonyPatch(typeof(Pawn_MechanitorTracker), nameof(Pawn_MechanitorTracker.CanCommandTo))]
     public static class MechanitorRange_3D_Patch
     {
+        // Fallback only (the game cannot be asked): vanilla's flat squared distance < 620.01.
         public const float RangeSquared = 620.01f;
+
+        public static readonly GameRange.Rule Rule = new GameRange.Rule
+        {
+            name = "the mechanitor's command range",
+            fallbackSquared = RangeSquared,
+            check = (t, c) => t is Pawn p && p.mechanitor != null && p.mechanitor.CanCommandTo(c),
+            sphere = true,
+        };
 
         private static byte Decide(Pawn_MechanitorTracker tracker, LocalTargetInfo target)
         {
@@ -338,8 +348,7 @@ namespace ProjectZ
             {
                 return FinalSay.No;   // a void row
             }
-            float d = Range3D.Distance(a, b, map);
-            return FinalSay.Of(d * d < RangeSquared);
+            return FinalSay.Of(GameRange.Within3D(Rule, p, a, b, map));
         }
 
         public static bool Prefix(Pawn_MechanitorTracker __instance, LocalTargetInfo target, ref bool __result, out byte __state)
@@ -365,18 +374,13 @@ namespace ProjectZ
         }
 
         // How far over the ground the range reaches on floor k from a mechanitor on floor ks (negative: out of reach).
-        public static float HorizontalReach(int ks, int k)
-        {
-            float v = Range3D.Rise(ks, k);
-            float s = RangeSquared - v * v;
-            return s <= 0f ? -1f : Mathf.Sqrt(s);
-        }
+        public static float HorizontalReach(Pawn mechanitor, int ks, int k) => GameRange.HorizontalReach(Rule, mechanitor, ks, k);
     }
 
     // The mechanitor's command range drawn between floors, in IsoRim's 3D view (like the weapon range preview,
     // RangePreview.Rings): the game draws the ring round the mechanitor (Pawn_MechanitorTracker.DrawCommandRadius, white,
     // its cells CanCommandTo) while one of its drafted mechs is selected; ProjectZ adds the ring on the ground and on the
-    // viewed floor, the cross-section of the 3D range there, its cells exactly those CanCommandTo takes (the same rule,
+    // viewed floor, the cross-section of the 3D range there (its reach the game's own, GameRange), its cells exactly those CanCommandTo takes (the same rule,
     // MechanitorRange_3D_Patch). The mechanitor's own floor keeps the game's ring. Drawn from the selected mech's
     // selection overlay, not from the mechanitor's own drawing: that one does not run while its floor is hidden (a floor
     // above the viewed one). Also the faint see-through range shell (RangeShell, the weapon preview's look) in the game's
@@ -405,14 +409,19 @@ namespace ProjectZ
             int ks = ProjectZ.FloorOf(m.Position, map);
             IntVec3 g = ProjectZ.GroundCellOf(m.Position, map);
             // once a frame per mechanitor (two of its mechs selected)
-            if (ks < 0 || !g.IsValid || !RangePreview.FirstThisFrame(m, MechanitorRange_3D_Patch.RangeSquared))
+            if (ks < 0 || !g.IsValid)
+            {
+                return;
+            }
+            float range = GameRange.ShellRadius(MechanitorRange_3D_Patch.Rule, m);
+            if (!RangePreview.FirstThisFrame(m, range))
             {
                 return;
             }
             try
             {
-                Drawn += RangePreview.Rings(g, ks, k => MechanitorRange_3D_Patch.HorizontalReach(ks, k), Color.white, c => tracker.CanCommandTo(c), map);
-                RangeShell.Draw(new Vector3(g.x + 0.5f, ks * Range3D.Storey, g.z + 0.5f), Mathf.Sqrt(MechanitorRange_3D_Patch.RangeSquared), 0f, sphere: true, white: true);
+                Drawn += RangePreview.Rings(g, ks, k => MechanitorRange_3D_Patch.HorizontalReach(m, ks, k), Color.white, c => tracker.CanCommandTo(c), map);
+                RangeShell.Draw(new Vector3(g.x + 0.5f, ks * Range3D.Storey, g.z + 0.5f), range, 0f, sphere: true, white: true);
                 Shells++;
             }
             catch (Exception e)
