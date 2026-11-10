@@ -693,7 +693,8 @@ namespace ProjectZ.Combat
     // its line of sight (aimed shots) or near the ground (misses). Along the way they pass over anything lower than their
     // height at that point (on the floor that height is on). A miss stops on a slab or roof it would cross; an aimed shot
     // with a clear line never does (Los3D found no plane on it). A shot that would come down on open air (a miss off an upper floor's edge) falls to
-    // the floor below, and one past a floor's north edge lands on its top row, never in the void between floors. Not
+    // the floor below (a lobbed one at launch, a direct one where it comes to rest, after flying on its own floor:
+    // Column.ShotLanding), and one past a floor's north edge lands on its top row, never in the void between floors. Not
     // saved: a projectile still in flight on load flies on as a plain one.
     public static class Flights
     {
@@ -786,6 +787,31 @@ namespace ProjectZ.Combat
             });
         }
 
+        // Does the shot fly lobbed (from the sky, no flight) or direct (a flight)? As declared (Api.SetLobbed, else the
+        // casting verb's rule between floors, Lobbed), else as its def flies (flyOverhead). ruled: the rule
+        // answered (not marked yet).
+        private static bool FliesLobbed(Projectile p, IntVec3 spawn, IntVec3 dc, Map map, out bool ruled)
+        {
+            ruled = false;
+            if (Lobbed.Marked(p, out bool lobbed))
+            {
+                return lobbed;
+            }
+            lobbed = p.def.projectile.flyOverhead;
+            Verb v = Lobbed.casting;
+            if (Lobbed.Any && v != null)
+            {
+                IntVec3 to = p.intendedTarget.IsValid ? p.intendedTarget.Cell : dc;
+                bool? declared = Heights.CrossFloor(spawn, to, map) ? Lobbed.Declared(v, spawn, to) : null;
+                if (declared.HasValue)
+                {
+                    lobbed = declared.Value;
+                    ruled = true;
+                }
+            }
+            return lobbed;
+        }
+
         public static void Postfix(Projectile __instance, ref Vector3 ___origin, ref Vector3 ___destination, ref int ___ticksToImpact, ref int ___lifetime)
         {
             Map map = __instance.Map;
@@ -822,12 +848,15 @@ namespace ProjectZ.Combat
                 dc = ___destination.ToIntVec3();
                 moved = true;
             }
-            // A shot that comes down on open air (a miss off the edge of an upper floor) falls to the floor below.
+            // A lobbed shot that comes down on open air (a miss off the edge of an upper floor) falls to the floor below
+            // (it comes from the sky). A direct shot keeps its floor and flies there; over open air it drops to the floor
+            // below only where it comes to rest (Projectile_ImpactOnTop_Patch), so its flight never dives through the
+            // floor it was shot along. Both by the one rule, Column.ShotLanding.
             int land = kd;
-            IntVec3 g = ProjectZ.GroundCellOf(dc, map);
-            while (land > 0 && g.IsValid && !Column.FloorAt(g, land, map))
+            bool lobbed = FliesLobbed(__instance, spawn, dc, map, out bool ruled);
+            if (lobbed)
             {
-                land--;
+                land = Column.ShotLanding(ProjectZ.GroundCellOf(dc, map), kd, map);
             }
             if (land != kd)
             {
@@ -860,22 +889,10 @@ namespace ProjectZ.Combat
                 return;   // only clamped onto its own floor
             }
             Flights.cross.AddOrUpdate(__instance, new Flights.Cross { from = ko, to = land });
-            // Lobbed (from the sky, no flight) or direct (a flight): as declared (Api.SetLobbed, else the casting verb's
-            // rule, Lobbed), else as its def flies (flyOverhead).
-            if (!Lobbed.Marked(__instance, out bool lobbed))
+            // Lobbed (from the sky, no flight) or direct (a flight): a rule's answer is kept for the rest of its flight.
+            if (ruled)
             {
-                lobbed = __instance.def.projectile.flyOverhead;
-                Verb v = Lobbed.casting;
-                if (Lobbed.Any && v != null)
-                {
-                    IntVec3 to = __instance.intendedTarget.IsValid ? __instance.intendedTarget.Cell : dc;
-                    bool? declared = Heights.CrossFloor(spawn, to, map) ? Lobbed.Declared(v, spawn, to) : null;
-                    if (declared.HasValue)
-                    {
-                        lobbed = declared.Value;
-                        Lobbed.Mark(__instance, lobbed);
-                    }
-                }
+                Lobbed.Mark(__instance, lobbed);
             }
             if (!lobbed)
             {

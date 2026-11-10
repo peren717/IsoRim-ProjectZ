@@ -165,11 +165,51 @@ namespace ProjectZ.Patches
         }
     }
 
+    // A direct shot (not lobbed: Combat.Lobbed) that comes to rest over open air upstairs (a miss off an upper floor's
+    // edge: it flew on its own floor, Projectile_Launch_Patch) drops to the floor below there (Column.ShotLanding, the
+    // rule a lobbed shot lands by at launch) and hits what is in that cell. Part of the flights (the launch keeps a
+    // direct shot on its floor only with them on); lobbed shots: Projectile_ImpactOnTop_Patch.
+    [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
+    [CombatPartOf(CombatPart.Flights)]
+    public static class Projectile_ImpactDirect_Patch
+    {
+        public static void Prefix(Projectile __instance)
+        {
+            if (!__instance.Spawned || Combat.Lobbed.Of(__instance))
+            {
+                return;
+            }
+            Map map = __instance.Map;
+            IntVec3 pos = __instance.Position;
+            int k = ProjectZ.FloorOf(pos, map);
+            if (k <= 0 || !ProjectZ.HasAnnex(map))
+            {
+                return;
+            }
+            int land = Column.ShotLanding(ProjectZ.GroundCellOf(pos, map), k, map);
+            if (land == k)
+            {
+                return;
+            }
+            IntVec3 at = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(pos, map), land, map);
+            if (!at.IsValid)
+            {
+                return;
+            }
+            __instance.Position = at;
+            if (__instance.usedTarget.HasThing && __instance.usedTarget.Thing.Position != at)
+            {
+                __instance.usedTarget = new LocalTargetInfo(at);
+            }
+            ProjectZ.DebugLog($"{__instance} came to rest over open air at {pos}: lands on {at}");
+        }
+    }
+
     // A shell falling from the sky (flyOverhead) lands on the top of its column (Column.Top): the highest floor
     // built there (the floor's roof below cannot drop, it is the floor itself); one falling onto open air upstairs
     // drops to what is below it. The same for a shot declared lobbed (Combat.Lobbed), not for one declared direct (a
-    // flyOverhead def shot directly). A lobbed shot whose def does not fly overhead meets a roof on its landing cell as
-    // the game's shells do (a thick roof stops it, a thin one falls in).
+    // flyOverhead def shot directly: Projectile_ImpactDirect_Patch). A lobbed shot whose def does not fly overhead meets
+    // a roof on its landing cell as the game's shells do (a thick roof stops it, a thin one falls in).
     [HarmonyPatch(typeof(Projectile), "ImpactSomething")]
     [CombatPartOf(CombatPart.SkyStrikes)]
     public static class Projectile_ImpactOnTop_Patch

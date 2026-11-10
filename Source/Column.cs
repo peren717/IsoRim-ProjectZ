@@ -23,6 +23,18 @@ namespace ProjectZ
             return L == 0 || ProjectZ.HasFloor(Levels.Cell(g, L, map), map);
         }
 
+        // The level a shot coming to rest at level L over g lands on: L when it has a floor there, else the first floor
+        // below it (the ground always counts). The one rule for a shot over open air (a miss off an upper floor's edge):
+        // a lobbed shot's landing at launch (Projectile_Launch_Patch), a direct shot's at impact (Projectile_ImpactOnTop_Patch).
+        public static int ShotLanding(IntVec3 g, int L, Map map)
+        {
+            while (L > 0 && g.IsValid && !FloorAt(g, L, map))
+            {
+                L--;
+            }
+            return L;
+        }
+
         // The horizontal plane between level L-1 and level L over g is solid: the cell below has a roof (not the
         // stairwell's opening) or level L has a floor there (the two go together: FloorRoof). L = Max + 1 is the top
         // level's roof.
