@@ -6,9 +6,7 @@
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
-  <loadAfter>
-    <li>Peren.IsoRimProjectZ</li>
-    <li>Peren.IsoRimProjectZWT4</li>
-  </loadAfter>
-  <description>Test patches for ProjectZ mode gamerange (another mod changing vanilla ranges). Never shipped.</description>
+  <!-- No loadAfter: the patches change only Core and Biotech defs, and the game applies patches after every mod's defs are
+       loaded, so this works with any ProjectZ folder (released or a worktree) in any load order. -->
+  <description>Test patches for ProjectZ mode gamerange (another mod changing vanilla ranges). A template: it ships inside ProjectZ's Source/Dev but is never loaded from there (RimWorld loads only mods directly in its Mods folder). For a test run: Source/Dev/testmods.sh install gamerange, then remove gamerange.</description>
 </ModMetaData>

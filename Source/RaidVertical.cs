@@ -88,12 +88,7 @@ namespace ProjectZ
                 // (breachers in their Breaching duty never mine in the game: they breach rock with their tools)
                 c.mine = (p.RaceProps.Humanlike || p.RaceProps.IsMechanoid) && !StatDefOf.MiningSpeed.Worker.IsDisabledFor(p) && p.mindState?.duty?.def != DutyDefOf.Breaching;
                 c.mineNonMineables = mineNonMineables && c.mine;
-                float speed = c.mine ? p.GetStatValue(StatDefOf.MiningSpeed) : 0f;
-                if (p.Faction != Faction.OfPlayer)
-                {
-                    speed = Mathf.Max(speed, 0.6f);   // copied from vanilla JobDriver_Mine.MinMiningSpeedFactorForNPCs (the floor for non-player miners)
-                }
-                c.ticksPerHit = Mathf.Round(JobDriver_Mine.BaseTicksBetweenPickHits / Mathf.Max(0.05f, speed));
+                c.ticksPerHit = MineValues.PickHitTicks(p, c.mine ? p.GetStatValue(StatDefOf.MiningSpeed) : 0f);
                 c.meleeDps = Mathf.Max(1f, p.GetStatValue(StatDefOf.MeleeDPS));
                 Verb prim = p.equipment?.PrimaryEq?.PrimaryVerb;
                 if (prim != null && prim.Available() && prim.verbProps.ai_IsBuildingDestroyer && !prim.IsMeleeAttack && !prim.IsIncendiary_Ranged())
@@ -126,8 +121,8 @@ namespace ProjectZ
 
             private static float BuildingFactor(DamageDef d) => d == null ? 1f : d.buildingDamageFactor * d.buildingDamageFactorImpassable;
 
-            // copied from vanilla JobDriver_Mine.BaseDamagePerPickHit_NaturalRock (80) and _NotNaturalRock (40)
-            public float MineTicks(float hp, bool natural) => Mathf.Ceil(hp / (natural ? 80f : 40f)) * ticksPerHit;
+            // the game's pick-hit damage (MineValues)
+            public float MineTicks(float hp, bool natural) => Mathf.Ceil(hp / MineValues.DamagePerHit(natural)) * ticksPerHit;
 
             public float MeleeTicks(float hp) => hp / meleeDps * 60f;
 
@@ -296,7 +291,7 @@ namespace ProjectZ
                 case Removal.Top:
                     if (pc.mine && span == 1)
                     {
-                        best = JobDriver_MineVertical.TopWork / (1.7f * Mathf.Max(0.05f, JobDriver_Mine.BaseTicksBetweenPickHits / pc.ticksPerHit));
+                        best = JobDriver_MineVertical.TopWork / (MineValues.RoofWorkPerTick * Mathf.Max(MineValues.MinSpeed, JobDriver_Mine.BaseTicksBetweenPickHits / pc.ticksPerHit));
                         how = Method.Mine;
                     }
                     break;
@@ -447,7 +442,7 @@ namespace ProjectZ
                     }
                     DigJobs++;
                     Job j = JobMaker.MakeJob(PZVJobDefOf.PZ_DigSlabUp, U, F, stand);
-                    j.expiryInterval = 20000;
+                    j.expiryInterval = MineValues.MiningJobTicks;
                     j.checkOverrideOnExpire = true;
                     return j;
                 }
@@ -1104,7 +1099,7 @@ namespace ProjectZ
                 ResetTicks();
                 dust ??= EffecterDefOf.Mine.Spawn();
                 dust.Trigger(actor, new TargetInfo(job.targetB.Cell, Map));
-                dug += 40f;
+                dug += MineValues.DamagePerHit(false);
                 float chunk = RaidVertical.SlabChunkHp(U, Map);
                 if (dug < chunk)
                 {
@@ -1138,12 +1133,7 @@ namespace ProjectZ
 
         private void ResetTicks()
         {
-            float speed = pawn.GetStatValue(StatDefOf.MiningSpeed);
-            if (pawn.Faction != Faction.OfPlayer)
-            {
-                speed = Mathf.Max(speed, 0.6f);   // copied from vanilla JobDriver_Mine.MinMiningSpeedFactorForNPCs
-            }
-            ticksToHit = Mathf.RoundToInt(JobDriver_Mine.BaseTicksBetweenPickHits / Mathf.Max(0.05f, speed));
+            ticksToHit = Mathf.RoundToInt(MineValues.PickHitTicks(pawn, pawn.GetStatValue(StatDefOf.MiningSpeed)));
         }
     }
 

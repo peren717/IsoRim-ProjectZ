@@ -490,7 +490,7 @@ namespace ProjectZ.Dev
                     Room room = c.GetRoom(map);
                     Result("T1 the bare top opened to the sky (no roof over C or U)", map.roofGrid.RoofAt(c) == null && !map.roofGrid.Roofed(u),
                         $"C roof {MuRoof(c, map)}, U roof {MuRoof(u, map)}, room open roofs {room?.OpenRoofCount}");
-                    Info($"T1 work time: {maWorkTicks} ticks from the first work tick to the open top by {maWorker} (65 work at 1.7 x mining speed a tick; speed 1: about {JobDriver_MineVertical.TopWork / 1.7f:0} ticks, as vanilla Remove roof at construction speed 1)");
+                    Info($"T1 work time: {maWorkTicks} ticks from the first work tick to the open top by {maWorker} ({JobDriver_MineVertical.TopWork} work at {MineValues.RoofWorkPerTick} x mining speed a tick; speed 1: about {JobDriver_MineVertical.TopWork / MineValues.RoofWorkPerTick:0} ticks, as vanilla Remove roof at construction speed 1)");
                     // the two cells beside it, then stairs under the three holes
                     MaOrder(map, "T1b", new[] { muB[0], muB[2] });
                     MuRun(300, 67200, () => MaAllGone(map), "ma_t1b_more", () => MaTopWatch(map));

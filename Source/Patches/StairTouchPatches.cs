@@ -543,7 +543,7 @@ namespace ProjectZ.Patches
         {
             public static void Prefix(Verb __instance, out bool __state)
             {
-                __state = __instance.verbProps != null && (__instance.verbProps.IsMeleeAttack || __instance.EffectiveRange <= 1.42f);
+                __state = __instance.verbProps != null && Combat.GameRange.MeleeReach(__instance);
                 if (__state)
                 {
                     verbDepth++;

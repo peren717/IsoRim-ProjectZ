@@ -140,6 +140,9 @@ namespace ProjectZ.Dev
     //                                   bulletpitch: projectiles between floors drawn pitched along their 3D flight
     //                                   (bullets down, up and on one floor, arrow, grenade, rocket, launcher, mortar shell),
     //                                   frozen mid-flight at yaw 45 and 225; run with -projectzfloors=3 (TestBulletPitch)
+    //                                   directmiss: a direct rocket from a floor-2 slab missing over open air lands on the
+    //                                   ground below, the shooter's slab intact (real AttackStatic, seeded ticks);
+    //                                   -projectzfloors=3 -projectzseed=7 (TestDirectMiss)
     //                                   los3d: line of sight between floors (Los3D): the game's walk, same-floor parity on a
     //                                   random layout, sealed rooms and doors, the plan's sheet cases and the user's case
     //                                   as real ordered shots, facing at normal speed, AI, turrets, smoke, the "no line of
@@ -1110,6 +1113,11 @@ namespace ProjectZ.Dev
                 StepFlyJump(map);
                 return;
             }
+            if (stage.StartsWith("dm_"))
+            {
+                StepDirectMiss(map);
+                return;
+            }
             if (stage.StartsWith("i_"))
             {
                 StepBulletPitch(map);
@@ -1630,6 +1638,10 @@ namespace ProjectZ.Dev
                     else if (mode == "void" || mode == "voidfire" || mode == "voidsave" || mode == "voidperf" || mode == "crush")
                     {
                         stage = mode == "void" ? "vo_setup" : mode == "voidfire" ? "vf_setup" : mode == "voidsave" ? "vs_setup" : mode == "voidperf" ? "vp_setup" : "cr_setup";
+                    }
+                    else if (mode == "directmiss")
+                    {
+                        stage = "dm_setup";
                     }
                     else if (mode == "bulletpitch")
                     {

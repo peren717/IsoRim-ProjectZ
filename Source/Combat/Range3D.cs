@@ -30,20 +30,35 @@ namespace ProjectZ.Combat
         // Height from floor kt up to floor ks, in cells.
         public static float Rise(int ks, int kt) => (ks - kt) * Storey;
 
+        // THE 3D distance, squared: a squared distance over the ground plus the rise between floors ka and kb (the inverse,
+        // a 3D reach cut at a floor, is GameRange.SectionFromSquared).
+        public static float Squared3D(float groundSquared, int ka, int kb)
+        {
+            float v = Rise(ka, kb);
+            return groundSquared + v * v;
+        }
+
         // Squared 3D distance from root to the nearest cell of rect (the target's cells, around targetCell, on its floor).
         public static float DistSquared(IntVec3 root, CellRect rect, IntVec3 targetCell, Map map, out int ks, out int kt)
         {
             ks = ProjectZ.FloorOf(root, map);
             kt = ProjectZ.FloorOf(targetCell, map);
             IntVec3 r = Heights.OnFloorOf(root, targetCell, map);
-            float v = Rise(ks, kt);
-            return rect.ClosestDistSquaredTo(r) + v * v;
+            return Squared3D(rect.ClosestDistSquaredTo(r), ks, kt);
         }
 
         // 3D distance between two cells (each on its floor).
         public static float Distance(IntVec3 a, IntVec3 b, Map map)
         {
             return Mathf.Sqrt(DistSquared(a, CellRect.SingleCell(b), b, map, out _, out _));
+        }
+
+        // 3D distance between two points on the map (true positions, e.g. things' centres), a on floor ka and b on floor kb.
+        public static float Distance(Vector3 a, int ka, Vector3 b, int kb, Map map)
+        {
+            float dx = a.x - b.x;
+            float dz = (a.z - Levels.Shift(map, ka)) - (b.z - Levels.Shift(map, kb));
+            return Mathf.Sqrt(Squared3D(dx * dx + dz * dz, ka, kb));
         }
 
         // Verb.OutOfRange between floors.

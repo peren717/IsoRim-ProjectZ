@@ -138,7 +138,7 @@ namespace ProjectZ
         private static IntVec3 FindLanding(Pawn pawn, Ability ab, float radius, Map map)
         {
             IntVec3 root = pawn.Position;
-            float range = ab != null ? ab.verb.EffectiveRange : FloorFlight.Range;
+            float range = ab != null ? GameRange.Jump.Flat(ab.verb) : FloorFlight.Range;
             // (a landing is within LandingRadius of the target: a target further than that past the range has none)
             float reach = Math.Min(radius, range + LandingRadius);
             List<KeyValuePair<float, Pawn>> found = new List<KeyValuePair<float, Pawn>>();

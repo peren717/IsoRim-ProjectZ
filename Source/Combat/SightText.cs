@@ -12,7 +12,7 @@ namespace ProjectZ.Combat
         public static bool Blocked(Verb v, LocalTargetInfo t)
         {
             Thing caster = v?.caster;
-            if (caster == null || !caster.Spawned || !t.IsValid || !v.verbProps.requireLineOfSight || v.verbProps.IsMeleeAttack || v.EffectiveRange <= 1.42f)
+            if (caster == null || !caster.Spawned || !t.IsValid || !v.verbProps.requireLineOfSight || GameRange.MeleeReach(v))
             {
                 return false;
             }

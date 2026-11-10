@@ -27,10 +27,11 @@ namespace ProjectZ
         //  9: a floor plan per generated map, see Docs/Api.md (RegisterMapFloorPlanner, UnregisterMapFloorPlanner, MapFloorPlan,
         //     TryBeginFullMapSize, EndFullMapSize);
         // 10: the 3D scope, see Docs/Api.md (Scope3D, Scope3DMethod, InScope3D, Scope3DHandle) and ProjectZ's layout values
-        //     (AimHeights, EyeHeight, FloorStride, OpenAirTerrain)).
+        //     (AimHeights, EyeHeight, FloorStride, OpenAirTerrain));
+        // 11: the layout of new maps and the ship deck, see Docs/Api.md (StrideFor, MaxFloors, ShipDeckTerrain)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 10;
+        public static int Version => 11;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -562,6 +563,19 @@ namespace ProjectZ
 
         // The terrain of an upper floor's cell with no floor on it (open air: impassable, not drawn).
         public static TerrainDef OpenAirTerrain => PZDefOf.PZ_OpenAir;
+
+        // ---- the layout of new maps and the ship deck (11)
+
+        // The FloorStride ProjectZ gives a new map whose ground has groundRows rows. A map keeps its stride once generated:
+        // for an existing map read FloorStride(map).
+        public static int StrideFor(int groundRows) => ProjectZ.StrideFor(groundRows);
+
+        // The most floors a world or a map plan can have, the ground counted (a map floor planner's answer above it is
+        // ignored). Read it at run time; don't copy it into a constant of your own.
+        public static int MaxFloors => ProjectZSettings.MaxFloors;
+
+        // The terrain of the ship upper deck (ProjectZ's gravship deck on an upper floor); null without Odyssey.
+        public static TerrainDef ShipDeckTerrain => PZDefOf.PZ_ShipDeck;
 
         private static bool OnGround(IntVec3 g, Map map) => map != null && g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.GroundRect(map).maxZ + 1;
     }

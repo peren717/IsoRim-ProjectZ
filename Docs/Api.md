@@ -2,8 +2,8 @@
 
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
 does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries,
-other mods' ladders (Api 7), floors and stairs for other mods (Api 8), floor plans per map (Api 9), and the 3D scope with
-ProjectZ's layout values (Api 10).
+other mods' ladders (Api 7), floors and stairs for other mods (Api 8), floor plans per map (Api 9), the 3D scope with
+ProjectZ's layout values (Api 10), and the layout of new maps with the ship deck (Api 11).
 
 ## Version checks
 
@@ -94,6 +94,7 @@ checks in code that isn't a patch.
 | **Flights** | `Projectile_Launch_Patch` (key) | `Projectile.Launch` | IsoRim `ProjectileCard` (ProjectilePitch) and `AddProjectileArc` (IsoRimBridge, an OnSettle step) |
 | | `Projectile_Intercept_Patch` (key) | `Projectile.CheckForFreeIntercept` | |
 | | `LobbedCast_Patch` | `Verb_LaunchProjectile.TryCastShot` | |
+| | `Projectile_ImpactDirect_Patch` | `Projectile.ImpactSomething` (a direct shot at rest over open air drops to the floor below) | |
 | **Explosions** | `DamageWorker_ExplosionCellsToHit_Patch` | `DamageWorker.ExplosionCellsToHit` | |
 | | `ExplosionDistance_Patch` | the explosion's distance calls (transpiler list) | |
 | **Shields** | `ProjectileInterceptor_3D_Patch` | `CompProjectileInterceptor.CheckIntercept` | |
@@ -264,7 +265,7 @@ gets the map's parent. Return null to leave the map to the game.
 | `MapFloorPlan` field | What |
 |---|---|
 | `groundSize` | the ground's size; x or z of 0 or less keeps the size the map was asked with |
-| `floors` | storeys, the ground counted, 1 to `ProjectZSettings.MaxFloors`; 1 = no floors above the ground |
+| `floors` | storeys, the ground counted, 1 to `MaxFloors` (Api 11; `ProjectZSettings.MaxFloors` before); 1 = no floors above the ground |
 | `keepUpperContent` | what generation put on the upper floors stays; without it they are filled with open air after the genSteps |
 
 - A plan replaces the game's floor count for that map, both more and fewer, also in a game with one floor. It has no
@@ -380,3 +381,14 @@ game's own method body in a scope, with a lobbed shot's sight clear.
 | `EyeHeight` | where a shooter's sight line starts, in cells over its floor (1.10) |
 | `FloorStride(map)` | rows from one floor's band to the next (`FloorRowShift(1)`); the map is `FloorCount` bands of this many rows; `map.Size.z` without floors |
 | `OpenAirTerrain` | the terrain of an upper floor's cell with no floor on it (`PZ_OpenAir`) |
+
+## The layout of new maps and the ship deck (Api 11)
+
+Read-only values that an addon would otherwise copy from ProjectZ's source. Check `Api.Version >= 11` first and read
+them from a `NoInlining` method of their own (see Version checks); on an older ProjectZ keep the addon's own fallback.
+
+| Call | Value |
+|---|---|
+| `StrideFor(groundRows)` | the `FloorStride` ProjectZ gives a new map whose ground has `groundRows` rows. A map keeps its stride once generated: for an existing map read `FloorStride(map)` |
+| `MaxFloors` | the most floors a world or a map plan can have, the ground counted (a `MapFloorPlan` above it is ignored). A property read at run time, so an addon never compiles the number in |
+| `ShipDeckTerrain` | the terrain of the ship upper deck (`PZ_ShipDeck`); null without Odyssey. Other foundations registered with `RegisterDeckTerrain` are not it |

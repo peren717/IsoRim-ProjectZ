@@ -228,7 +228,7 @@ namespace ProjectZ
                     {
                         continue;
                     }
-                    if (Range3D.Distance(root, c, map) > Range)
+                    if (!GameRange.Within3D(Rule, JumpDef, root, c, map))
                     {
                         continue;
                     }

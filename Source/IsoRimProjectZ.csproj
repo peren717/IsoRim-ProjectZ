@@ -13,11 +13,15 @@
     <DebugType>none</DebugType>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <Optimize>true</Optimize>
-    <!-- IsoRim with the floor API (branch projectz-api until merged): override with -p:IsoRimDll=... -->
-    <IsoRimDll Condition="'$(IsoRimDll)' == ''">..\..\IsoRimModelsWT\1.7\Assemblies\IsoRim.dll</IsoRimDll>
-    <!-- The game folder (default: this repo sits in its Mods folder); override with -p:RimDir=... for a worktree elsewhere. -->
-    <RimDir Condition="'$(RimDir)' == ''">..\..\..</RimDir>
     <DefineConstants>$(DefineConstants);RW17</DefineConstants>
+  </PropertyGroup>
+  <!-- Build paths: only here, each overridable with -p:<Name>=<path> (the packs' pattern).
+       RimDir: the game folder (default: this repo sits in its Mods folder); IsoRimDll: the released IsoRim in that Mods
+       folder (an IsoRim worktree: -p:IsoRimDll=...); HarmonyDll: Harmony from the Workshop folder next to the game. -->
+  <PropertyGroup>
+    <RimDir Condition="'$(RimDir)' == ''">..\..\..</RimDir>
+    <IsoRimDll Condition="'$(IsoRimDll)' == ''">$(RimDir)\Mods\IsoRim17\1.7\Assemblies\IsoRim.dll</IsoRimDll>
+    <HarmonyDll Condition="'$(HarmonyDll)' == ''">$(RimDir)\..\..\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HarmonyDll>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="obj\**;bin\**" />
@@ -27,6 +31,6 @@
     <Reference Include="UnityStubs"><HintPath>$(RimDir)\UnityStubs.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="IsoRim"><HintPath>$(IsoRimDll)</HintPath><Private>false</Private></Reference>
     <Reference Include="Waylith"><HintPath>$(RimDir)\Waylith.dll</HintPath><Private>false</Private></Reference>
-    <Reference Include="0Harmony"><HintPath>$(RimDir)\..\..\workshop\content\294100\2009463077\1.7\Assemblies\0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(HarmonyDll)</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

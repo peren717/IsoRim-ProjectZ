@@ -414,13 +414,14 @@ namespace ProjectZ.Patches
             return false;
         }
 
+        // Copied from vanilla ExitMapGrid.IsGoodExitCell (an instance method of the grid; watched, CopyWatches).
         private static bool IsGoodExitCell(IntVec3 cell, Map map)
         {
             if (!cell.CanBeSeenOver(map))
             {
                 return false;
             }
-            int num = GenRadial.NumCellsInRadius(2f);   // copied from vanilla ExitMapGrid.IsGoodExitCell
+            int num = GenRadial.NumCellsInRadius(2f);
             for (int i = 0; i < num; i++)
             {
                 IntVec3 c = cell + GenRadial.RadialPattern[i];

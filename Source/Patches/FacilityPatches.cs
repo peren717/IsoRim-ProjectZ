@@ -43,10 +43,7 @@ namespace ProjectZ.Patches
                 int kb = FloorAt(b, map);
                 if (ka != kb && ka >= 0 && kb >= 0)
                 {
-                    float dx = a.x - b.x;
-                    float dz = (a.z - Levels.Shift(map, ka)) - (b.z - Levels.Shift(map, kb));
-                    float dy = (ka - kb) * Range3D.Storey;
-                    return Mathf.Sqrt(dx * dx + dz * dz + dy * dy);
+                    return Range3D.Distance(a, ka, b, kb, map);
                 }
             }
             return Vector3.Distance(a, b);

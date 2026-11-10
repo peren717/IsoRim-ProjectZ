@@ -227,9 +227,14 @@ namespace ProjectZ.Combat
 
     [HarmonyPatch(typeof(PowerBeam), "StartRandomFireAndDoFlameDamage")]
     [CombatPartOf(CombatPart.SkyStrikes)]
+    // Copied from vanilla PowerBeam.StartRandomFireAndDoFlameDamage (watched, CopyWatches), with the cell picked on the top
+    // of its column; the damage ranges are the game's own (private: read from the game, GameValues).
     public static class PowerBeam_Fire_Patch
     {
         private static readonly List<Thing> tmp = new List<Thing>();
+
+        private static readonly IntRange FlameDamage = GameValues.Private(typeof(PowerBeam), "FlameDamageAmountRange", new IntRange(65, 100));
+        private static readonly IntRange CorpseFlameDamage = GameValues.Private(typeof(PowerBeam), "CorpseFlameDamageAmountRange", new IntRange(5, 10));
 
         public static bool Prefix(PowerBeam __instance)
         {
@@ -244,8 +249,7 @@ namespace ProjectZ.Combat
             tmp.AddRange(c.GetThingList(map));
             for (int i = 0; i < tmp.Count; i++)
             {
-                // copied from vanilla PowerBeam.FlameDamageAmountRange (65-100) and CorpseFlameDamageAmountRange (5-10)
-                int amount = tmp[i] is Corpse ? Rand.RangeInclusive(5, 10) : Rand.RangeInclusive(65, 100);
+                int amount = tmp[i] is Corpse ? CorpseFlameDamage.RandomInRange : FlameDamage.RandomInRange;
                 Pawn pawn = tmp[i] as Pawn;
                 BattleLogEntry_DamageTaken log = null;
                 if (pawn != null)

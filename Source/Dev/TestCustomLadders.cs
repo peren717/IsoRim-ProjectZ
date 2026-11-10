@@ -21,7 +21,7 @@ namespace ProjectZ.Dev
     }
 
     // Mode customladders (Api 7, other mods' ladders; Docs/Api.md). Needs the test mod Source/Dev/LadderTestMod copied to
-    // Mods\_PZLadderTest and active after ProjectZ; run with -projectzfloors=5 -projectzseed=7. Every check builds its own
+    // Mods\_PZLadderTest (testmods.sh install ladders) and active after ProjectZ; run with -projectzfloors=5 -projectzseed=7. Every check builds its own
     // fixture in one cleared area under its own random state; building, uninstalling, installing and climbing are real
     // jobs with real ticks.
     //   D   the lookup: which Defs are ladders, how each is placed, their kind

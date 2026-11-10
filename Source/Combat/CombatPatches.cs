@@ -127,7 +127,7 @@ namespace ProjectZ.Combat
 
         // Copied from vanilla Verb.CanHitCellFromCellIgnoringRange (fallback only): used without the game's method (off the main
         // thread, where the scope does nothing, or when its copy failed), with Los3D for the sight walks and the lobbed rule.
-        // TODO: register this copy with IsoRim's method-change watch once that Api is merged.
+        // Watched with IsoRim's copy watch (CopyWatches).
         private static byte Fallback(Verb verb, IntVec3 from, IntVec3 to, bool corners, Map map)
         {
             VerbProperties vp = verb.verbProps;
@@ -850,7 +850,7 @@ namespace ProjectZ.Combat
             }
             // A lobbed shot that comes down on open air (a miss off the edge of an upper floor) falls to the floor below
             // (it comes from the sky). A direct shot keeps its floor and flies there; over open air it drops to the floor
-            // below only where it comes to rest (Projectile_ImpactOnTop_Patch), so its flight never dives through the
+            // below only where it comes to rest (Projectile_ImpactDirect_Patch), so its flight never dives through the
             // floor it was shot along. Both by the one rule, Column.ShotLanding.
             int land = kd;
             bool lobbed = FliesLobbed(__instance, spawn, dc, map, out bool ruled);

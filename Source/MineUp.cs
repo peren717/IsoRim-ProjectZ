@@ -467,7 +467,7 @@ namespace ProjectZ
             if (rock == null)
             {
                 Job open = JobMaker.MakeJob(PZMineDefOf.PZ_MineFromBelow, FloorRoof.Above(work, map), work);
-                open.expiryInterval = 20000;
+                open.expiryInterval = MineValues.MiningJobTicks;
                 open.checkOverrideOnExpire = true;
                 return open;
             }
@@ -486,7 +486,7 @@ namespace ProjectZ
             {
                 job = JobMaker.MakeJob(PZMineDefOf.PZ_MineFromBelow, rock, work);
             }
-            job.expiryInterval = 20000;   // (as vanilla's mining job)
+            job.expiryInterval = MineValues.MiningJobTicks;
             job.checkOverrideOnExpire = true;
             return job;
         }
@@ -525,6 +525,45 @@ namespace ProjectZ
         }
     }
 
+    // The game's mining pace (JobDriver_Mine) for ProjectZ's own diggers that are no JobDriver_Mine (a raider digging a slab)
+    // and for the raiders' cost estimate; a JobDriver_Mine of ours calls the game's own ResetTicksToPickHit instead. The
+    // pace rule is copied from vanilla JobDriver_Mine.ResetTicksToPickHit (private; watched, CopyWatches); its private
+    // values are read from the game (GameValues), with the fallbacks of the build it was checked against.
+    public static class MineValues
+    {
+        public static readonly float NpcSpeedFloor = GameValues.Private(typeof(JobDriver_Mine), "MinMiningSpeedFactorForNPCs", 0.6f);
+        public static readonly int DamageNaturalRock = GameValues.Private(typeof(JobDriver_Mine), "BaseDamagePerPickHit_NaturalRock", 80);
+        public static readonly int DamageOther = GameValues.Private(typeof(JobDriver_Mine), "BaseDamagePerPickHit_NotNaturalRock", 40);
+
+        // Ours: the slowest mining speed counted, so a pawn without mining speed is slow, never stuck (no division by 0).
+        public const float MinSpeed = 0.05f;
+
+        // Ticks between two pick hits of a pawn mining at speed (its MiningSpeed; a non-player miner at least NpcSpeedFloor).
+        public static float PickHitTicks(Pawn p, float speed)
+        {
+            if (p.Faction != Faction.OfPlayer)
+            {
+                speed = Mathf.Max(speed, NpcSpeedFloor);
+            }
+            return Mathf.Round(JobDriver_Mine.BaseTicksBetweenPickHits / Mathf.Max(MinSpeed, speed));
+        }
+
+        // The damage of one pick hit on natural rock, or on anything else.
+        public static int DamagePerHit(bool naturalRock) => naturalRock ? DamageNaturalRock : DamageOther;
+
+        // A mining job's expiry (vanilla MineAIUtility.MiningJobTicks, private: read from the game), for ProjectZ's own
+        // mining and digging jobs, as the game's mining job.
+        public static readonly int MiningJobTicks = GameValues.Private(typeof(MineAIUtility), "MiningJobTicks", 20000);
+
+        // Opening a bare top (no rock) is vanilla Remove roof's work: JobDriver_AffectRoof.BaseWorkAmount (private: read
+        // from the game), done at RoofWorkPerTick x the worker's speed a tick.
+        public static readonly float RoofWork = GameValues.Private(typeof(JobDriver_AffectRoof), "BaseWorkAmount", 65f);
+
+        // Copied from vanilla JobDriver_AffectRoof.MakeNewToils (its work toil's tick, an inline 1.7: nothing to ask;
+        // watched, CopyWatches).
+        public const float RoofWorkPerTick = 1.7f;
+    }
+
     // The job (plan R2, both ways): A = the rock, B = the work cell (below it: mine up; above it: mine down), C = where a
     // miner from above stands. Vanilla's mining per pick hit (its own damage step, so the 80/40 hits, the yield share, the
     // last hit's DestroyMined and the vein flood are vanilla), the yield at the miner's cell; then the boundary between the
@@ -538,9 +577,11 @@ namespace ProjectZ
 
         private static readonly DoDamageFn doDamage = AccessTools.MethodDelegate<DoDamageFn>(AccessTools.Method(typeof(JobDriver_Mine), "DoDamage"));
 
-        // A bare top over the work cell (no rock): it opens after vanilla Remove roof's work (65 at 1.7 a tick, here by the
-        // miner's mining speed).
-        public const float TopWork = 65f;
+        private static readonly Action<JobDriver_Mine> resetTicks = AccessTools.MethodDelegate<Action<JobDriver_Mine>>(AccessTools.Method(typeof(JobDriver_Mine), "ResetTicksToPickHit"));
+
+        // A bare top over the work cell (no rock): it opens after vanilla Remove roof's work (MineValues.RoofWork at
+        // MineValues.RoofWorkPerTick a tick, here by the miner's mining speed).
+        public static float TopWork => MineValues.RoofWork;
 
         private Effecter dust;
 
@@ -589,7 +630,7 @@ namespace ProjectZ
             };
             open.tickIntervalAction = delegate (int delta)
             {
-                topWorkLeft -= open.actor.GetStatValue(StatDefOf.MiningSpeed) * 1.7f * delta;
+                topWorkLeft -= open.actor.GetStatValue(StatDefOf.MiningSpeed) * MineValues.RoofWorkPerTick * delta;
                 if (topWorkLeft > 0f)
                 {
                     return;
@@ -615,15 +656,8 @@ namespace ProjectZ
             return open;
         }
 
-        private void ResetTicks()
-        {
-            float speed = pawn.GetStatValue(StatDefOf.MiningSpeed);
-            if (speed < 0.6f && pawn.Faction != Faction.OfPlayer)
-            {
-                speed = 0.6f;
-            }
-            ticksRef(this) = (int)Math.Round(100f / speed);
-        }
+        // The game's own pace between pick hits (JobDriver_Mine.ResetTicksToPickHit).
+        private void ResetTicks() => resetTicks(this);
 
         protected override IEnumerable<Toil> MakeNewToils()
         {

@@ -34,7 +34,8 @@ namespace ProjectZ.Dev
     //   T0  frame time with a drafted shooter targeting and a turret selected (3D view, floor 1 viewed).
     // Stand-ins for other mods (test Harmony id, applied at setup): -projectzconnectdist=N (vanilla's hookup range 6
     // becomes N in both hookup searches), -projectzsapperradius=N (the sapper filter's 2500 becomes N * N). The jump and
-    // weapon ranges come from the throwaway XML mod Source/Dev/GameRangeTestMod (sniper range 78, longjump 25.9).
+    // weapon ranges come from the XML test mod Source/Dev/GameRangeTestMod (sniper range 78, longjump 25.9; put in
+    // place with testmods.sh install gamerange, packageId Peren.PZGameRangeTest).
     public static partial class TestRunner
     {
         private const int GrSeed = 9500;
@@ -116,7 +117,7 @@ namespace ProjectZ.Dev
             Info($"gamerange: area {r2Area}, map {map.Size}, groundZ {gz}, storey {IsoRimBridge.StoreyHeight:0.00} cells; stand-ins: hookup range {grConnect}, sapper radius {grSapper} ({grModSwaps} constants swapped); "
                 + $"sniper range {ThingDef.Named("Gun_SniperRifle").Verbs[0].range}, locust jump def range {jd?.verbProperties?.range} cooldown {jd?.cooldownTicksRange}; patches: rect {FailSoft.IsApplied(nameof(PotentialConnectors_Rect_Patch))}, ring seen {FailSoft.IsApplied(nameof(GenDraw_RadiusRing_Seen_Patch))}");
             Info("copy watches: registered " + CopyWatches.Registered + "; hashes " + CopyWatches.Hashes());
-            Result("W0 the copied methods are watched (IsoRim copy watch), their hashes as registered", CopyWatches.Registered == 6 && !CopyWatches.Hashes().Contains("(registered"), CopyWatches.Hashes());
+            Result("W0 the copied methods are watched (IsoRim copy watch), their hashes as registered", CopyWatches.Registered == CopyWatches.Count && !CopyWatches.Hashes().Contains("(registered"), CopyWatches.Hashes());
             stage = "gr_d0";
         }
 

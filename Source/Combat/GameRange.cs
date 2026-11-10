@@ -32,6 +32,10 @@ namespace ProjectZ.Combat
         // A weapon's range: Verb.EffectiveRange (the weapon rule, Range3D).
         public static readonly Read<Verb> Weapon = new Read<Verb> { name = "weapon range", read = v => v.EffectiveRange, sphere = false };
 
+        // The game's own melee-reach test for a verb (Verb.TryFindShootLineFromTo: a melee verb, or a range up to
+        // ShootTuning.MeleeRange, needs no shoot line, only touch).
+        public static bool MeleeReach(Verb v) => v.verbProps.IsMeleeAttack || Weapon.Flat(v) <= ShootTuning.MeleeRange;
+
         // A jump's range: Verb.EffectiveRange of the jump verb (Verb_Jump, Verb_CastAbilityJump; a plain sphere).
         public static readonly Read<Verb> Jump = new Read<Verb> { name = "jump range", read = v => v.EffectiveRange };
 
@@ -179,8 +183,8 @@ namespace ProjectZ.Combat
         // bit for bit).
         public static bool InSphere(float flat, int ks, int k, float h2, bool inclusive = true)
         {
-            float v = Range3D.Rise(ks, k);
-            return inclusive ? h2 + v * v <= flat * flat : h2 + v * v < flat * flat;
+            float d2 = Range3D.Squared3D(h2, ks, k);
+            return inclusive ? d2 <= flat * flat : d2 < flat * flat;
         }
 
         // The see-through shell round the source (centre: in true space; muzzle: its height over the floor): a sphere, or
@@ -195,9 +199,31 @@ namespace ProjectZ.Combat
             DrawShell(centre, rule.Flat(source), rule.sphere, muzzle, white);
         }
 
-        // Within the rule's 3D range between two floors (a: the source's cell, b: the target's; strict, as the game's).
+        // ---- within the 3D range between two floors (a: the source's cell, b: the target's)
+        // The comparison is the game's own for each kind of rule:
+        //   - a read rule (a range the game reads: a verb's, a def's) is inclusive, distance <= reach, as the game compares
+        //     such a range (Verb.OutOfRange: out only past range^2; JumpUtility.CanHitTargetFrom: DistanceToSquared <= range^2);
+        //   - a check rule (the game's yes/no at a cell, its flat reach probed) is strict, distance^2 < reach^2: the probe
+        //     keeps the reach as the nearest refused cell's squared distance or the rule's own value (the mechanitor's
+        //     CanCommandTo: DistanceToSquared < 620.01).
+
+        // A read rule's range from its source.
+        public static bool Within3D<T>(Read<T> rule, T source, IntVec3 a, IntVec3 b, Map map) where T : class => Within3D(rule.Flat(source), rule.sphere, a, b, map);
+
+        // A read rule's flat range the game passed itself (e.g. JumpUtility.CanHitTargetFrom's range argument).
+        public static bool Within3D(float flat, bool sphere, IntVec3 a, IntVec3 b, Map map)
+        {
+            float reach = sphere ? flat : Range3D.Reach(flat, ProjectZ.FloorOf(a, map), ProjectZ.FloorOf(b, map));
+            return Range3D.Distance(a, b, map) <= reach;
+        }
+
+        // A Rule's range from its source (a check rule strict; one with a getter as a read rule).
         public static bool Within3D(Rule rule, Thing source, IntVec3 a, IntVec3 b, Map map)
         {
+            if (rule.read != null)
+            {
+                return Within3D(Flat(rule, source), rule.sphere, a, b, map);
+            }
             float d = Range3D.Distance(a, b, map);
             if (rule.sphere)
             {

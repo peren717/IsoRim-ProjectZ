@@ -68,8 +68,8 @@ namespace ProjectZ.Combat
                 {
                     continue;
                 }
-                float v = (k - kc) * Range3D.Storey;
-                float h2 = radius * radius - v * v;
+                // the blast's sphere cut at floor k (GameRange's one conversion; only touching floor k: out of reach)
+                float h2 = GameRange.SectionSquared(radius, true, kc, k);
                 if (h2 <= 0f)
                 {
                     continue;
@@ -92,7 +92,7 @@ namespace ProjectZ.Combat
                     {
                         continue;
                     }
-                    if (angle.HasValue && !InAngle(g, gc, Mathf.Sqrt(h2 + v * v), angle.Value))
+                    if (angle.HasValue && !InAngle(g, gc, radius, angle.Value))
                     {
                         continue;
                     }

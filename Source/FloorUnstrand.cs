@@ -443,7 +443,7 @@ namespace ProjectZ
                 {
                     IntVec3 c = ProjectZ.CellOnFloor(g + GenRadial.RadialPattern[i], L, map);
                     if (!c.IsValid || !c.InBounds(map) || Levels.LevelOf(c, map) != L || !c.Standable(map) || !Column.OpenAbove(c, map)
-                        || Range3D.Distance(root, c, map) > FloorFlight.Range || c.GetFirstPawn(map) != null
+                        || !GameRange.Within3D(FloorFlight.Rule, FloorFlight.JumpDef, root, c, map) || c.GetFirstPawn(map) != null
                         || !map.pawnDestinationReservationManager.CanReserve(c, pawn))
                     {
                         continue;

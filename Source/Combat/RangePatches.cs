@@ -48,7 +48,7 @@ namespace ProjectZ.Combat
             Pawn caster = req.caster;
             Map map = caster.Map;
             Verb verb = req.verb;
-            if (verb.verbProps.IsMeleeAttack || verb.EffectiveRange <= 1.42f)
+            if (GameRange.MeleeReach(verb))
             {
                 return false;
             }

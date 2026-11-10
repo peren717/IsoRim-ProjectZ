@@ -47,7 +47,7 @@ namespace ProjectZ.Combat
         // The cross-floor rule (both on floors of map): range, open sky, a clear arc.
         public static bool CanJump(IntVec3 root, IntVec3 cell, float range, Map map, ThingDef flyer = null)
         {
-            return Range3D.Distance(root, cell, map) <= range && Column.OpenAbove(cell, map) && Arc(root, cell, map, flyer ?? CurrentFlyer);
+            return GameRange.Within3D(range, GameRange.Jump.sphere, root, cell, map) && Column.OpenAbove(cell, map) && Arc(root, cell, map, flyer ?? CurrentFlyer);
         }
 
         // The arc for the jump being checked now (its flyer, else the game's PawnFlyer).
@@ -639,7 +639,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            int num = GenRadial.NumCellsInRadius(3.9f);   // copied from vanilla PawnFlyer.CheckDestination (the landing search radius)
+            int num = GenRadial.NumCellsInRadius(3.9f);   // copied from vanilla PawnFlyer.CheckDestination (the landing search radius; watched, CopyWatches)
             for (int i = 0; i < num; i++)
             {
                 IntVec3 c = dest + GenRadial.RadialPattern[i];

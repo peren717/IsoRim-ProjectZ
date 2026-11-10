@@ -34,8 +34,9 @@ namespace ProjectZ.Patches
         public const float DetourFactor = 1.2f;   // option C: a same-floor path this much over the stairs' lower bound is checked
         public const int ExtraLegs = 8;           // legs computed beyond the final route's, then the route is taken as it is (the review's ~4 left 2 of 240 oracle pairs 6 ticks over the optimum)
         public const int MaxFailures = 3;         // legs that failed before "no route"
-        public const int FogCost = 600;           // copied from vanilla PathGridJob.Cost_AvoidFog
-        public const int BlockedCost = 175;       // copied from vanilla PathFinderJob.Cost_Blocked
+        public const int FogCost = PathGridJob.Cost_AvoidFog;   // the game's own (public)
+        // The game's own PathFinderJob.Cost_Blocked (private: read from the game; 175 only if it is gone)
+        public static readonly int BlockedCost = GameValues.Private(typeof(PathFinderJob), "Cost_Blocked", 175);
 
         // Set while a route is worked out (its legs are FindPathNow calls of their own: never routed again).
         [ThreadStatic]

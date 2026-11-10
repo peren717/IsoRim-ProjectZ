@@ -25,7 +25,7 @@ namespace ProjectZ
 
         // The level a shot coming to rest at level L over g lands on: L when it has a floor there, else the first floor
         // below it (the ground always counts). The one rule for a shot over open air (a miss off an upper floor's edge):
-        // a lobbed shot's landing at launch (Projectile_Launch_Patch), a direct shot's at impact (Projectile_ImpactOnTop_Patch).
+        // a lobbed shot's landing at launch (Projectile_Launch_Patch), a direct shot's at impact (Projectile_ImpactDirect_Patch).
         public static int ShotLanding(IntVec3 g, int L, Map map)
         {
             while (L > 0 && g.IsValid && !FloorAt(g, L, map))

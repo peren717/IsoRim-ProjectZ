@@ -82,7 +82,7 @@ namespace ProjectZ.Combat
         {
             Map map = Find.CurrentMap;
             float range = verb == null ? 0f : GameRange.Weapon.Flat(verb);
-            if (!CombatGate.On(CombatPart.RangePreview) || caster == null || map == null || caster.MapHeld != map || !at.IsValid || range <= 1.5f || !GameRing(range)
+            if (!CombatGate.On(CombatPart.RangePreview) || caster == null || map == null || caster.MapHeld != map || !at.IsValid || verb == null || !GameRing(range)
                 || !View3D(map))
             {
                 return;

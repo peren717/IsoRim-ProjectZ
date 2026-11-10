@@ -6,5 +6,5 @@
   <supportedVersions>
     <li>1.7</li>
   </supportedVersions>
-  <description>Test Defs for ProjectZ mode customladders. Never shipped.</description>
+  <description>Test Defs for ProjectZ mode customladders. A template: it ships inside ProjectZ's Source/Dev but is never loaded from there (RimWorld loads only mods directly in its Mods folder). For a test run: Source/Dev/testmods.sh install ladders, then remove ladders.</description>
 </ModMetaData>
