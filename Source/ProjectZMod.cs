@@ -60,6 +60,7 @@ namespace ProjectZ
             // the game's own sight rule for shots between floors, run in the 3D scope (built now; logged once if it fails)
             Combat.Verb_CanHitCell_Patch.GameReady();
             IsoRimBridge.Init();
+            CopyWatches.Register();
             Dev.TestRunner.Init();
             Log.Message("[ProjectZ] loaded, default floors for new worlds=" + Settings.floors + " (effective " + WorldFloors.Default + ")");
         }

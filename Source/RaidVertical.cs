@@ -91,9 +91,9 @@ namespace ProjectZ
                 float speed = c.mine ? p.GetStatValue(StatDefOf.MiningSpeed) : 0f;
                 if (p.Faction != Faction.OfPlayer)
                 {
-                    speed = Mathf.Max(speed, 0.6f);   // (JobDriver_Mine's floor for non-player miners)
+                    speed = Mathf.Max(speed, 0.6f);   // copied from vanilla JobDriver_Mine.MinMiningSpeedFactorForNPCs (the floor for non-player miners)
                 }
-                c.ticksPerHit = Mathf.Round(100f / Mathf.Max(0.05f, speed));
+                c.ticksPerHit = Mathf.Round(JobDriver_Mine.BaseTicksBetweenPickHits / Mathf.Max(0.05f, speed));
                 c.meleeDps = Mathf.Max(1f, p.GetStatValue(StatDefOf.MeleeDPS));
                 Verb prim = p.equipment?.PrimaryEq?.PrimaryVerb;
                 if (prim != null && prim.Available() && prim.verbProps.ai_IsBuildingDestroyer && !prim.IsMeleeAttack && !prim.IsIncendiary_Ranged())
@@ -126,6 +126,7 @@ namespace ProjectZ
 
             private static float BuildingFactor(DamageDef d) => d == null ? 1f : d.buildingDamageFactor * d.buildingDamageFactorImpassable;
 
+            // copied from vanilla JobDriver_Mine.BaseDamagePerPickHit_NaturalRock (80) and _NotNaturalRock (40)
             public float MineTicks(float hp, bool natural) => Mathf.Ceil(hp / (natural ? 80f : 40f)) * ticksPerHit;
 
             public float MeleeTicks(float hp) => hp / meleeDps * 60f;
@@ -295,7 +296,7 @@ namespace ProjectZ
                 case Removal.Top:
                     if (pc.mine && span == 1)
                     {
-                        best = JobDriver_MineVertical.TopWork / (1.7f * Mathf.Max(0.05f, 100f / pc.ticksPerHit));
+                        best = JobDriver_MineVertical.TopWork / (1.7f * Mathf.Max(0.05f, JobDriver_Mine.BaseTicksBetweenPickHits / pc.ticksPerHit));
                         how = Method.Mine;
                     }
                     break;
@@ -1140,9 +1141,9 @@ namespace ProjectZ
             float speed = pawn.GetStatValue(StatDefOf.MiningSpeed);
             if (pawn.Faction != Faction.OfPlayer)
             {
-                speed = Mathf.Max(speed, 0.6f);
+                speed = Mathf.Max(speed, 0.6f);   // copied from vanilla JobDriver_Mine.MinMiningSpeedFactorForNPCs
             }
-            ticksToHit = Mathf.RoundToInt(100f / Mathf.Max(0.05f, speed));
+            ticksToHit = Mathf.RoundToInt(JobDriver_Mine.BaseTicksBetweenPickHits / Mathf.Max(0.05f, speed));
         }
     }
 

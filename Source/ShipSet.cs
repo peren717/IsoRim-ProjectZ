@@ -168,9 +168,7 @@ namespace ProjectZ
                 {
                     continue;
                 }
-                float r = comp.Props.radius;
-                float dy = (k - km) * Range3D.Storey;
-                if ((g - mg).LengthHorizontalSquared + dy * dy <= r * r)
+                if (GameRange.InSphere(GameRange.Footprint.Flat(comp.Props), km, k, (g - mg).LengthHorizontalSquared))
                 {
                     return true;
                 }
@@ -241,7 +239,7 @@ namespace ProjectZ
                     if (g.IsValid && maker.Spawned && maker.TryGetComp(out CompSubstructureFootprint comp) && comp.Valid && maker != thingToExclude)
                     {
                         IntVec3 mg = ProjectZ.GroundCellOf(maker.Position, map);
-                        if (mg.IsValid && g.InHorDistOf(mg, comp.Props.radius))
+                        if (mg.IsValid && g.InHorDistOf(mg, GameRange.Footprint.Flat(comp.Props)))
                         {
                             __result = true;
                             break;

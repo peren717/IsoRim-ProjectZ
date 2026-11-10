@@ -277,7 +277,7 @@ namespace ProjectZ
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             return FailSoft.Transpile(nameof(DeathrestHose_CrossFloor_Patch), original, instructions,
-                code => PowerRisers.Swap(code, CrossFloorWires.DrawMesh4, CrossFloorWires.HoseMethod, 1, new CodeInstruction(OpCodes.Ldarg_0)));
+                code => CallSwap.Swap(code, CrossFloorWires.DrawMesh4, CrossFloorWires.HoseMethod, 1, new CodeInstruction(OpCodes.Ldarg_0)));
         }
     }
 }

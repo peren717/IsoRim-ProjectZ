@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using RimWorld;
 using UnityEngine;
 using Verse;
 
@@ -20,10 +21,34 @@ namespace ProjectZ.Combat
     //     RefreshSeconds real seconds (paused: settings changed) or when the source's hediffs or apparel change.
     //   - fallback: the game's own value, used only when the game cannot be asked (no map, the probe found nothing,
     //     asked again from inside a probe).
-    // The flat reach turns into the 3D range here too: a plain sphere (sphere: the mechanitor) or the weapon rule
-    // (Range3D: +1 per floor shooting down); per floor the cross-section (HorizontalReach), round the source the shell.
+    // A read rule whose value comes from something other than a thing (a verb, a def's props) is a Read<T>: the same
+    // getter rule, its source of type T (Weapon, Jump, Footprint below; FloorFlight.Rule).
+    // The flat reach turns into the 3D range here too, in one place for every rule (SectionSquared, InSphere): a plain
+    // sphere (sphere: the mechanitor, jumps, the gravship footprint, the facility ring) or the weapon rule
+    // (Range3D: +1 per floor shooting down); per floor the cross-section (HorizontalReach), round the source the shell
+    // (DrawShell).
     public static class GameRange
     {
+        // A weapon's range: Verb.EffectiveRange (the weapon rule, Range3D).
+        public static readonly Read<Verb> Weapon = new Read<Verb> { name = "weapon range", read = v => v.EffectiveRange, sphere = false };
+
+        // A jump's range: Verb.EffectiveRange of the jump verb (Verb_Jump, Verb_CastAbilityJump; a plain sphere).
+        public static readonly Read<Verb> Jump = new Read<Verb> { name = "jump range", read = v => v.EffectiveRange };
+
+        // The gravship footprint round an engine or extender: CompProperties_SubstructureFootprint.radius.
+        public static readonly Read<CompProperties_SubstructureFootprint> Footprint = new Read<CompProperties_SubstructureFootprint> { name = "gravship footprint", read = p => p.radius };
+
+        // A read rule over a source of type T: the game's getter, read live, never cached; the fallback without a source.
+        public sealed class Read<T> where T : class
+        {
+            public string name;
+            public float fallback;                     // the game's own value, used only without a source
+            public Func<T, float> read;                // the game's getter
+            public bool sphere = true;                 // 3D: a plain sphere; false: the weapon rule (Range3D)
+
+            public float Flat(T source) => source == null ? fallback : read(source);
+        }
+
         public const int RefreshTicks = 250;
         public const float RefreshSeconds = 4f;
         private const int MaxProbe = 200;   // cells per direction (past any map's half width)
@@ -115,11 +140,59 @@ namespace ProjectZ.Combat
         {
             if (!rule.sphere)
             {
-                return Range3D.HorizontalReach(Flat(rule, source), ks, k);
+                return HorizontalReach(Flat(rule, source), false, ks, k);
             }
-            float v = Range3D.Rise(ks, k);
-            float s = FlatSquared(rule, source) - v * v;
+            float s = SectionFromSquared(FlatSquared(rule, source), ks, k);   // (squared as the game compares it, not re-squared)
             return s <= 0f ? -1f : Mathf.Sqrt(s);
+        }
+
+        public static float HorizontalReach<T>(Read<T> rule, T source, int ks, int k) where T : class => HorizontalReach(rule.Flat(source), rule.sphere, ks, k);
+
+        // ---- the one 3D conversion of a flat reach (every rule's)
+
+        // The squared reach over the ground on floor k of a flat reach from floor ks (negative: floor k out of reach):
+        // a sphere, flat^2 - rise^2; the weapon rule, (flat + its bonus down)^2 - rise^2 (Range3D.Reach).
+        public static float SectionSquared(float flat, bool sphere, int ks, int k)
+        {
+            float reach = sphere ? flat : Range3D.Reach(flat, ks, k);
+            return SectionFromSquared(reach * reach, ks, k);
+        }
+
+        // The same from the squared 3D reach (a check rule's value is kept squared, as the game compares it).
+        public static float SectionFromSquared(float reachSquared, int ks, int k)
+        {
+            float v = Range3D.Rise(ks, k);
+            return reachSquared - v * v;
+        }
+
+        // SectionSquared's root; negative when floor k is out of reach (a sphere only touching floor k is out of
+        // reach too).
+        public static float HorizontalReach(float flat, bool sphere, int ks, int k)
+        {
+            float s = SectionSquared(flat, sphere, ks, k);
+            return (sphere ? s <= 0f : s < 0f) ? -1f : Mathf.Sqrt(s);
+        }
+
+        // (sphere) A cell h2 squared cells over the ground from the source's column, on floor k, lies inside the flat
+        // reach of a source on floor ks: inclusive (<=, the footprint) or strict (<). The same conversion as
+        // SectionFromSquared, compared as h2 + rise^2 against reach^2 (the footprint's own order of terms: its cells stay
+        // bit for bit).
+        public static bool InSphere(float flat, int ks, int k, float h2, bool inclusive = true)
+        {
+            float v = Range3D.Rise(ks, k);
+            return inclusive ? h2 + v * v <= flat * flat : h2 + v * v < flat * flat;
+        }
+
+        // The see-through shell round the source (centre: in true space; muzzle: its height over the floor): a sphere, or
+        // the weapon rule's, bulging downward (RangeShell).
+        public static void DrawShell(Vector3 centre, float flat, bool sphere, float muzzle, bool white = false)
+        {
+            RangeShell.Draw(centre, flat, muzzle, sphere, white);
+        }
+
+        public static void DrawShell<T>(Read<T> rule, T source, Vector3 centre, float muzzle, bool white = false) where T : class
+        {
+            DrawShell(centre, rule.Flat(source), rule.sphere, muzzle, white);
         }
 
         // Within the rule's 3D range between two floors (a: the source's cell, b: the target's; strict, as the game's).

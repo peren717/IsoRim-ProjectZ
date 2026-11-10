@@ -46,7 +46,9 @@ namespace ProjectZ
     {
         public const int CooldownTicks = 1200;
         public const int CalmTicks = 600;
-        public const float CalmRadius = 24f;   // the game's animal flee distance (JobGiver_AnimalFlee)
+        // copied from vanilla JobGiver_AnimalFlee.FleeDistance (a private 24, passed to FleeUtility.FleeJob as a literal);
+        // kept as a copy: the game asks no question that gives it (a probe would need a real danger and its flee job giver run)
+        public const float CalmRadius = 24f;
         public const int MemoTicks = 250;
         public const int RoomCells = 150;
         public const float HerdRadius = 40f;

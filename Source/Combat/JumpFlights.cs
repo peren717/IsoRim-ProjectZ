@@ -639,7 +639,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            int num = GenRadial.NumCellsInRadius(3.9f);
+            int num = GenRadial.NumCellsInRadius(3.9f);   // copied from vanilla PawnFlyer.CheckDestination (the landing search radius)
             for (int i = 0; i < num; i++)
             {
                 IntVec3 c = dest + GenRadial.RadialPattern[i];
@@ -686,7 +686,7 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            float range = __instance.EffectiveRange;
+            float range = GameRange.Jump.Flat(__instance);
             int view = FloorView.Current;
             Ring(__instance, root, g, ks, 0, range, map);
             if (view != 0)
@@ -701,8 +701,7 @@ namespace ProjectZ.Combat
             {
                 return;
             }
-            float v = Range3D.Rise(ks, k);
-            float s = range * range - v * v;
+            float s = GameRange.SectionSquared(range, GameRange.Jump.sphere, ks, k);
             if (s < 1f)
             {
                 return;

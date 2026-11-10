@@ -421,7 +421,7 @@ namespace ProjectZ
             try
             {
                 Drawn += RangePreview.Rings(g, ks, k => MechanitorRange_3D_Patch.HorizontalReach(m, ks, k), Color.white, c => tracker.CanCommandTo(c), map);
-                RangeShell.Draw(new Vector3(g.x + 0.5f, ks * Range3D.Storey, g.z + 0.5f), range, 0f, sphere: true, white: true);
+                GameRange.DrawShell(new Vector3(g.x + 0.5f, ks * Range3D.Storey, g.z + 0.5f), range, MechanitorRange_3D_Patch.Rule.sphere, 0f, white: true);
                 Shells++;
             }
             catch (Exception e)

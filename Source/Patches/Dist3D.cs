@@ -17,8 +17,8 @@ namespace ProjectZ.Patches
     //   distance = the game's own ground distance between their ground cells (Euclidean or Manhattan, as the call site
     //              measures) + |level difference| x StoreyCells,
     // StoreyCells = one storey's climb in walking cells: the ramp (3 cells) + the stair step's time (Climb.StepTicks) in
-    // cells of a baseline walker (60 / 4.6 ticks per cell) = 5.3. On one level (one band) every helper returns the game's
-    // own value bit for bit; nothing changes on maps without floors.
+    // cells of a baseline walker (ticks per second over the Human def's move speed: 60 / 4.6 unmodified) = 5.3. On one
+    // level (one band) every helper returns the game's own value bit for bit; nothing changes on maps without floors.
     //
     // One mechanism: a transpiler swaps the distance expressions inside the listed vanilla methods (Rows, the inventory)
     // for these helpers, the method's own map passed along (first Thing/Region/Map/IAttackTarget parameter, the path
@@ -38,10 +38,52 @@ namespace ProjectZ.Patches
         public static int MinGroundZ = int.MaxValue;
 
         public const float RampCells = 3f;
-        public const float BaselineTicksPerCell = 60f / 4.6f;
+
+        // A human's base move speed when the Human def can't be read (before the defs are loaded): its def's own value.
+        private const float HumanSpeedFallback = 4.6f;
+
+        // The baseline walker: the game's ticks per second over a human's base move speed (the Human def's MoveSpeed,
+        // as the game and other mods' patches left it; HumanSpeedFallback only before the defs are loaded or without
+        // it). Not StatDefOf.MoveSpeed.defaultBaseValue: that is 3.0, the stat's default for things without their own base.
+        public static float BaselineTicksPerCell => GenTicks.TicksPerRealSecond / BaseMoveSpeed();
+
+        private static float baseSpeed = -1f;
+
+        private static float BaseMoveSpeed()
+        {
+            if (baseSpeed > 0f)
+            {
+                return baseSpeed;
+            }
+            if (!PlayDataLoader.Loaded || ThingDefOf.Human == null || StatDefOf.MoveSpeed == null)
+            {
+                return HumanSpeedFallback;
+            }
+            float v = ThingDefOf.Human.statBases.GetStatValueFromList(StatDefOf.MoveSpeed, HumanSpeedFallback);
+            baseSpeed = v > 0f ? v : HumanSpeedFallback;
+            storeyCells = -1f;
+            return baseSpeed;
+        }
 
         // One storey in walking cells.
-        public static readonly float StoreyCells = RampCells + Climb.StepTicks / BaselineTicksPerCell;
+        public static float StoreyCells
+        {
+            get
+            {
+                if (storeyCells < 0f || baseSpeed < 0f)
+                {
+                    float s = RampCells + Climb.StepTicks / BaselineTicksPerCell;
+                    if (baseSpeed < 0f)
+                    {
+                        return s;   // (not cached before the defs are read)
+                    }
+                    storeyCells = s;
+                }
+                return storeyCells;
+            }
+        }
+
+        private static float storeyCells = -1f;
 
         // Map for helpers in methods without a map of their own (set by the entry prefix, Dist3D_WorkContext_Patch).
         [ThreadStatic]

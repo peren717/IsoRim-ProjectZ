@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using ProjectZ.Combat;
 using RimWorld;
+using UnityEngine;
 using Verse;
 using Verse.AI;
 
@@ -31,9 +32,61 @@ namespace ProjectZ
         // test switch -projectznoflight: nobody flies between floors
         public static bool Off;
 
-        public const float Range = 19.9f;      // as the locust's jump
-        public const int CooldownTicks = 300;  // as the locust's jump
-        public const int WarmupTicks = 30;
+        // The flight is a jump as Biotech's longjump: its range is ONE GameRange read rule on the longjump ability def (its
+        // verb's range; Rule), its warm-up that verb's warmupTime, both as the game and other mods' patches left the def
+        // (PZ_LocustJump, ProjectZ's own copy of the longjump for the locust, without Biotech). The cooldown is the locust's
+        // (PZ_LocustJump's cooldown: the locust's flight cooldown), and the flight flies on PZ_LocustJump's verb. The values
+        // without any def (one place): 19.9 cells, 30 ticks, 300 ticks.
+        public const float RangeFallback = 19.9f;
+        public const int WarmupFallbackTicks = 30, CooldownFallbackTicks = 300;
+
+        public static readonly GameRange.Read<AbilityDef> Rule = new GameRange.Read<AbilityDef>
+        {
+            name = "flight between floors", fallback = RangeFallback, read = d => d.verbProperties != null ? d.verbProperties.range : RangeFallback,
+        };
+
+        public static float Range => Rule.Flat(JumpDef);
+
+        public static int WarmupTicks => JumpDef?.verbProperties != null ? JumpDef.verbProperties.warmupTime.SecondsToTicks() : WarmupFallbackTicks;
+
+        // The longest cooldown the def gives (a range: each flight draws its own, as the game's abilities do).
+        public static int CooldownTicks => LocustDef != null && LocustDef.cooldownTicksRange != default(IntRange) ? LocustDef.cooldownTicksRange.max : CooldownFallbackTicks;
+
+        private static int CooldownDraw => LocustDef != null && LocustDef.cooldownTicksRange != default(IntRange) ? LocustDef.cooldownTicksRange.RandomInRange : CooldownFallbackTicks;
+
+        private static AbilityDef jumpDef, locustDef;
+        private static bool defsLooked;
+
+        private static void LookDefs()
+        {
+            if (!defsLooked && PlayDataLoader.Loaded)
+            {
+                locustDef = DefDatabase<AbilityDef>.GetNamedSilentFail("PZ_LocustJump");
+                jumpDef = DefDatabase<AbilityDef>.GetNamedSilentFail("Longjump") ?? locustDef;
+                defsLooked = true;
+            }
+        }
+
+        // The longjump (range, warm-up); PZ_LocustJump without Biotech.
+        public static AbilityDef JumpDef
+        {
+            get
+            {
+                LookDefs();
+                return jumpDef;
+            }
+        }
+
+        // The locust's jump (cooldown, the verb flown).
+        public static AbilityDef LocustDef
+        {
+            get
+            {
+                LookDefs();
+                return locustDef;
+            }
+        }
+
         public const int FleeTries = 12;       // landings checked fully per flee
         public const float FleeGain = 8f;      // a flight from danger gains this much distance at least (or the walk's)
 
@@ -129,13 +182,13 @@ namespace ProjectZ
             }
             if (verbProps == null)
             {
-                verbProps = DefDatabase<AbilityDef>.GetNamedSilentFail("PZ_LocustJump")?.verbProperties ?? new VerbProperties();
+                verbProps = LocustDef?.verbProperties ?? new VerbProperties();
             }
             if (cooldown.Count > 512)
             {
                 cooldown.Clear();
             }
-            cooldown[p.thingIDNumber] = Find.TickManager.TicksGame + CooldownTicks;
+            cooldown[p.thingIDNumber] = Find.TickManager.TicksGame + CooldownDraw;
             if (!JumpUtility.DoJump(p, c, null, verbProps))
             {
                 return false;

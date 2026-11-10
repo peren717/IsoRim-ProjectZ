@@ -340,7 +340,8 @@ namespace ProjectZ
         internal static HashSet<MethodBase> Dist3DMethods => dist3DMethods ??= new HashSet<MethodBase>(Patches.Dist3D.Rows.SelectMany(r => Patches.Dist3D.Resolve(r)));
 
         // The method and the compiler's code it owns: lambdas and local functions ("<Name>b__", "<Name>g__") in its type and
-        // nested types, and its iterator or async state machine's MoveNext ("<Name>d__").
+        // nested types, and its iterator or async state machine's MoveNext ("<Name>d__"). The names carry the method's name
+        // only, so with overloads of that name the code is also checked to be reached from this method's own IL (Owned).
         private static IEnumerable<MethodBase> WithInner(MethodBase method)
         {
             yield return method;
@@ -349,6 +350,7 @@ namespace ProjectZ
             {
                 yield break;
             }
+            HashSet<MethodBase> owned = t.GetMethods(AccessTools.all | BindingFlags.DeclaredOnly).Count(x => x.Name == method.Name) > 1 ? Owned(method) : null;
             string tag = "<" + method.Name + ">";
             foreach (Type x in new[] { t }.Concat(AllNested(t)))
             {
@@ -361,10 +363,56 @@ namespace ProjectZ
                     }
                     if (machine ? m.Name == "MoveNext" : m.Name.Contains(tag))
                     {
-                        yield return m;
+                        if (owned == null || owned.Contains(m))
+                        {
+                            yield return m;
+                        }
                     }
                 }
             }
+        }
+
+        // The compiler's code reached from method's own IL, transitively: lambdas and local functions it names (ldftn,
+        // call), and the MoveNext of the state machine it creates (newobj).
+        private static HashSet<MethodBase> Owned(MethodBase method)
+        {
+            HashSet<MethodBase> seen = new HashSet<MethodBase>();
+            Queue<MethodBase> todo = new Queue<MethodBase>();
+            todo.Enqueue(method);
+            while (todo.Count > 0)
+            {
+                MethodBase m = todo.Dequeue();
+                List<KeyValuePair<OpCode, object>> body;
+                try
+                {
+                    body = PatchProcessor.ReadMethodBody(m).ToList();
+                }
+                catch (Exception)
+                {
+                    continue;
+                }
+                foreach (KeyValuePair<OpCode, object> p in body)
+                {
+                    if (!(p.Value is MethodBase target) || target.DeclaringType == null)
+                    {
+                        continue;
+                    }
+                    MethodBase found = null;
+                    if (target is ConstructorInfo && target.DeclaringType.Name.StartsWith("<") && target.DeclaringType.Name.Contains(">d__"))
+                    {
+                        found = AccessTools.Method(target.DeclaringType, "MoveNext");
+                    }
+                    else if (target is MethodInfo && target.Name.StartsWith("<"))
+                    {
+                        found = target;
+                    }
+                    if (found != null && seen.Add(found))
+                    {
+                        todo.Enqueue(found);
+                    }
+                }
+            }
+            return seen;
         }
 
         private static IEnumerable<Type> AllNested(Type t)
@@ -393,18 +441,9 @@ namespace ProjectZ
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {
-            int n = 0;
-            foreach (CodeInstruction ci in instructions)
-            {
-                if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && ci.operand is MethodBase mb && Swaps.TryGetValue(mb, out MethodInfo mine))
-                {
-                    ci.opcode = OpCodes.Call;
-                    ci.operand = mine;
-                    n++;
-                }
-                yield return ci;
-            }
-            lastSwapped = n;
+            List<CodeInstruction> code = instructions.ToList();
+            lastSwapped = CallSwap.SwapAll(code, Swaps);
+            return code;
         }
 
         // ---- ProjectZ's own use: the game's original body of a method it patches, with the swaps (a reverse patch: none of
@@ -412,23 +451,109 @@ namespace ProjectZ
         // swapped (logged).
         internal static MethodInfo OriginalWithScope(MethodBase original, MethodInfo standin)
         {
+            return ReverseCopy(original, standin, null, true, HarmonyReversePatchType.Original);
+        }
+
+        private static IReadOnlyDictionary<MethodBase, MethodInfo> copyExtra;
+        private static bool copyScope;
+
+        // A private copy of the game's (or another mod's) method as the stand-in's body (a reverse patch), so a rule is asked
+        // as it is without patching it live: the calls in 'extra' swapped (CallSwap), and with 'scope' the 3D scope's too.
+        // Snapshot: the method with the transpilers on it when the copy is made (other mods' changes to its body come along;
+        // their prefixes and postfixes don't), so make it at first use, after every mod's startup patches; Original: its
+        // compiled body only. Null when that failed or nothing was swapped (logged).
+        internal static MethodInfo ReverseCopy(MethodBase original, MethodInfo standin, IReadOnlyDictionary<MethodBase, MethodInfo> extra, bool scope, HarmonyReversePatchType type)
+        {
+            string name = original == null ? "(missing)" : original.DeclaringType?.Name + "." + original.Name;
+            if (original == null || standin == null)
+            {
+                Log.Warning("[ProjectZ] no copy of the game's " + name + " (method not found).");
+                return null;
+            }
+            if (type == HarmonyReversePatchType.Snapshot && Harmony.GetPatchInfo(original) == null)
+            {
+                type = HarmonyReversePatchType.Original;   // (nothing patched on it: the snapshot is its body; Harmony's snapshot needs patches)
+            }
+            copyExtra = extra;
+            copyScope = scope;
             try
             {
                 lastSwapped = 0;
-                MethodInfo m = Harmony.ReversePatch(original, new HarmonyMethod(standin) { reversePatchType = HarmonyReversePatchType.Original },
-                    AccessTools.Method(typeof(Scope3DCore), nameof(Transpiler)));
+                MethodInfo m = Harmony.ReversePatch(original, new HarmonyMethod(standin) { reversePatchType = type },
+                    AccessTools.Method(typeof(Scope3DCore), nameof(CopyTranspiler)));
                 if (lastSwapped == 0)
                 {
-                    Log.Warning("[ProjectZ] 3D scope: the game's " + original.DeclaringType?.Name + "." + original.Name + " has no call the scope answers.");
+                    Log.Warning("[ProjectZ] the game's " + name + " has no call to swap: no copy made.");
                     return null;
                 }
                 return m;
             }
             catch (Exception e)
             {
-                Log.Warning("[ProjectZ] 3D scope: no copy of the game's " + original.DeclaringType?.Name + "." + original.Name + " (" + e.GetType().Name + ": " + e.Message + ").");
+                Log.Warning("[ProjectZ] no copy of the game's " + name + " (" + e.GetType().Name + ": " + e.Message + ").");
                 return null;
             }
+            finally
+            {
+                copyExtra = null;
+                copyScope = false;
+            }
+        }
+
+        public static IEnumerable<CodeInstruction> CopyTranspiler(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> code = instructions.ToList();
+            int n = copyScope ? CallSwap.SwapAll(code, Swaps) : 0;
+            if (copyExtra != null)
+            {
+                n += CallSwap.SwapAll(code, copyExtra);
+            }
+            lastSwapped = n;
+            return code;
+        }
+    }
+
+    // THE call-swap helper: every ProjectZ transpiler that replaces the calls of one method by another goes through here
+    // (the 3D scope's table, the private copies of the game's rules (Scope3DCore.ReverseCopy), the power risers and
+    // hookups, the hoses).
+    public static class CallSwap
+    {
+        // Replace calls to 'from' by calls to 'to'; 'extraArgs' are pushed right before the call. Null when exactly
+        // 'expected' were swapped; else what is missing (FailSoft.Transpile then hands the IL back as it came).
+        internal static string Swap(List<CodeInstruction> list, MethodInfo from, MethodInfo to, int expected, params CodeInstruction[] extraArgs)
+        {
+            int done = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if ((list[i].opcode == OpCodes.Call || list[i].opcode == OpCodes.Callvirt) && list[i].operand as MethodInfo == from)
+                {
+                    list[i].opcode = OpCodes.Call;
+                    list[i].operand = to;
+                    for (int j = 0; j < extraArgs.Length; j++)
+                    {
+                        list.Insert(i, extraArgs[extraArgs.Length - 1 - j].Clone());
+                    }
+                    i += extraArgs.Length;
+                    done++;
+                }
+            }
+            return done == expected ? null : $"{done} of {expected} {from?.Name} calls found";
+        }
+
+        // Every call of a key of 'table' becomes a call of its value; the number swapped.
+        internal static int SwapAll(List<CodeInstruction> list, IReadOnlyDictionary<MethodBase, MethodInfo> table)
+        {
+            int n = 0;
+            foreach (CodeInstruction ci in list)
+            {
+                if ((ci.opcode == OpCodes.Call || ci.opcode == OpCodes.Callvirt) && ci.operand is MethodBase mb && table.TryGetValue(mb, out MethodInfo mine))
+                {
+                    ci.opcode = OpCodes.Call;
+                    ci.operand = mine;
+                    n++;
+                }
+            }
+            return n;
         }
     }
 

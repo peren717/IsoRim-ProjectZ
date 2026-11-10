@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+  <!-- A stand-in for another mod: the sniper rifle's range 78 (past the old copied 75, under the game's own ring limit, the radial pattern's 79.8), the longjump's range 25.9 (the flight between floors reads it). -->
+  <Operation Class="PatchOperationReplace">
+    <xpath>Defs/ThingDef[defName="Gun_SniperRifle"]/verbs/li/range</xpath>
+    <value><range>78</range></value>
+  </Operation>
+  <Operation Class="PatchOperationReplace">
+    <xpath>Defs/AbilityDef[defName="Longjump"]/verbProperties/range</xpath>
+    <value><range>25.9</range></value>
+  </Operation>
+</Patch>

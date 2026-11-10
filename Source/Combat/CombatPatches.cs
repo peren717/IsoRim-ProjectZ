@@ -225,7 +225,7 @@ namespace ProjectZ.Combat
                 return FinalSay.Pass;
             }
             float min = verb.verbProps.EffectiveMinRange(targ, verb.caster);
-            return FinalSay.Of(Range3D.OutOfRange(root, occupiedRect, targ.Cell, verb.EffectiveRange, min, map));
+            return FinalSay.Of(Range3D.OutOfRange(root, occupiedRect, targ.Cell, GameRange.Weapon.Flat(verb), min, map));
         }
 
         public static bool Prefix(Verb __instance, IntVec3 root, LocalTargetInfo targ, CellRect occupiedRect, ref bool __result, out byte __state)
@@ -292,8 +292,10 @@ namespace ProjectZ.Combat
         private static readonly List<IntVec3> lineCells = new List<IntVec3>();
 
         // The game's blind smoke factor (0.7 when smoke is on the shoot line), with the cells the line is in between
-        // floors (the game's own walk would cross the map rows between the two bands).
-        private static float SmokeFactor(Verb verb, ShootLine sl, Map map)
+        // floors (the game's own walk would cross the map rows between the two bands). Copied from vanilla
+        // ShotReport.HitReportFor (the 0.7 is inline there, set only inside the report: nothing to ask). Parity with the
+        // game's own: test mode gamerange (G2).
+        internal static float SmokeFactor(Verb verb, ShootLine sl, Map map)
         {
             if (!sl.Source.IsValid || !sl.Dest.IsValid || verb.EquipmentSource != null && verb.EquipmentSource.TryGetComp<CompUniqueWeapon>(out CompUniqueWeapon u) && u.IgnoreAccuracyMaluses)
             {
@@ -1036,34 +1038,12 @@ namespace ProjectZ.Combat
                     PZCombatStats.passedOver++;
                     continue;   // flies over it
                 }
-                bool openDoor = false;
-                if (thing.def.Fillage == FillCategory.Full)
+                float n = InterceptChance(thing, c, dest, launcher, preventFriendlyFire, chance, out bool wall);
+                if (wall)
                 {
-                    if (!(thing is Building_Door door && door.Open))
-                    {
-                        Hit(p, ck, thing);
-                        return true;
-                    }
-                    openDoor = true;
+                    Hit(p, ck, thing);
+                    return true;
                 }
-                float n = 0f;
-                if (thing is Pawn pawn)
-                {
-                    n = 0.4f * Mathf.Clamp(pawn.BodySize, 0.1f, 2f);
-                    if (pawn.GetPosture() != PawnPosture.Standing)
-                    {
-                        n *= 0.1f;
-                    }
-                    if (launcher != null && pawn.Faction != null && launcher.Faction != null && !pawn.Faction.HostileTo(launcher.Faction))
-                    {
-                        n = preventFriendlyFire ? 0f : n * Find.Storyteller.difficulty.friendlyFireChanceFactor;
-                    }
-                }
-                else if (thing.def.fillPercent > 0.2f)
-                {
-                    n = openDoor ? 0.05f : (!dest.AdjacentTo8Way(c) ? thing.def.fillPercent * 0.15f : thing.def.fillPercent);
-                }
-                n *= chance;
                 if (n > 1E-05f && Rand.Chance(n))
                 {
                     Hit(p, ck, thing);
@@ -1071,6 +1051,44 @@ namespace ProjectZ.Combat
                 }
             }
             return false;
+        }
+
+        // The game's chance that thing in cell c stops the shot (wall: it always does). Copied from vanilla
+        // Projectile.CheckForFreeIntercept (private, its roll and the impact inside; no part of it can be asked): a pawn
+        // 0.4 x its body size, a tenth when not standing, friendly fire; a thing over 0.2 fill its fill x 0.15, all of it
+        // next to the target, 0.05 an open door; times the distance factor (VerbUtility.InterceptChanceFactorFromDistance,
+        // asked). Parity with the game's own: test mode gamerange (G1).
+        public static float InterceptChance(Thing thing, IntVec3 c, IntVec3 dest, Thing launcher, bool preventFriendlyFire, float distanceFactor, out bool wall)
+        {
+            wall = false;
+            bool openDoor = false;
+            if (thing.def.Fillage == FillCategory.Full)
+            {
+                if (!(thing is Building_Door door && door.Open))
+                {
+                    wall = true;
+                    return 1f;
+                }
+                openDoor = true;
+            }
+            float n = 0f;
+            if (thing is Pawn pawn)
+            {
+                n = 0.4f * Mathf.Clamp(pawn.BodySize, 0.1f, 2f);
+                if (pawn.GetPosture() != PawnPosture.Standing)
+                {
+                    n *= 0.1f;
+                }
+                if (launcher != null && pawn.Faction != null && launcher.Faction != null && !pawn.Faction.HostileTo(launcher.Faction))
+                {
+                    n = preventFriendlyFire ? 0f : n * Find.Storyteller.difficulty.friendlyFireChanceFactor;
+                }
+            }
+            else if (thing.def.fillPercent > 0.2f)
+            {
+                n = openDoor ? 0.05f : (!dest.AdjacentTo8Way(c) ? thing.def.fillPercent * 0.15f : thing.def.fillPercent);
+            }
+            return n * distanceFactor;
         }
 
         private static void Hit(Projectile p, IntVec3 cell, Thing thing)

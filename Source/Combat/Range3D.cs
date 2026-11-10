@@ -62,14 +62,8 @@ namespace ProjectZ.Combat
         }
 
         // How far over the ground a shooter on floor ks reaches on floor k: the cross-section of its 3D range there.
-        // Negative when floor k is out of reach.
-        public static float HorizontalReach(float range, int ks, int k)
-        {
-            float reach = Reach(range, ks, k);
-            float v = Rise(ks, k);
-            float s = reach * reach - v * v;
-            return s < 0f ? -1f : Mathf.Sqrt(s);
-        }
+        // Negative when floor k is out of reach. (GameRange holds the one conversion; the range: GameRange.Weapon.)
+        public static float HorizontalReach(float range, int ks, int k) => GameRange.HorizontalReach(range, false, ks, k);
 
         // The same rule over a continuous height, for the preview shell: distance from the shooter along a unit
         // direction whose height part is dy (negative = down), with the bonus growing per storey of drop.

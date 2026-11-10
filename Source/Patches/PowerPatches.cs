@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -26,7 +27,7 @@ namespace ProjectZ.Patches
     // and the conduit link graphics work per cell and need nothing; the vertical link is drawn by RiserView (same rule,
     // PowerRisers.Riser).
     //
-    // Second, separate rule (ConnectRange): a building's wireless hookup to a transmitter within 6 cells stays on its
+    // Second, separate rule (ConnectRange): a building's wireless hookup to a transmitter in the game's range stays on its
     // own floor. Vanilla searches a rect clipped to the map; floors are bands of the same map with only a few void rows
     // between them (3 on a 150 map), so near a band edge a lamp could hook up to a conduit on the next floor. Both
     // searches (PowerConnectionMaker.BestTransmitterForConnector and PotentialConnectorsForTransmitter) clip their rect
@@ -34,7 +35,7 @@ namespace ProjectZ.Patches
     //
     // Third rule, built on the second (hookups to the next floor, user decision 2026-10-26; PowerHookup): a building that
     // finds no transmitter in range on its own floor hooks up to one on the floor directly above or below. The range is
-    // mapped there by the stacked-cell rule (Api.StackedCell of the connector's cell, the same 6 cells around it, clipped
+    // mapped there by the stacked-cell rule (Api.StackedCell of the connector's cell, the game's own search round it, clipped
     // to that band; never a raw rect across the void rows); only +-1 floor; both found -> the nearer by horizontal
     // distance in the mapped frame (a tie: the floor above). Vanilla picks a transmitter for a connector in exactly two
     // functions (Assembly-CSharp 1.7), both get the rule:
@@ -163,40 +164,36 @@ namespace ProjectZ.Patches
             return clipped;
         }
 
-        // Replace calls to 'from' by calls to 'to'; 'extraArgs' are pushed right before the call. Another count than
-        // expected: what is missing (FailSoft.Transpile then hands the IL back as it came).
-        internal static string Swap(List<CodeInstruction> list, MethodInfo from, MethodInfo to, int expected, params CodeInstruction[] extraArgs)
-        {
-            int done = 0;
-            for (int i = 0; i < list.Count; i++)
-            {
-                if ((list[i].opcode == OpCodes.Call || list[i].opcode == OpCodes.Callvirt) && list[i].operand as MethodInfo == from)
-                {
-                    list[i].opcode = OpCodes.Call;
-                    list[i].operand = to;
-                    for (int j = 0; j < extraArgs.Length; j++)
-                    {
-                        list.Insert(i, extraArgs[extraArgs.Length - 1 - j].Clone());
-                    }
-                    i += extraArgs.Length;
-                    done++;
-                }
-            }
-            return done == expected ? null : $"{done} of {expected} {from.Name} calls found";
-        }
-
         internal static readonly MethodInfo CardinalThing = AccessTools.Method(typeof(GenAdj), nameof(GenAdj.CellsAdjacentCardinal), new[] { typeof(Thing) });
         internal static readonly MethodInfo CardinalRect = AccessTools.Method(typeof(GenAdj), nameof(GenAdj.CellsAdjacentCardinal), new[] { typeof(IntVec3), typeof(Rot4), typeof(IntVec2) });
         internal static readonly MethodInfo AdjacentThing = AccessTools.Method(typeof(PowerRisers), nameof(Adjacent), new[] { typeof(Thing) });
         internal static readonly MethodInfo AdjacentRect = AccessTools.Method(typeof(PowerRisers), nameof(Adjacent), new[] { typeof(IntVec3), typeof(Rot4), typeof(IntVec2), typeof(PowerNetManager) });
         internal static readonly MethodInfo ClipMap = AccessTools.Method(typeof(CellRect), nameof(CellRect.ClipInsideMap));
         internal static readonly MethodInfo ClipFloor = AccessTools.Method(typeof(PowerRisers), nameof(ClipInsideFloor));
+        internal static readonly MethodInfo RectThing = AccessTools.Method(typeof(GenAdj), nameof(GenAdj.OccupiedRect), new[] { typeof(Thing) });
+        internal static readonly MethodInfo RectFor = AccessTools.Method(typeof(PowerHookup), nameof(PowerHookup.RectFor));
     }
 
     // The hookup rule (third rule above): own floor first, else the nearer of the floors directly above and below.
+    // The range and the test are the game's own (no copied PowerConnectionMaker.ConnectMaxDist): every search is the
+    // game's finder itself, asked at the mapped cell; only where it looks is swapped (the smallest change that keeps
+    // another mod's range or test):
+    //   - a transmitter for a connector: PowerConnectionMaker.BestTransmitterForConnector at the connector's cell (own
+    //     floor) or at its stacked cell above or below, its search clipped to that cell's band by ConnectRange
+    //     (BestTransmitterForConnector_Floor_Patch);
+    //   - the connectors round a new transmitter on the floors above and below: PotentialConnectorsForTransmitter with
+    //     the transmitter's rect moved to its stacked cell there (PotentialConnectors_Rect_Patch), clipped to that band.
+    // While ProjectZ asks (Asking), the hookup postfixes below stay out (no recursion).
     public static class PowerHookup
     {
-        public const int Range = 6;   // vanilla's PowerConnectionMaker.ConnectMaxDist
+        // ProjectZ is asking the game's finders (the across-floor postfixes stay out)
+        public static bool Asking;
+
+        // (PotentialConnectors_Rect_Patch) the transmitter's rect moved here while asking for another floor; Invalid: its own
+        private static IntVec3 rectAt = IntVec3.Invalid;
+
+        private static readonly Func<CompPower, IEnumerable<CompPower>> potential =
+            AccessTools.MethodDelegate<Func<CompPower, IEnumerable<CompPower>>>(AccessTools.Method(typeof(PowerConnectionMaker), "PotentialConnectorsForTransmitter"));
 
         // Where a connector hooks up from (vanilla: a wall attachment from its wall).
         public static IntVec3 ConnectorPos(CompPower pc)
@@ -213,52 +210,38 @@ namespace ProjectZ.Patches
             return p.Position;
         }
 
-        // Vanilla's test (BestTransmitterForConnector) over one rect: the nearest transmitter to 'from' that takes a wire.
-        private static CompPower Scan(CellRect r, IntVec3 from, Map map, List<PowerNet> disallowed, out float best)
+        // The game's pick for a connector at c (its search on c's own floor).
+        private static CompPower Ask(IntVec3 c, Map map, List<PowerNet> disallowed)
         {
-            best = 999999f;
-            CompPower result = null;
-            for (int z = r.minZ; z <= r.maxZ; z++)
+            bool was = Asking;
+            Asking = true;
+            try
             {
-                for (int x = r.minX; x <= r.maxX; x++)
-                {
-                    Building t = new IntVec3(x, 0, z).GetTransmitter(map);
-                    if (t == null || t.Destroyed)
-                    {
-                        continue;
-                    }
-                    CompPower pc = t.PowerComp;
-                    if (pc != null && pc.TransmitsPowerNow && (t.def.building == null || t.def.building.allowWireConnection) && (disallowed == null || !disallowed.Contains(pc.transNet)))
-                    {
-                        float d = (t.Position - from).LengthHorizontalSquared;
-                        if (d < best)
-                        {
-                            best = d;
-                            result = pc;
-                        }
-                    }
-                }
+                return PowerConnectionMaker.BestTransmitterForConnector(c, map, disallowed);
             }
-            return result;
+            finally
+            {
+                Asking = was;
+            }
         }
 
-        // The range around c, on c's own floor.
-        private static CellRect Around(IntVec3 c, Map map)
-        {
-            CellRect r = CellRect.SingleCell(c).ExpandedBy(Range);
-            return PowerRisers.ClipInsideFloor(ref r, map);
-        }
+        // The game's searches stay on one floor only while ConnectRange holds (its clips landed).
+        private static bool Clipped => FailSoft.IsApplied(nameof(BestTransmitterForConnector_Floor_Patch)) && FailSoft.IsApplied(nameof(PotentialConnectorsForTransmitter_Floor_Patch));
 
-        // A transmitter in range on the connector's own floor (vanilla's search, clipped to the band).
+        // A transmitter in range on the connector's own floor (the game's search, clipped to the band).
         public static CompPower OwnFloor(IntVec3 pos, Map map, List<PowerNet> disallowed = null)
         {
-            return Scan(Around(pos, map), pos, map, disallowed, out _);
+            return Ask(pos, map, disallowed);
         }
 
-        // The nearest transmitter in range on the floor directly above or below (the range mapped by the stacked-cell
-        // rule); null without floors, from a void row, or when there is none.
+        // The nearest transmitter in range on the floor directly above or below (the game's search at the stacked cell);
+        // null without floors, from a void row, or when there is none.
         public static CompPower OtherFloors(IntVec3 pos, Map map, List<PowerNet> disallowed = null)
         {
+            if (!Clipped)
+            {
+                return null;
+            }
             CompPower best = null;
             float bestD = float.MaxValue;
             for (int i = 0; i < 2; i++)
@@ -268,8 +251,13 @@ namespace ProjectZ.Patches
                 {
                     continue;
                 }
-                CompPower pc = Scan(Around(s, map), s, map, disallowed, out float d);
-                if (pc != null && d < bestD)
+                CompPower pc = Ask(s, map, disallowed);
+                if (pc == null)
+                {
+                    continue;
+                }
+                float d = (pc.parent.Position - s).LengthHorizontalSquared;   // (the game's own measure for its pick)
+                if (d < bestD)
                 {
                     best = pc;
                     bestD = d;
@@ -292,6 +280,13 @@ namespace ProjectZ.Patches
             return OtherFloors(pos, map, disallowed);
         }
 
+        // (PotentialConnectors_Rect_Patch) the rect the game's search goes round.
+        public static CellRect RectFor(Thing t)
+        {
+            CellRect occ = t.OccupiedRect();
+            return rectAt.IsValid ? new CellRect(rectAt.x, rectAt.z, occ.Width, occ.Height) : occ;
+        }
+
         // Rule b: the own-floor connectors (vanilla), then the waiting connectors on the floors above and below whose own
         // pick is t.
         public static IEnumerable<CompPower> WithOtherFloors(IEnumerable<CompPower> own, CompPower t)
@@ -301,7 +296,7 @@ namespace ProjectZ.Patches
                 yield return c;
             }
             ThingWithComps p = t?.parent;
-            if (p == null || !p.Spawned)
+            if (p == null || !p.Spawned || !Clipped || !FailSoft.IsApplied(nameof(PotentialConnectors_Rect_Patch)))
             {
                 yield break;
             }
@@ -311,6 +306,7 @@ namespace ProjectZ.Patches
                 yield break;
             }
             CellRect occ = p.OccupiedRect();
+            List<CompPower> found = new List<CompPower>();
             for (int i = 0; i < 2; i++)
             {
                 IntVec3 s = Api.StackedCell(occ.Min, map, i == 0);
@@ -318,30 +314,29 @@ namespace ProjectZ.Patches
                 {
                     continue;
                 }
-                CellRect r = new CellRect(s.x, s.z, occ.Width, occ.Height).ExpandedBy(Range);
-                r = PowerRisers.ClipInsideFloor(ref r, map);
-                for (int z = r.minZ; z <= r.maxZ; z++)
+                found.Clear();
+                bool was = Asking;
+                Asking = true;
+                rectAt = s;
+                try
                 {
-                    for (int x = r.minX; x <= r.maxX; x++)
+                    found.AddRange(potential(t));   // the game's search round the rect moved to floor s
+                }
+                finally
+                {
+                    rectAt = IntVec3.Invalid;
+                    Asking = was;
+                }
+                foreach (CompPower pc in found)
+                {
+                    if (pc == null || pc.connectParent != null)
                     {
-                        List<Thing> list = map.thingGrid.ThingsListAt(new IntVec3(x, 0, z));
-                        for (int j = 0; j < list.Count; j++)
-                        {
-                            if (!list[j].def.ConnectToPower || !(list[j] is Building b))
-                            {
-                                continue;
-                            }
-                            CompPower pc = b.PowerComp;
-                            if (pc == null || pc.connectParent != null)
-                            {
-                                continue;
-                            }
-                            IntVec3 pos = ConnectorPos(pc);
-                            if (OwnFloor(pos, map) == null && OtherFloors(pos, map) == t)
-                            {
-                                yield return pc;
-                            }
-                        }
+                        continue;
+                    }
+                    IntVec3 pos = ConnectorPos(pc);
+                    if (OwnFloor(pos, map) == null && OtherFloors(pos, map) == t)
+                    {
+                        yield return pc;
                     }
                 }
             }
@@ -355,7 +350,7 @@ namespace ProjectZ.Patches
     {
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return FailSoft.Transpile(nameof(PowerNetMaker_Risers_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1));
+            return FailSoft.Transpile(nameof(PowerNetMaker_Risers_Patch), original, instructions, code => CallSwap.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1));
         }
     }
 
@@ -367,8 +362,8 @@ namespace ProjectZ.Patches
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
             return FailSoft.Transpile(nameof(PowerNetManager_Risers_Patch), original, instructions, code =>
-                PowerRisers.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1)   // register
-                ?? PowerRisers.Swap(code, PowerRisers.CardinalRect, PowerRisers.AdjacentRect, 1, new CodeInstruction(OpCodes.Ldarg_0)));   // rebuild
+                CallSwap.Swap(code, PowerRisers.CardinalThing, PowerRisers.AdjacentThing, 1)   // register
+                ?? CallSwap.Swap(code, PowerRisers.CardinalRect, PowerRisers.AdjacentRect, 1, new CodeInstruction(OpCodes.Ldarg_0)));   // rebuild
         }
     }
 
@@ -378,7 +373,7 @@ namespace ProjectZ.Patches
     {
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return FailSoft.Transpile(nameof(BestTransmitterForConnector_Floor_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 2));
+            return FailSoft.Transpile(nameof(BestTransmitterForConnector_Floor_Patch), original, instructions, code => CallSwap.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 2));
         }
     }
 
@@ -392,7 +387,7 @@ namespace ProjectZ.Patches
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
         {
-            return FailSoft.Transpile(nameof(PotentialConnectorsForTransmitter_Floor_Patch), original, instructions, code => PowerRisers.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 1));
+            return FailSoft.Transpile(nameof(PotentialConnectorsForTransmitter_Floor_Patch), original, instructions, code => CallSwap.Swap(code, PowerRisers.ClipMap, PowerRisers.ClipFloor, 1));
         }
     }
 
@@ -403,7 +398,7 @@ namespace ProjectZ.Patches
     {
         public static void Postfix(ref CompPower __result, IntVec3 connectorPos, Map map, List<PowerNet> disallowedNets)
         {
-            if (__result == null)
+            if (__result == null && !PowerHookup.Asking)
             {
                 __result = PowerHookup.Fallback(connectorPos, map, disallowedNets);
             }
@@ -416,10 +411,31 @@ namespace ProjectZ.Patches
     {
         public static void Postfix(ref IEnumerable<CompPower> __result, CompPower b)
         {
-            if (b?.parent?.Map != null && ProjectZ.Annex(b.parent.Map) != null)
+            if (!PowerHookup.Asking && b?.parent?.Map != null && ProjectZ.Annex(b.parent.Map) != null)
             {
                 __result = PowerHookup.WithOtherFloors(__result, b);
             }
+        }
+    }
+
+    // The game's connector search round a transmitter, asked for the floor above or below (PowerHookup.WithOtherFloors):
+    // its rect round the transmitter becomes PowerHookup.RectFor (the rect moved to the stacked cell while asking; its
+    // own rect otherwise). The range and the test stay the game's. A live swap (CallSwap), not a private copy
+    // (Scope3DCore.ReverseCopy) nor the 3D scope: the search is an iterator (its body is the state machine's MoveNext, which
+    // a copy cannot be called as), and the swapped call is "where to look", not a 3D question. Outside ProjectZ's asking
+    // RectFor is the game's own OccupiedRect.
+    [HarmonyPatch]
+    [PatchGroup("power hookup across floors", key: true)]
+    public static class PotentialConnectors_Rect_Patch
+    {
+        public static MethodBase TargetMethod()
+        {
+            return AccessTools.EnumeratorMoveNext(AccessTools.Method(typeof(PowerConnectionMaker), "PotentialConnectorsForTransmitter"));
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase original)
+        {
+            return FailSoft.Transpile(nameof(PotentialConnectors_Rect_Patch), original, instructions, code => CallSwap.Swap(code, PowerRisers.RectThing, PowerRisers.RectFor, 1));
         }
     }
 }

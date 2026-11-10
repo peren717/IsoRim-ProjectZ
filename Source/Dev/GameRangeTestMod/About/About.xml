@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>ProjectZ GameRange test Defs</name>
+  <author>Lin</author>
+  <packageId>Peren.PZGameRangeTest</packageId>
+  <supportedVersions>
+    <li>1.7</li>
+  </supportedVersions>
+  <loadAfter>
+    <li>Peren.IsoRimProjectZ</li>
+    <li>Peren.IsoRimProjectZWT4</li>
+  </loadAfter>
+  <description>Test patches for ProjectZ mode gamerange (another mod changing vanilla ranges). Never shipped.</description>
+</ModMetaData>

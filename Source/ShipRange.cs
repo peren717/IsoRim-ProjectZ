@@ -39,11 +39,11 @@ namespace ProjectZ
         public static int LastFrame = -1;
 
         // The cells of the sphere (ground column mg, floor km, radius r) cut at floor k, as raw cells of that floor: the
-        // ground cells the footprint rule accepts there (ShipSet.InFootprint), lifted to floor k.
+        // ground cells the footprint rule accepts there (ShipSet.InFootprint), lifted to floor k. r: the footprint's flat
+        // reach (GameRange.Footprint), its 3D conversion GameRange's.
         public static void Section(IntVec3 mg, int km, float r, int k, Map map, AnnexMapComponent an, List<IntVec3> into)
         {
-            float dy = (k - km) * Range3D.Storey;
-            float s = r * r - dy * dy;
+            float s = GameRange.SectionSquared(r, GameRange.Footprint.sphere, km, k);
             if (s < 0f)
             {
                 return;
@@ -62,7 +62,7 @@ namespace ProjectZ
                         continue;
                     }
                     int ddx = x - mg.x, ddz = z - mg.z;
-                    if (ddx * ddx + ddz * ddz + dy * dy <= r * r)
+                    if (GameRange.InSphere(r, km, k, ddx * ddx + ddz * ddz))
                     {
                         into.Add(new IntVec3(x, 0, z + Levels.Shift(map, k)));
                     }
@@ -121,7 +121,7 @@ namespace ProjectZ
                     otherSet.Clear();
                     if (engine != exclude && Maker(engine, map, out IntVec3 g0, out int k0) && engine.TryGetComp(out CompSubstructureFootprint ec))
                     {
-                        Section(g0, k0, ec.Props.radius, k, map, an, engineCells);
+                        Section(g0, k0, GameRange.Footprint.Flat(ec.Props), k, map, an, engineCells);
                         engineSet.AddRange(engineCells);
                     }
                     foreach (Thing f in engine.AffectedByFacilities.LinkedFacilitiesListForReading)
@@ -130,7 +130,7 @@ namespace ProjectZ
                         {
                             continue;
                         }
-                        AddOther(fg, fk, comp.Props.radius, k, map, an);
+                        AddOther(fg, fk, GameRange.Footprint.Flat(comp.Props), k, map, an);
                     }
                     if (hasExtra)
                     {
@@ -159,14 +159,14 @@ namespace ProjectZ
             foreach (object o in Find.Selector.SelectedObjects)
             {
                 if (o is Thing st && st.Spawned && st.Map == map && st != exclude && st.TryGetComp(out CompSubstructureFootprint sc) && sc.Valid && sc.DisplaySubstructureOverlay
-                    && Maker(st, map, out IntVec3 sg, out int sk) && !shells.Contains((sg, sk, sc.Props.radius)))
+                    && Maker(st, map, out IntVec3 sg, out int sk) && !shells.Contains((sg, sk, GameRange.Footprint.Flat(sc.Props))))
                 {
-                    shells.Add((sg, sk, sc.Props.radius));
+                    shells.Add((sg, sk, GameRange.Footprint.Flat(sc.Props)));
                 }
             }
             foreach ((IntVec3 g, int k, float r) in shells)
             {
-                RangeShell.Draw(new Vector3(g.x + 0.5f, k * Range3D.Storey, g.z + 0.5f), r, 0f, sphere: true);
+                GameRange.DrawShell(new Vector3(g.x + 0.5f, k * Range3D.Storey, g.z + 0.5f), r, GameRange.Footprint.sphere, 0f);
                 LastShells++;
             }
         }
@@ -249,7 +249,7 @@ namespace ProjectZ
             }
             try
             {
-                ShipRange.Draw(map, an, center, footprint.radius, thing);
+                ShipRange.Draw(map, an, center, GameRange.Footprint.Flat(footprint), thing);
             }
             catch (Exception e)
             {
@@ -261,13 +261,31 @@ namespace ProjectZ
 
     // A facility's link range while it is placed or selected (PlaceWorker_ShowFacilitiesRange: tool cabinets, vitals
     // monitors, ...): links measure the 3D distance (FacilityPatches), so in the 3D view the ground and the viewed floor
-    // also get the ring cut from that sphere, as the weapon range preview does. Its own floor keeps the game's ring.
+    // also get the ring cut from that sphere, as the weapon range preview does. Its own floor keeps the game's ring. The
+    // radius is the one the game itself drew (RangePreview.GameRingFirst; no ring drawn, none added).
     [HarmonyPatch(typeof(PlaceWorker_ShowFacilitiesRange), nameof(PlaceWorker_ShowFacilitiesRange.DrawGhost))]
     public static class ShowFacilitiesRange_Floors_Patch
     {
         public static int LastRings;   // test read-out
 
+        public static void Prefix()
+        {
+            RangePreview.GameRingStart();
+        }
+
         public static void Postfix(ThingDef def, IntVec3 center)
+        {
+            try
+            {
+                Rings(def, center);
+            }
+            finally
+            {
+                RangePreview.GameRingEnd();
+            }
+        }
+
+        private static void Rings(ThingDef def, IntVec3 center)
         {
             LastRings = 0;
             Map map = Find.CurrentMap;
@@ -282,8 +300,7 @@ namespace ProjectZ
             {
                 return;
             }
-            float r = props.maxDistance - 0.1f;
-            if (r > GenRadial.MaxRadialPatternRadius)
+            if (!RangePreview.GameRingFirst(out float r) || r > GenRadial.MaxRadialPatternRadius)
             {
                 return;   // the game draws no ring either
             }
@@ -294,8 +311,7 @@ namespace ProjectZ
                 {
                     continue;
                 }
-                float dy = (kc - k) * Range3D.Storey;
-                float s = r * r - dy * dy;
+                float s = GameRange.SectionSquared(r, true, kc, k);
                 IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
                 if (s < 1f || !c.IsValid)
                 {

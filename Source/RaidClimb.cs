@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using HarmonyLib;
 using ProjectZ.Patches;
 using RimWorld;
 using UnityEngine;
@@ -66,7 +69,7 @@ namespace ProjectZ
         // (tests) every plan is made a second time right away, for its timing
         public static bool RepeatTiming;
 
-        public const int RadiusSq = 2500;    // JobGiver_AISapper's 50 cells
+        public const int RadiusSq = 2500;    // JobGiver_AISapper's 50 cells: only when the game's own filter is not found (SapperRule)
         public const int PlanTicks = 2500;   // a lord's plan is kept this long (while its first ladder's site stays good)
         public const int MemoTicks = 250;    // "no plan" remembered (as the router's memo)
         public const int WanderTicks = 30;   // over the per-tick budget: a short wander, then think again
@@ -177,9 +180,9 @@ namespace ProjectZ
                 IntVec3 focus = pawn.mindState?.duty != null ? pawn.mindState.duty.focus.Cell : IntVec3.Invalid;
                 if (focus.IsValid)
                 {
-                    if (Dist3D.DistSq(focus, pawn.Position, map) < 100 && focus.GetRoom(map) == pawn.GetRoom() && focus.WithinRegions(pawn.Position, map, 9, TraverseMode.NoPassClosedDoors))
+                    if (SapperRule.ReachedDutySpot(pawn, focus, map))
                     {
-                        return null;   // (AISapper's own test: at its duty spot)
+                        return null;   // (AISapper's own answer: at its duty spot)
                     }
                     if (ClimbPlanner.CompAt(g, focus, map) == startComp)
                     {
@@ -345,7 +348,7 @@ namespace ProjectZ
             for (int i = 0; i < all.Count; i++)
             {
                 IAttackTarget x = all[i];
-                if (x.ThreatDisabled(pawn) || x.Thing.Faction != Faction.OfPlayer || Dist3D.DistSq(pawn.Position, x.Thing.Position, map) > RadiusSq)
+                if (!SapperRule.Takes(pawn, x))
                 {
                     continue;
                 }
@@ -384,6 +387,139 @@ namespace ProjectZ
             RaidVertical.ResetStats();
             PlanMsTotal = PlanMsMax = 0;
             PlanMs.Clear();
+        }
+    }
+
+    // The sapper's rules as the game itself answers them (JobGiver_AISapper.TryGiveJob, no copied numbers): its target
+    // filter (a closure: not threat-disabled, the player's, within its radius, reachable the last resort's way) and its
+    // "reached the duty spot" test. ProjectZ asks private copies of the game's own two methods (Scope3DCore.ReverseCopy,
+    // a snapshot: Dist3D's 3D distances and other mods' changes to their bodies come along), so the live sapper is not
+    // patched and asking has no side effect:
+    //   - Takes: the filter, its reachability answered "yes" (reachability is the planner's business: components);
+    //   - ReachedDutySpot: TryGiveJob, the lord's notice recorded instead of sent, its reachability answered "no" after
+    //     the test (so it stops there, no path searched, no job).
+    // The copies are made at first use (after every mod's startup patches). Not the 3D scope's table: the swapped calls
+    // (CanReach, Lord.Notify_ReachedDutyLocation) are the probe's answers, not 3D questions; the distance inside is Dist3D's
+    // walking measure (Dist3D's rows), which the scope refuses by design. Without the copies (another game version), the
+    // copied rule as a fallback (RaidClimb.RadiusSq, 10 cells).
+    public static class SapperRule
+    {
+        private static bool reached;
+        private static bool looked, haveFilter, haveGive;
+        private static object closure;
+        private static FieldInfo closurePawn;
+        private static readonly JobGiver_AISapper giver = new JobGiver_AISapper();
+
+        // The filter's closure: on a class nested in JobGiver_AISapper, bool (IAttackTarget), with one Pawn field.
+        public static MethodInfo FilterMethod()
+        {
+            foreach (Type t in typeof(JobGiver_AISapper).GetNestedTypes(AccessTools.all))
+            {
+                int pawnFields = 0;
+                foreach (FieldInfo f in t.GetFields(AccessTools.all))
+                {
+                    if (f.FieldType == typeof(Pawn) && !f.IsStatic)
+                    {
+                        pawnFields++;
+                    }
+                }
+                if (pawnFields != 1)
+                {
+                    continue;
+                }
+                foreach (MethodInfo m in t.GetMethods(AccessTools.all | BindingFlags.DeclaredOnly))
+                {
+                    ParameterInfo[] ps = m.GetParameters();
+                    if (!m.IsStatic && m.ReturnType == typeof(bool) && ps.Length == 1 && ps[0].ParameterType == typeof(IAttackTarget))
+                    {
+                        return m;
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static void Look()
+        {
+            if (looked)
+            {
+                return;
+            }
+            looked = true;
+            MethodInfo reach = AccessTools.Method(typeof(ReachabilityUtility), nameof(ReachabilityUtility.CanReach),
+                new[] { typeof(Pawn), typeof(LocalTargetInfo), typeof(PathEndMode), typeof(Danger), typeof(bool), typeof(bool), typeof(TraverseMode) });
+            MethodInfo notify = AccessTools.Method(typeof(Lord), nameof(Lord.Notify_ReachedDutyLocation));
+            MethodInfo filter = FilterMethod();
+            if (filter != null)
+            {
+                Dictionary<MethodBase, MethodInfo> yes = new Dictionary<MethodBase, MethodInfo> { [reach] = AccessTools.Method(typeof(SapperRule), nameof(ReachYes)) };
+                haveFilter = Scope3DCore.ReverseCopy(filter, AccessTools.Method(typeof(SapperRule), nameof(FilterCopy)), yes, false, HarmonyReversePatchType.Snapshot) != null;
+                if (haveFilter)
+                {
+                    closure = Activator.CreateInstance(filter.DeclaringType);
+                    closurePawn = Array.Find(filter.DeclaringType.GetFields(AccessTools.all), f => f.FieldType == typeof(Pawn) && !f.IsStatic);
+                }
+            }
+            Dictionary<MethodBase, MethodInfo> no = new Dictionary<MethodBase, MethodInfo>
+            {
+                [reach] = AccessTools.Method(typeof(SapperRule), nameof(ReachNo)),
+                [notify] = AccessTools.Method(typeof(SapperRule), nameof(Reached)),
+            };
+            haveGive = Scope3DCore.ReverseCopy(AccessTools.Method(typeof(JobGiver_AISapper), "TryGiveJob"), AccessTools.Method(typeof(SapperRule), nameof(GiveCopy)), no, false, HarmonyReversePatchType.Snapshot) != null;
+            if (!haveFilter || !haveGive)
+            {
+                Log.Warning("[ProjectZ] The game's sapper rules could not be asked (filter " + haveFilter + ", duty spot " + haveGive + "): raider ladders use the copied 50-cell rule.");
+            }
+        }
+
+        // (the copies' bodies, written by Scope3DCore.ReverseCopy)
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static bool FilterCopy(object instance, IAttackTarget x) => throw new NotImplementedException("reverse patch");
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static Job GiveCopy(JobGiver_AISapper instance, Pawn pawn) => throw new NotImplementedException("reverse patch");
+
+        // The game's target filter takes x for the pawn (reachability aside).
+        public static bool Takes(Pawn pawn, IAttackTarget x)
+        {
+            Look();
+            if (!haveFilter)
+            {
+                return !x.ThreatDisabled(pawn) && x.Thing.Faction == Faction.OfPlayer && Dist3D.DistSq(pawn.Position, x.Thing.Position, pawn.Map) <= RaidClimb.RadiusSq;
+            }
+            closurePawn.SetValue(closure, pawn);
+            try
+            {
+                return FilterCopy(closure, x);
+            }
+            finally
+            {
+                closurePawn.SetValue(closure, null);
+            }
+        }
+
+        // The game's sapper says the pawn is at its duty spot (focus: its duty's).
+        public static bool ReachedDutySpot(Pawn pawn, IntVec3 focus, Map map)
+        {
+            Look();
+            if (!haveGive)
+            {
+                return Dist3D.DistSq(focus, pawn.Position, map) < 100 && focus.GetRoom(map) == pawn.GetRoom() && focus.WithinRegions(pawn.Position, map, 9, TraverseMode.NoPassClosedDoors);
+            }
+            reached = false;
+            GiveCopy(giver, pawn);
+            return reached;
+        }
+
+        // ---- the copies' swapped calls
+
+        public static bool ReachYes(Pawn pawn, LocalTargetInfo dest, PathEndMode peMode, Danger maxDanger, bool canBashDoors, bool canBashFences, TraverseMode mode) => true;
+
+        public static bool ReachNo(Pawn pawn, LocalTargetInfo dest, PathEndMode peMode, Danger maxDanger, bool canBashDoors, bool canBashFences, TraverseMode mode) => false;
+
+        public static void Reached(Lord lord, Pawn pawn)
+        {
+            reached = true;
         }
     }
 

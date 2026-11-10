@@ -85,6 +85,9 @@ namespace ProjectZ.Dev
     //                                   drawn cells against CanCommandTo, real go-here orders, flat view unchanged; the reach
     //                                   taken from the game, its cost; shots; -projectzmechrange=N: a stand-in mod changing the range;
     //                                   TestMechRange), -projectzfloors=3 -projectzmapsize=120 -projectzseed=7
+    //                                   gamerange: every range through GameRange and the copied constants (the game's ring, the
+    //                                   flight def, hookups, the sapper filter, parity with vanilla; TestGameRange),
+    //                                   -projectzfloors=3 -projectzmapsize=120 -projectzseed=7
     //                                   parts: the combat part switch (Api 6; -projectztestkeep[=A,B], -projectztestrelease=A,B;
     //                                   run with and without Combat Extended); api6: the Api 6 3D space queries on a two-floor
     //                                   fixture, -projectzfloors=3 -projectzseed=N (TestApi6)
@@ -863,6 +866,11 @@ namespace ProjectZ.Dev
                 StepMechRange(map);
                 return;
             }
+            if (stage.StartsWith("gr_"))
+            {
+                StepGameRange(map);
+                return;
+            }
             if (stage.StartsWith("br_"))
             {
                 StepBillRadius(map);
@@ -1405,6 +1413,10 @@ namespace ProjectZ.Dev
                     else if (mode == "mechrange")
                     {
                         stage = "mr_setup";
+                    }
+                    else if (mode == "gamerange")
+                    {
+                        stage = "gr_setup";
                     }
                     else if (mode == "billradius")
                     {

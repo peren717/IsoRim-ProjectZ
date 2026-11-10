@@ -244,7 +244,7 @@ namespace ProjectZ.Combat
             tmp.AddRange(c.GetThingList(map));
             for (int i = 0; i < tmp.Count; i++)
             {
-                // (vanilla's FlameDamageAmountRange 65-100, corpses 5-10)
+                // copied from vanilla PowerBeam.FlameDamageAmountRange (65-100) and CorpseFlameDamageAmountRange (5-10)
                 int amount = tmp[i] is Corpse ? Rand.RangeInclusive(5, 10) : Rand.RangeInclusive(65, 100);
                 Pawn pawn = tmp[i] as Pawn;
                 BattleLogEntry_DamageTaken log = null;

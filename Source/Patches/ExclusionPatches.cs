@@ -420,7 +420,7 @@ namespace ProjectZ.Patches
             {
                 return false;
             }
-            int num = GenRadial.NumCellsInRadius(2f);
+            int num = GenRadial.NumCellsInRadius(2f);   // copied from vanilla ExitMapGrid.IsGoodExitCell
             for (int i = 0; i < num; i++)
             {
                 IntVec3 c = cell + GenRadial.RadialPattern[i];
