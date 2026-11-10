@@ -183,7 +183,7 @@ namespace ProjectZ
         // A cell whose own top is set to open: marked Mine below, or a Remove roof hole or a Mine above mark under it.
         private static bool AboutToOpen(IntVec3 n, Map map)
         {
-            if (MineSide.MarkAt(n, map, MineDir.FromAbove))
+            if (MineSide.MarkAt(n, map, MineDir.FromAbove) || map.designationManager.DesignationAt(n, DesignationDefOf.RemoveFoundation) != null && TopRemoval.Can(n, map))
             {
                 return true;
             }

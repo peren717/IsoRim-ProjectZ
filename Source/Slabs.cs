@@ -1015,7 +1015,7 @@ namespace ProjectZ
 
         public static void Postfix(TerrainGrid __instance, IntVec3 c, ref bool __result)
         {
-            if (!__result && Slab.At(c, mapRef(__instance)))
+            if (!__result && (Slab.At(c, mapRef(__instance)) || TopRemoval.Can(c, mapRef(__instance))))
             {
                 __result = true;
             }
@@ -1033,6 +1033,11 @@ namespace ProjectZ
             Map map = mapRef(__instance);
             if (!Slab.At(c, map))
             {
+                if (TopRemoval.Can(c, map))
+                {
+                    TopRemoval.Open(c, map, null);   // (god mode; the job opens it with its worker: RemoveFoundationEffect_Top_Patch)
+                    return false;
+                }
                 return true;
             }
             Slab.Remove(c, map, doLeavings);
@@ -1055,18 +1060,44 @@ namespace ProjectZ
         }
     }
 
-    // The refusal says which blocker it is (vanilla's message covers only buildings).
+    // The job's end on a natural top: it opens with its worker as the cause (TopRemoval, MineUp.cs).
+    [HarmonyPatch(typeof(JobDriver_RemoveFoundation), "DoEffect")]
+    public static class RemoveFoundationEffect_Top_Patch
+    {
+        public static bool Prefix(JobDriver_RemoveFoundation __instance, IntVec3 c)
+        {
+            Map map = __instance.pawn?.Map;
+            if (map == null || !TopRemoval.Can(c, map))
+            {
+                return true;
+            }
+            TopRemoval.Open(c, map, __instance.pawn);
+            return false;
+        }
+    }
+
+    // The refusal says which blocker it is (vanilla's message covers only buildings); on a natural rock top, why it can't
+    // be opened (TopRemoval.Why).
     [HarmonyPatch(typeof(Designator_RemoveFoundation), nameof(Designator_RemoveFoundation.CanDesignateCell))]
     public static class RemoveFoundationDesignate_Slab_Patch
     {
         public static void Postfix(Designator_RemoveFoundation __instance, IntVec3 c, ref AcceptanceReport __result)
         {
-            if (!__result.Accepted && !__result.Reason.NullOrEmpty() && Slab.At(c, __instance.Map))
+            Map map = __instance.Map;
+            if (!__result.Accepted && !__result.Reason.NullOrEmpty() && Slab.At(c, map))
             {
-                string why = Slab.Blocker(c, __instance.Map);
+                string why = Slab.Blocker(c, map);
                 if (why != null)
                 {
                     __result = why;
+                }
+            }
+            else if (!__result.Accepted && c.InBounds(map) && !c.Fogged(map) && map.designationManager.DesignationAt(c, DesignationDefOf.RemoveFoundation) == null)
+            {
+                string key = TopRemoval.Why(c, map);
+                if (!key.NullOrEmpty())
+                {
+                    __result = key.Translate();
                 }
             }
         }
@@ -1079,6 +1110,16 @@ namespace ProjectZ
     {
         public static void Postfix(Pawn pawn, IntVec3 c, bool forced, ref bool __result)
         {
+            // (a natural top: no peel order, forced or not; a spot to stand on next to it)
+            if (__result && !Slab.At(c, pawn.Map) && TopRemoval.Can(c, pawn.Map))
+            {
+                if (!SlabPeel.WorkSpot(pawn, c).IsValid)
+                {
+                    JobFailReason.Is("PZ_NoWorkSpot".Translate());
+                    __result = false;
+                }
+                return;
+            }
             if (__result && forced && Slab.At(c, pawn.Map))
             {
                 if (!SlabPeel.WorkSpot(pawn, c).IsValid)
@@ -1136,6 +1177,15 @@ namespace ProjectZ
                     __result.targetB = from;
                 }
             }
+            else if (__result != null && __result.def == JobDefOf.RemoveFoundation && TopRemoval.Can(c, pawn.Map))
+            {
+                // (a natural top: the worker stands next to it, never on the top that opens)
+                IntVec3 from = SlabPeel.WorkSpot(pawn, c);
+                if (from.IsValid)
+                {
+                    __result.targetB = from;
+                }
+            }
         }
     }
 
@@ -1146,7 +1196,7 @@ namespace ProjectZ
         public static IEnumerable<Toil> Postfix(IEnumerable<Toil> values, JobDriver_AffectFloor __instance)
         {
             Job job = __instance.job;
-            bool spot = job != null && job.targetB.IsValid && !job.targetB.HasThing && (Slab.At(job.targetA.Cell, __instance.pawn.Map) || ShipDeck.Upper(job.targetA.Cell, __instance.pawn.Map));
+            bool spot = job != null && job.targetB.IsValid && !job.targetB.HasThing && (Slab.At(job.targetA.Cell, __instance.pawn.Map) || ShipDeck.Upper(job.targetA.Cell, __instance.pawn.Map) || TopRemoval.Can(job.targetA.Cell, __instance.pawn.Map));
             bool first = true;
             foreach (Toil t in values)
             {

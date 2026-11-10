@@ -884,4 +884,63 @@ namespace ProjectZ
             return false;
         }
     }
+
+    // Remove upper floor on a bare natural rock top, from above (player report 2026-11-10: a two-storey hall dug inside a
+    // mountain, the rock floor between the storeys could only go from below). The same opening as Remove roof and Mine above
+    // from the level below (Shaft.Open on the cell under the top): shaft mark, roofs, fog, pawns stepping aside, falls, no
+    // materials. Tall-mountain maps only. The work goes through the game's remove-foundation tool, job and work giver
+    // (Slabs.cs): the worker stands next to the cell (SlabPeel.WorkSpot), no peel order. Refused, with the reason: rock or
+    // something built on the top or a stairs exit there (Hole.TopBlocked), rock or a wall right below (Hole.Blocked: Mine
+    // below opens rock from above), a player's floor laid on the top (taken up first with Remove floor). Natural cells the
+    // game marked for stairs or an elevator shaft (StairwellMarks) are left as they were (never worked).
+    public static class TopRemoval
+    {
+        public static int Opened;
+
+        // Null: Remove upper floor opens the top c. Otherwise the refusal's key ("": no reason, not a natural top here).
+        public static string Why(IntVec3 c, Map map)
+        {
+            if (map == null || !Mountains.On(map) || !c.IsValid || !c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || !ProjectZ.HasFloor(c, map) || Slab.At(c, map) || ShipDeck.At(c, map))
+            {
+                return "";
+            }
+            TerrainGrid tg = map.terrainGrid;
+            if (!Floors.IsNatural(tg.TopTerrainAt(c)))
+            {
+                return Floors.IsNatural(tg.UnderTerrainAt(c)) ? "PZ_RemoveLaidFloorFirst" : "";
+            }
+            if (StairwellFloor.IsStairsExit(c, map))
+            {
+                return "PZ_StairsLandHere";
+            }
+            string top = Hole.TopBlocked(c, map);
+            if (top != null)
+            {
+                return top == "PZ_MineAboveFirst" ? "PZ_MineHereFirst" : "PZ_BuiltHere";
+            }
+            IntVec3 b = FloorRoof.Below(c, map);
+            Building be = b.IsValid && b.InBounds(map) ? b.GetEdifice(map) : null;
+            if (be != null && be.def.building != null && be.def.building.isNaturalRock)
+            {
+                return "PZ_RockBelowMineBelow";
+            }
+            if (be != null && be.def.passability == Traversability.Impassable)
+            {
+                return "PZ_BuiltBelow";
+            }
+            if (!b.IsValid || Hole.Blocked(b, map) != null || (map.GetComponent<StairwellMarks>()?.cells.Contains(c) ?? false))
+            {
+                return "";
+            }
+            return null;
+        }
+
+        public static bool Can(IntVec3 c, Map map) => Why(c, map) == null;
+
+        public static void Open(IntVec3 c, Map map, Thing cause)
+        {
+            Opened++;
+            Shaft.Open(FloorRoof.Below(c, map), map, cause);
+        }
+    }
 }

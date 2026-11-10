@@ -126,6 +126,7 @@ namespace ProjectZ
         }
 
         // (Taking a floor away stays per kind where it is: slabs Slab.Remove (Slab.At is slab-only), decks as vanilla
-        // substructure; natural rock has no way yet ("dig down", mountains phase 3).)
+        // substructure; a bare natural top opens as a shaft: Remove roof or Mine above from below, Remove upper floor from
+        // above (TopRemoval, MineUp.cs).)
     }
 }
