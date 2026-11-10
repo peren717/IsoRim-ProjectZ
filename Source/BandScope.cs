@@ -363,6 +363,63 @@ namespace ProjectZ
             }
             FinalSay.Bool(__state, ref __result);
         }
+
+        // How far over the ground the range reaches on floor k from a mechanitor on floor ks (negative: out of reach).
+        public static float HorizontalReach(int ks, int k)
+        {
+            float v = Range3D.Rise(ks, k);
+            float s = RangeSquared - v * v;
+            return s <= 0f ? -1f : Mathf.Sqrt(s);
+        }
+    }
+
+    // The mechanitor's command range drawn between floors, in IsoRim's 3D view (like the weapon range preview,
+    // RangePreview.Rings): the game draws the ring round the mechanitor (Pawn_MechanitorTracker.DrawCommandRadius, white,
+    // its cells CanCommandTo) while one of its drafted mechs is selected; ProjectZ adds the ring on the ground and on the
+    // viewed floor, the cross-section of the 3D range there, its cells exactly those CanCommandTo takes (the same rule,
+    // MechanitorRange_3D_Patch). The mechanitor's own floor keeps the game's ring. Drawn from the selected mech's
+    // selection overlay, not from the mechanitor's own drawing: that one does not run while its floor is hidden (a floor
+    // above the viewed one). Also the faint see-through range shell (RangeShell, the weapon preview's look) in the game's
+    // white: a sphere of the command range round the mechanitor's floor, cut at the ground; at each floor's height its
+    // cross-section is that floor's ring (HorizontalReach).
+    // Without the 3D view, without IsoRim or on a map without floors: the game's ring only.
+    [HarmonyPatch(typeof(Pawn), nameof(Pawn.DrawExtraSelectionOverlays))]
+    public static class MechanitorRange_Preview_Patch
+    {
+        public static int Drawn;   // (tests) rings added
+        public static int Shells;   // (tests) shells drawn
+
+        public static void Postfix(Pawn __instance)
+        {
+            if (!ModsConfig.BiotechActive || VoidRule.Off || !__instance.Drafted || !__instance.IsColonyMech)
+            {
+                return;
+            }
+            Pawn m = __instance.GetOverseer();
+            Map map = Find.CurrentMap;
+            Pawn_MechanitorTracker tracker = m?.mechanitor;
+            if (tracker == null || !m.Spawned || m.Map != map || !RangePreview.View3D(map))
+            {
+                return;
+            }
+            int ks = ProjectZ.FloorOf(m.Position, map);
+            IntVec3 g = ProjectZ.GroundCellOf(m.Position, map);
+            // once a frame per mechanitor (two of its mechs selected)
+            if (ks < 0 || !g.IsValid || !RangePreview.FirstThisFrame(m, MechanitorRange_3D_Patch.RangeSquared))
+            {
+                return;
+            }
+            try
+            {
+                Drawn += RangePreview.Rings(g, ks, k => MechanitorRange_3D_Patch.HorizontalReach(ks, k), Color.white, c => tracker.CanCommandTo(c), map);
+                RangeShell.Draw(new Vector3(g.x + 0.5f, ks * Range3D.Storey, g.z + 0.5f), Mathf.Sqrt(MechanitorRange_3D_Patch.RangeSquared), 0f, sphere: true, white: true);
+                Shells++;
+            }
+            catch (Exception e)
+            {
+                Log.ErrorOnce("[ProjectZ] Drawing the mechanitor's command range failed: " + e, 61190322);
+            }
+        }
     }
 }
 

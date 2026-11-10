@@ -28,8 +28,9 @@ namespace ProjectZ.Combat
 
         // centre: the muzzle in true space (x, height in cells, z) over the ground cell; muzzle: its height over the floor.
         // sphere: a plain sphere of radius range instead of the range rule (no downward bonus; the gravship footprint,
-        // ShipRange), cut at the ground the same way.
-        public static void Draw(Vector3 centre, float range, float muzzle, bool sphere = false)
+        // ShipRange; the mechanitor's command range), cut at the ground the same way. white: the game's white instead of
+        // ShellColor (the mechanitor's command range, drawn white by the game).
+        public static void Draw(Vector3 centre, float range, float muzzle, bool sphere = false, bool white = false)
         {
             Material mat = IsoRimBridge.ShellMaterial();
             if (mat == null)
@@ -41,11 +42,11 @@ namespace ProjectZ.Combat
             int pitchBin = Mathf.RoundToInt(Mathf.Asin(Mathf.Clamp(view.y, -1f, 1f)) * Mathf.Rad2Deg / 2f);
             long key = ((long)Mathf.RoundToInt(range * 10f) << 40) ^ ((long)Mathf.RoundToInt(centre.y * 20f) << 24)
                 ^ ((long)(yawBin & 0xff) << 8) ^ (long)(pitchBin & 0xff) ^ ((long)Mathf.RoundToInt(Range3D.Storey * 100f) << 52)
-                ^ (sphere ? 1L << 62 : 0L);
+                ^ (sphere ? 1L << 62 : 0L) ^ (white ? 1L << 61 : 0L);
             Sweep();
             if (!meshes.TryGetValue(key, out Entry e))
             {
-                e = new Entry { mesh = Build(range, centre.y, view, sphere) };
+                e = new Entry { mesh = Build(range, centre.y, view, sphere, white) };
                 meshes[key] = e;
             }
             e.lastFrame = Time.frameCount;
@@ -102,7 +103,7 @@ namespace ProjectZ.Combat
             return d * Radius(range, d.y, sphere);
         }
 
-        public static Mesh Build(float range, float h0, Vector3 view, bool sphere = false)
+        public static Mesh Build(float range, float h0, Vector3 view, bool sphere = false, bool white = false)
         {
             // The polar angle where the shell meets the ground (height falls steadily past the side).
             float lo = Mathf.PI * 0.5f, hi = Mathf.PI;
@@ -127,7 +128,7 @@ namespace ProjectZ.Combat
             List<Vector3> verts = new List<Vector3>((Lat + 1) * (Lon + 1));
             List<Color32> cols = new List<Color32>(verts.Capacity);
             List<int> tris = new List<int>(Lat * Lon * 6);
-            Color c0 = RangePreview.ShellColor;
+            Color c0 = white ? Color.white : RangePreview.ShellColor;
             const float eps = 0.002f;
             for (int r = 0; r <= Lat; r++)
             {

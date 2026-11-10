@@ -81,6 +81,9 @@ namespace ProjectZ.Dev
     //                                   billradius: a bill's ingredient radius in 3D (fetching upstairs and down, Unlimited
     //                                   on level 4, outfit stands, one-floor parity, timing, ring shots; TestBillRadius),
     //                                   -projectzfloors=5 -projectzmapsize=250 -projectzseed=7 (-projectzfloors=1: no floors)
+    //                                   mechrange: the mechanitor's command range drawn between floors in the 3D view (the
+    //                                   drawn cells against CanCommandTo, real go-here orders, flat view unchanged; shots;
+    //                                   TestMechRange), -projectzfloors=3 -projectzmapsize=120 -projectzseed=7
     //                                   parts: the combat part switch (Api 6; -projectztestkeep[=A,B], -projectztestrelease=A,B;
     //                                   run with and without Combat Extended); api6: the Api 6 3D space queries on a two-floor
     //                                   fixture, -projectzfloors=3 -projectzseed=N (TestApi6)
@@ -850,6 +853,11 @@ namespace ProjectZ.Dev
                 StepStairs4(map);
                 return;
             }
+            if (stage.StartsWith("mr_"))
+            {
+                StepMechRange(map);
+                return;
+            }
             if (stage.StartsWith("br_"))
             {
                 StepBillRadius(map);
@@ -1378,6 +1386,10 @@ namespace ProjectZ.Dev
                     else if (mode == "stairs4")
                     {
                         stage = "s4_setup";
+                    }
+                    else if (mode == "mechrange")
+                    {
+                        stage = "mr_setup";
                     }
                     else if (mode == "billradius")
                     {

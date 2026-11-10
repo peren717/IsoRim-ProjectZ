@@ -15,6 +15,7 @@ namespace ProjectZ.Combat
     //     the +1 per floor bonus), cut at the ground, brighter toward its outline (Fresnel), drawn after the light
     //     overlay and depth-tested, so walls in front hide it and it never darkens at night.
     // Without the 3D view (or without IsoRim) nothing is added: the game's ring only.
+    // The mechanitor's command range gets the same rings and a white shell (Rings, RangeShell; MechanitorRange_Preview_Patch).
     public static class RangePreview
     {
         // Colour of the shell (its alpha comes from the Fresnel term) and of the added rings.
@@ -31,7 +32,7 @@ namespace ProjectZ.Combat
         {
             Map map = Find.CurrentMap;
             if (!CombatGate.On(CombatPart.RangePreview) || caster == null || map == null || caster.MapHeld != map || !at.IsValid || range <= 1.5f || range > MaxRange
-                || !IsoRimBridge.Present || !IsoRimBridge.View3DOn || ProjectZ.Annex(map) == null)
+                || !View3D(map))
             {
                 return;
             }
@@ -42,23 +43,13 @@ namespace ProjectZ.Combat
                 return;
             }
             // once a frame per shooter and range (the gizmo and the targeter can both ask)
-            if (drawnFrame != Time.frameCount)
-            {
-                drawnFrame = Time.frameCount;
-                drawnThisFrame.Clear();
-            }
-            if (!drawnThisFrame.Add(((long)caster.thingIDNumber << 20) ^ Mathf.RoundToInt(range * 100f)))
+            if (!FirstThisFrame(caster, range))
             {
                 return;
             }
             try
             {
-                int view = FloorView.Current;
-                Ring(g, ks, 0, range, map);
-                if (view != 0)
-                {
-                    Ring(g, ks, view, range, map);
-                }
+                Rings(g, ks, k => Range3D.HorizontalReach(range, ks, k), Color.white, null, map);
                 float muzzle = IsoRimBridge.MuzzleHeight(caster);
                 RangeShell.Draw(new Vector3(g.x + 0.5f, ks * Range3D.Storey + muzzle, g.z + 0.5f), range, muzzle);
             }
@@ -68,22 +59,54 @@ namespace ProjectZ.Combat
             }
         }
 
-        private static void Ring(IntVec3 g, int ks, int k, float range, Map map)
+        // The previews are added only in IsoRim's 3D view of a map with floors.
+        public static bool View3D(Map map) => map != null && IsoRimBridge.Present && IsoRimBridge.View3DOn && ProjectZ.Annex(map) != null;
+
+        // Once a frame per caster and range.
+        public static bool FirstThisFrame(Thing caster, float range)
+        {
+            if (drawnFrame != Time.frameCount)
+            {
+                drawnFrame = Time.frameCount;
+                drawnThisFrame.Clear();
+            }
+            return drawnThisFrame.Add(((long)caster.thingIDNumber << 20) ^ Mathf.RoundToInt(range * 100f));
+        }
+
+        // The cross-section rings round ground cell g of a range from floor ks: on the ground and on the viewed floor, the
+        // floor ks itself keeping the game's ring. reach(k): how far over the ground the range reaches on floor k (below
+        // 1: not drawn); predicate (optional): the cells inside, exactly (the ring then follows the rule cell by cell).
+        // Returns the rings drawn.
+        public static int Rings(IntVec3 g, int ks, Func<int, float> reach, Color color, Func<IntVec3, bool> predicate, Map map)
+        {
+            int view = FloorView.Current;
+            int n = Ring(g, ks, 0, reach, color, predicate, map);
+            if (view != 0)
+            {
+                n += Ring(g, ks, view, reach, color, predicate, map);
+            }
+            return n;
+        }
+
+        private static int Ring(IntVec3 g, int ks, int k, Func<int, float> reach, Color color, Func<IntVec3, bool> predicate, Map map)
         {
             if (k == ks)
             {
-                return;   // the game's own ring
+                return 0;   // the game's own ring
             }
-            float r = Range3D.HorizontalReach(range, ks, k);
+            float r = reach(k);
             if (r < 1f)
             {
-                return;
+                return 0;
             }
             IntVec3 c = ProjectZ.CellOnFloor(g, k, map);
-            if (c.IsValid)
+            if (!c.IsValid)
             {
-                GenDraw.DrawRadiusRing(c, Mathf.Min(r, GenRadial.MaxRadialPatternRadius - 0.5f), Color.white);
+                return 0;
             }
+            // (with a predicate the radius is a bound only: a cell over, so no cell the rule takes is left out)
+            GenDraw.DrawRadiusRing(c, Mathf.Min(predicate == null ? r : r + 1f, GenRadial.MaxRadialPatternRadius - 0.5f), color, predicate);
+            return 1;
         }
     }
 
