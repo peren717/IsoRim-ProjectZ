@@ -6,10 +6,15 @@ using Verse;
 
 namespace ProjectZ.Patches
 {
-    // Grids made from map.Size while the map was shrunk for generation (areas from AddStartingAreas, lazily made
-    // scratch grids such as FloodFiller.parentGrid ...) have only the ground rows. After the size is restored they are
-    // resized to the full map, keeping their ground contents (indices are unchanged because the width is unchanged).
-    // Searched: the map's fields, the fields of those objects (two levels), areas, zones, plans and map components.
+    // Per-cell data made from map.Size while the map was shrunk for generation has only the ground rows. After the size is
+    // restored it is resized to the full map, keeping its ground contents (indices are unchanged because the width is
+    // unchanged). Searched: the fields of the map, of the objects in the map's fields, and of every area, zone, plan and map
+    // component (two levels). Not searched: anything nested deeper or held in a list, e.g. the grids of VEF's pipe nets
+    // (PipeNetManager.pipeNets).
+    //   - Plain per-cell arrays (TileMutatorWorker_MixedBiome's biome grid): resized here (DebugLog, its normal job).
+    //   - BoolGrid / ByteGrid / IntGrid / CellGrid: made at the full size already (MapGenPatches Grid_ClearAndResizeTo_Patch).
+    //     This is only the backstop, within the reach above: every grid it still resizes is a warning (once per field), a
+    //     regression to look at.
     internal static class GridFixer
     {
         private const BindingFlags Inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -72,7 +77,9 @@ namespace ProjectZ.Patches
                         if (v != null && TryFix(v, map, groundCells))
                         {
                             fixedCount++;
-                            ProjectZ.DebugLog($"resized {t.Name}.{f.Name} ({v.GetType().Name}) to the full map");
+                            // (a warning in every player's log: a grid that slipped past Grid_ClearAndResizeTo_Patch is a regression)
+                            string field = $"{t.FullName}.{f.Name}";
+                            Log.WarningOnce($"[ProjectZ] GridFixer backstop: grid {field} ({v.GetType().Name}) was made at the ground size during generation, resized to the full map", Gen.HashCombineInt(field.GetHashCode(), 0x5A6F));
                         }
                         // Plain per-cell arrays indexed by cellIndices (z-major, e.g. MixedBiomeMapComponent.biomeGrid):
                         // the ground part is a prefix of the full array.

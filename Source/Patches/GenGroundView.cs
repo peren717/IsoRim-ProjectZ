@@ -36,7 +36,17 @@ namespace ProjectZ.Patches
     //   PathFinder, PathFinderMapData,         run inside the full-size window (MapGenPatches BeginFull/EndFull). Handled.
     //   UsedRectPathGridCustomizer
     //   FloodFiller                            indices only for its visited list; neighbours checked by InBounds (map.Size). Safe.
-    //   MapGenFloatGrid, grid constructors     allocation by NumGridCells only, no walk. Safe.
+    //   MapGenFloatGrid, map component grids   allocation by NumGridCells only, no walk. Safe.
+    //   BoolGrid, ByteGrid, IntGrid, CellGrid  sized by map.Size in ClearAndResizeTo(Map) (their Map constructors and every
+    //     made or resized from the map        resize by a map): run inside the full-size window (MapGenPatches
+    //                                          Grid_ClearAndResizeTo_Patch), so a grid made from the shrunk map has the full
+    //                                          size: areas (AddStartingAreas), zones, plans, genStep scratch grids (Asteroid,
+    //                                          RocksFromGrid, Caves, LargestAreaFinder), FloodFiller.parentGrid, other mods'
+    //                                          grids (VEF PipeNet.networkGrid from a gravship start's pipes). Indexed by the
+    //                                          same stride, so ground cells read the same. Handled. GridFixer (FinalizeInit) is
+    //                                          only a backstop for grids in the fields of the map, of its fields' objects and
+    //                                          of areas, zones, plans and map components; it does not reach grids nested
+    //                                          deeper or in lists (VEF's pipe nets). It warns for every grid it still resizes.
     //   CellFinder random cells / edges        CellFinderPatches (ground only). Handled.
     public static class GenGroundView
     {

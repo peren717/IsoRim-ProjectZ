@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Threading;
 using HarmonyLib;
 using RimWorld.Planet;
 using Verse.AI;
@@ -26,6 +28,7 @@ namespace ProjectZ.Patches
             public bool mountains;     // tall mountains (Mountains.cs), filled in the FinalizeInit prefix
             public bool keepUpper;     // a plan's keepUpperContent: what generation put on the annex stays (no second fill)
             public int fullDepth;      // how many full-size windows are open while shrunk (BeginFull, EndFull)
+            public int thread;         // the generating thread (GenerateMap prefix): the only one that opens or ends windows
             public IntVec3 FullSize => new IntVec3(groundSize.x, groundSize.y, floors * stride);
         }
 
@@ -35,10 +38,13 @@ namespace ProjectZ.Patches
         // nest (a pathfinder call inside an addon's window must not shrink the map under it). False: the map isn't being
         // generated shrunk, there is nothing to end. Ending is always safe: after the size was restored (FinalizeInit, the
         // GenerateMap finalizer), or for another map, it does nothing.
+        // Only the generating thread opens and ends windows (fullDepth and map.info.Size are not synchronised). Worker threads
+        // (Parallel.ForEach in PathFinderMapData.GatherData inside a FindPathNow window) get false: they run inside the
+        // generating thread's window and see the full size already.
         internal static bool BeginFull(Map map)
         {
             Pending p = pending;
-            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map))
+            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map) || p.thread != Thread.CurrentThread.ManagedThreadId)
             {
                 return false;
             }
@@ -50,7 +56,7 @@ namespace ProjectZ.Patches
         internal static void EndFull(Map map)
         {
             Pending p = pending;
-            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map) || p.fullDepth <= 0)
+            if (p == null || !p.shrunk || map == null || !ReferenceEquals(p.map, map) || p.fullDepth <= 0 || p.thread != Thread.CurrentThread.ManagedThreadId)
             {
                 return;
             }
@@ -144,6 +150,7 @@ namespace ProjectZ.Patches
                 floors = floors,
                 mountains = plan == null && ProjectZ.TallMountainsForNewMaps,   // (a plan's map: its own layout, no rock rising through it)
                 keepUpper = plan != null && plan.Value.keepUpperContent,
+                thread = Thread.CurrentThread.ManagedThreadId,
             };
             ProjectZ.DebugLog($"generating {mapGenerator?.defName} map: ground {mapSize.x}x{mapSize.z}, stride {stride}, floors {floors} -> {mapSize.x}x{floors * stride}");
             mapSize = new IntVec3(mapSize.x, mapSize.y, floors * stride);
@@ -210,18 +217,52 @@ namespace ProjectZ.Patches
         }
     }
 
-    // Areas made while the map is shrunk (AddStartingAreas, genSteps) get full-size grids at once.
-    [HarmonyPatch(typeof(Area), MethodType.Constructor, new[] { typeof(AreaManager) })]
-    public static class Area_Ctor_Patch
+    // A grid made from a shrunk map is made at the full size. The game's cell grids size themselves from map.Size in
+    // ClearAndResizeTo(Map): their Map constructors and every resize by a map go through it. It runs inside the full-size
+    // window, like the pathfinder above, so a grid made during generation (areas from AddStartingAreas, zones, a genStep's
+    // scratch grid, another mod's grid such as VEF's PipeNet.networkGrid when a gravship start spawns its pipes) matches
+    // the map's real grids. The game's own body sizes the grid. Outside generation and on maps without floors BeginFull
+    // is false and nothing changes. GridFixer (FinalizeInit) stays as the backstop.
+    [HarmonyPatch]
+    public static class Grid_ClearAndResizeTo_Patch
     {
-        private static readonly AccessTools.FieldRef<Area, BoolGrid> GridRef = AccessTools.FieldRefAccess<Area, BoolGrid>("innerGrid");
+        private static readonly Type[] GridTypes = { typeof(BoolGrid), typeof(ByteGrid), typeof(IntGrid), typeof(CellGrid) };
 
-        public static void Postfix(Area __instance, AreaManager areaManager)
+        private static IEnumerable<MethodBase> TargetMethods()
         {
-            AnnexGen.Pending p = AnnexGen.pending;
-            if (p != null && p.shrunk && ReferenceEquals(p.map, areaManager?.map))
+            List<MethodBase> found = new List<MethodBase>();
+            List<string> missing = new List<string>();
+            foreach (Type grid in GridTypes)
             {
-                GridRef(__instance)?.ClearAndResizeTo(p.groundSize.x, p.floors * p.stride);
+                MethodInfo m = AccessTools.DeclaredMethod(grid, nameof(BoolGrid.ClearAndResizeTo), new[] { typeof(Map) });
+                if (m != null)
+                {
+                    found.Add(m);
+                }
+                else
+                {
+                    missing.Add(grid.Name);
+                }
+            }
+            if (missing.Count > 0)
+            {
+                // (that grid type no longer sizes itself through ClearAndResizeTo(Map): grids of it made during generation
+                // keep the ground size, only GridFixer's backstop is left for them)
+                Log.Error($"[ProjectZ] {nameof(Grid_ClearAndResizeTo_Patch)}: ClearAndResizeTo(Map) not found on {string.Join(", ", missing)}; {found.Count} of {GridTypes.Length} grid types patched.");
+            }
+            return found;
+        }
+
+        public static void Prefix(Map __0, out bool __state)
+        {
+            __state = AnnexGen.BeginFull(__0);
+        }
+
+        public static void Finalizer(Map __0, bool __state)
+        {
+            if (__state)
+            {
+                AnnexGen.EndFull(__0);
             }
         }
     }
