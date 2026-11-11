@@ -14,48 +14,14 @@ namespace ProjectZ.Combat
     // The rest (active, hostility, hit points, EMP, effects) is the game's: when the 3D path enters, the game's check
     // is run with the two positions placed just outside and inside its circle on the shield's band, in the direction
     // of the 3D entry point (the flash shows there).
+    // The measure itself (between floors or not, overhead or direct, the points in 3D, the cut under the dome's floor) is
+    // Intercept3D's, the one ProjectZ interceptors share (Api 12, InterceptorDistance); this patch adds the path crossing.
     [HarmonyPatch(typeof(CompProjectileInterceptor), nameof(CompProjectileInterceptor.CheckIntercept))]
     [CombatPartOf(CombatPart.Shields)]
     public static class ProjectileInterceptor_3D_Patch
     {
         public static int Checked;   // counters (tests)
         public static int Entered;
-
-        private static readonly AccessTools.FieldRef<Projectile, Vector3> originRef = AccessTools.FieldRefAccess<Projectile, Vector3>("origin");
-        private static readonly AccessTools.FieldRef<Projectile, Vector3> destRef = AccessTools.FieldRefAccess<Projectile, Vector3>("destination");
-
-        private static float Scale => Range3D.Storey / Heights.Storey;
-
-        // The level of a raw position's band (its void rows counted with it), within the map's levels.
-        private static int BandOf(Vector3 p, AnnexMapComponent an)
-        {
-            int z = Mathf.FloorToInt(p.z);
-            if (z < an.groundZ)
-            {
-                return 0;
-            }
-            return Mathf.Clamp(Levels.LevelOfRowLoose(an.map, z), an.MinLevel, an.MaxLevel);
-        }
-
-        // A raw position on level k to virtual 3D (y in cells).
-        private static Vector3 V(Vector3 p, int k, float h, AnnexMapComponent an)
-        {
-            return new Vector3(p.x, h * Scale, p.z - Levels.Shift(an.map, k));
-        }
-
-        private static float HeightAt(Projectile p, Vector3 pos, int k)
-        {
-            Flights.Flight f = Flights.Of(p);
-            if (f == null)
-            {
-                return k * Heights.Storey + (Heights.Eye + Heights.Middle) / 2f;
-            }
-            Vector3 o = originRef(p);
-            Vector3 d = destRef(p);
-            float len = new Vector2(d.x - o.x, d.z - o.z).magnitude;
-            float t = len < 0.01f ? 1f : Mathf.Clamp01(new Vector2(pos.x - o.x, pos.z - o.z).magnitude / len);
-            return Mathf.Lerp(f.hs, f.ht, t);
-        }
 
         // Where the segment p0 -> p1 crosses the sphere (s, r): entering from outside (or leaving, if outgoing counts).
         private static bool Crosses(Vector3 p0, Vector3 p1, Vector3 s, float r, bool outgoing, out Vector3 at)
@@ -110,31 +76,23 @@ namespace ProjectZ.Combat
         private static bool Check(CompProjectileInterceptor __instance, Projectile projectile, ref Vector3 lastExactPos, ref Vector3 newExactPos, ref bool __result, ref byte __state)
         {
             Map map = __instance.parent?.Map;
-            AnnexMapComponent an = VoidRule.Off ? null : ProjectZ.Annex(map);
+            AnnexMapComponent an = Intercept3D.Space(map);
             if (an == null || projectile == null)
             {
                 return true;
             }
             IntVec3 sc = __instance.parent.Position;
-            int ks = ProjectZ.FloorOf(sc, map);
-            int kp = BandOf(newExactPos, an);
-            bool cross = Flights.cross.TryGetValue(projectile, out _);
-            if (ks < 0 || !cross && kp == ks)
+            if (!Intercept3D.Between(projectile, newExactPos, sc, map, an, out int ks))
             {
                 return true;   // the game's own check on one band
             }
             Checked++;
             CompProperties_ProjectileInterceptor props = __instance.Props;
             float r = props.radius;
-            bool overhead = Lobbed.Of(projectile);   // a shell, or a shot declared lobbed
-            Vector3 s = new Vector3(sc.x + 0.5f, ks * Range3D.Storey, sc.z + 0.5f - Levels.Shift(map, ks));
-            int k0 = BandOf(lastExactPos, an);
-            Vector3 p0 = V(lastExactPos, k0, HeightAt(projectile, lastExactPos, k0), an);
-            Vector3 p1 = V(newExactPos, kp, HeightAt(projectile, newExactPos, kp), an);
-            if (overhead)
-            {
-                s.y = p0.y = p1.y = 0f;
-            }
+            bool overhead = Intercept3D.Overhead(projectile);   // a shell, or a shot declared lobbed
+            Vector3 s = Intercept3D.Centre(sc, ks, map, overhead);
+            Vector3 p0 = Intercept3D.Point(projectile, lastExactPos, an, overhead);
+            Vector3 p1 = Intercept3D.Point(projectile, newExactPos, an, overhead);
             __result = false;
             __state = FinalSay.No;
             if ((p1 - s).magnitude > r + projectile.def.projectile.SpeedTilesPerTick + 0.1f)
@@ -145,7 +103,7 @@ namespace ProjectZ.Combat
             {
                 return false;
             }
-            if (!overhead && at.y < s.y - 0.05f)
+            if (Intercept3D.UnderFloor(at, s, overhead))
             {
                 return false;   // under the dome's floor
             }

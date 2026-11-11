@@ -28,10 +28,11 @@ namespace ProjectZ
         //     TryBeginFullMapSize, EndFullMapSize);
         // 10: the 3D scope, see Docs/Api.md (Scope3D, Scope3DMethod, InScope3D, Scope3DHandle) and ProjectZ's layout values
         //     (AimHeights, EyeHeight, FloorStride, OpenAirTerrain));
-        // 11: the layout of new maps and the ship deck, see Docs/Api.md (StrideFor, MaxFloors, ShipDeckTerrain)).
+        // 11: the layout of new maps and the ship deck, see Docs/Api.md (StrideFor, MaxFloors, ShipDeckTerrain);
+        // 12: the interceptor distance between floors, see Docs/Api.md (InterceptorDistance, InterceptorAimPoint)).
         // A member of version N is missing on an older ProjectZ: check Version >= N first, and call it from a method of its
         // own (a missing member fails the whole method that names it, when that method is first run).
-        public static int Version => 11;
+        public static int Version => 12;
 
         // ---- floors (2)
         // Floors are numbered from the ground: 0 = the ground, 1 = the floor above it, and so on. On a map without floors
@@ -576,6 +577,28 @@ namespace ProjectZ
 
         // The terrain of the ship upper deck (ProjectZ's gravship deck on an upper floor); null without Odyssey.
         public static TerrainDef ShipDeckTerrain => PZDefOf.PZ_ShipDeck;
+
+        // ---- interceptors between floors (12)
+
+        // How far an incoming thing (a projectile, a skyfaller) at map position `position` (its exact or drawn position) is
+        // from an interceptor centred on cell `centre`, as ProjectZ's own interceptors (shield bubbles) measure it between
+        // floors. True with distance in cells when they are between floors: overhead things (a lobbed projectile, IsLobbed;
+        // anything not a projectile, as a skyfaller or drop pod, comes down from the sky) on the ground circle, heights
+        // ignored, whatever floor they come down on; direct projectiles in 3D (StoreyHeight per floor, a projectile between
+        // floors at its flight height), and PositiveInfinity under the centre's floor (never inside). False (distance 0) on
+        // one floor, on a map without floors and with the void rule off: the interceptor's own (the game's) measure applies.
+        // A thing that is not a projectile is on the floor of the cell it comes down on (its Position), wherever it is drawn.
+        // Docs/Api.md, "Interceptors between floors".
+        public static bool InterceptorDistance(Thing incoming, UnityEngine.Vector3 position, IntVec3 centre, Map map, out float distance)
+            => Intercept3D.TryDistance(incoming, position, centre, map, out distance);
+
+        // Where an interceptor (shooter) turns to face an incoming thing: the thing's drawn position (DrawPos) in the shooter's
+        // own floor frame, so the flat angle from shooter.DrawPos to it (Vector3.AngleFlat of the difference) is the true
+        // direction, by the same floor rule as InterceptorDistance (a thing that is not a projectile is on the floor of the
+        // cell it comes down on, wherever it is drawn). On the shooter's floor, without floors and with the void rule off:
+        // the DrawPos itself. Unlike AimPoint (Api 4: a target cell's centre) it follows the thing as it is drawn.
+        public static UnityEngine.Vector3 InterceptorAimPoint(Thing shooter, Thing incoming)
+            => incoming == null ? UnityEngine.Vector3.zero : Intercept3D.AimPoint(shooter, incoming, incoming.DrawPos);
 
         private static bool OnGround(IntVec3 g, Map map) => map != null && g.x >= 0 && g.z >= 0 && g.x < map.Size.x && g.z < ProjectZ.GroundRect(map).maxZ + 1;
     }

@@ -3,7 +3,8 @@
 Every public call is documented where it is declared, in [`Source/Api.cs`](../Source/Api.cs). This file holds what
 does not fit there: the combat parts (Api 6) with the inventory of their patches, the rules for the 3D queries,
 other mods' ladders (Api 7), floors and stairs for other mods (Api 8), floor plans per map (Api 9), the 3D scope with
-ProjectZ's layout values (Api 10), and the layout of new maps with the ship deck (Api 11).
+ProjectZ's layout values (Api 10), the layout of new maps with the ship deck (Api 11), and interceptors between floors
+(Api 12).
 
 ## Version checks
 
@@ -392,3 +393,37 @@ them from a `NoInlining` method of their own (see Version checks); on an older P
 | `StrideFor(groundRows)` | the `FloorStride` ProjectZ gives a new map whose ground has `groundRows` rows. A map keeps its stride once generated: for an existing map read `FloorStride(map)` |
 | `MaxFloors` | the most floors a world or a map plan can have, the ground counted (a `MapFloorPlan` above it is ignored). A property read at run time, so an addon never compiles the number in |
 | `ShipDeckTerrain` | the terrain of the ship upper deck (`PZ_ShipDeck`); null without Odyssey. Other foundations registered with `RegisterDeckTerrain` are not it |
+
+## Interceptors between floors (Api 12)
+
+`InterceptorDistance(incoming, position, centre, map, out distance)` is the one measure ProjectZ's interceptors use between
+floors: how far an incoming thing is from an interceptor's centre. ProjectZ's shield bubbles use it (their dome check,
+`Shields3D`, with the path crossing on top); an addon whose mod has an interceptor of its own (a point defence that
+measures how far a shell is from it) uses it so that interceptor stops things between floors by the same rule. The code
+is `Source/Combat/Intercept3D.cs`.
+
+| Case | Answer |
+|---|---|
+| one floor (the thing's row band is the centre's floor, and it is not a projectile flying between floors; for a thing that is not a projectile, the band of the cell it comes down on, its `Position`, not of the row it is drawn in), no floors, the void rule off, a centre in a void row | `false`, `distance` 0: keep the interceptor's own measure (the game's, or the mod's own) |
+| overhead: a lobbed projectile (`IsLobbed`), or anything that is not a projectile (a skyfaller, a drop pod: it comes down from the sky) | `true`, the ground circle: both points moved down onto the ground rows (void rows counted with the band below), heights ignored, whatever floor it comes down on |
+| direct: any other projectile | `true`, the 3D distance (x, z over the ground rows; height `StoreyHeight` per floor, a projectile between floors at its flight height, others at the middle of their floor) |
+| direct, under the centre's floor | `true`, `float.PositiveInfinity`: an interceptor covers the space over its floor |
+
+`position` is the thing's map position as the interceptor reads it (its exact position, or its drawn position). The answer
+is in cells, to compare with the interceptor's radius. Check `Api.Version >= 12` first and call it from a `NoInlining`
+method of its own; on an older ProjectZ keep the interceptor's own measure.
+
+`InterceptorAimPoint(shooter, incoming)` is where that interceptor turns to face the thing: its drawn position (`DrawPos`)
+in the shooter's own floor frame, by the same floor rule (a thing that is not a projectile is on the floor of the cell it
+comes down on, wherever it is drawn), so `(point - shooter.DrawPos).AngleFlat()` is the true direction. On the shooter's
+floor, without floors and with the void rule off it is the `DrawPos` itself. Unlike `AimPoint` (Api 4, a target cell's
+centre) it follows the thing as it is drawn: a falling drop pod is drawn far north of its cell.
+
+```csharp
+[MethodImpl(MethodImplOptions.NoInlining)]
+private static bool Within(Thing shell, IntVec3 centre, float radius, Map map, out bool between)
+{
+    between = ProjectZ.Api.InterceptorDistance(shell, shell.DrawPos, centre, map, out float d);
+    return between && d <= radius;
+}
+```
