@@ -97,7 +97,8 @@ namespace ProjectZ.Dev
             return h;
         }
 
-        private static readonly HarmonyLib.AccessTools.FieldRef<Pawn_DraftController, AutoUndrafter> autoUndrafterRef = HarmonyLib.AccessTools.FieldRefAccess<Pawn_DraftController, AutoUndrafter>("autoUndrafter");
+        private static HarmonyLib.AccessTools.FieldRef<Pawn_DraftController, AutoUndrafter> autoUndrafterRefBound;
+        private static HarmonyLib.AccessTools.FieldRef<Pawn_DraftController, AutoUndrafter> autoUndrafterRef => autoUndrafterRefBound ??= HarmonyLib.AccessTools.FieldRefAccess<Pawn_DraftController, AutoUndrafter>("autoUndrafter");   // (bound on first use: nothing for players)
 
         private static void RtWork(Map map, WorkTypeDef w)
         {
@@ -922,7 +923,7 @@ namespace ProjectZ.Dev
                 steel.stackCount = 7;
                 GenPlace.TryPlaceThing(steel, air, map, ThingPlaceMode.Near);
                 IntVec3 steelAt = steel.Spawned ? steel.Position : IntVec3.Invalid;
-                Rand.PushState(4711);
+                Rand.PushState(FixtureSeed($"{mode}_steel"));
                 Pawn animal;
                 try
                 {

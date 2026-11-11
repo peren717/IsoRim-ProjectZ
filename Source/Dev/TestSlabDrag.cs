@@ -132,7 +132,7 @@ namespace ProjectZ.Dev
 
         private static bool StepSlabDrag(Map map)
         {
-            Rand.PushState((int)(StableHash("slabdrag_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("slabdrag_" + stage));
             try
             {
                 return StepSlabDragInner(map);

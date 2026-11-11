@@ -286,8 +286,10 @@ namespace ProjectZ.Dev
     //   the render workers; -projectzfloors=3 -projectzseed=7; TestBeamAim)
     //   -projectzdays=D     in-game days to fast-forward in main mode (default 2)
     //   -projectzmapsize=N  quick-test ground size (default 150)
-    //   -projectzseed=N     a fixed random seed: the same world, tile and colonists every run, and in los3d each check's
-    //                       own random state from N and the check's name
+    //   -isorimseed=N       (IsoRim, Api 72) the run's one seed: the same world, tile and colonists every run, and the
+    //                       fixture seed below; a harness always passes it
+    //   -projectzseed=N     optional: another fixture seed (every stage, run of ticks and check draws from FixtureSeed of
+    //                       its name and this; default the -isorimseed N, else DefaultSeed)
     // Tests drive the real game: incidents through their workers, then real ticks (TickManager.DoSingleTick).
     public static partial class TestRunner
     {
@@ -421,14 +423,11 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            if (GenCommandLine.TryGetCommandLineArg("projectzseed", out string sd) && int.TryParse(sd, out int seed) && seed >= 0)
-            {
-                Seed = seed;
-            }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "outcroptop" || mode == "thickrock" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "mtnslab" || mode == "finders" || mode == "drops" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
-            {
-                h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WallHeightSeedPrefix)));
-            }
+            // (the world, tile and colonists: IsoRim's central seed, -isorimseed; FixtureSeed below)
+            h.Patch(AccessTools.Method(typeof(TickManager), nameof(TickManager.TickManagerUpdate)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GameTicksPrefix)));
+            RandProbeInit(h);
+            h.Patch(AccessTools.Method(typeof(FishShadowComponent), nameof(FishShadowComponent.MapComponentTick)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(VisualTickPrefix)),
+                finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
             if (mode == "shrinkgrid")
             {
                 GxInit(h);
@@ -439,7 +438,10 @@ namespace ProjectZ.Dev
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WorldFloorsSetupPrefix)));
             }
             // Driven from the game loop without a GameComponent (nothing test-only goes into saves).
-            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)));
+            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(FramePrefix)),
+                postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)), finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
+            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.LoadGame)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(LoadPrefix)),
+                finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
@@ -471,9 +473,9 @@ namespace ProjectZ.Dev
             {
                 PatchRadialProbe(h);
             }
-            if (mode.StartsWith("gravity"))
+            if (mode == "bulletpitch")
             {
-                PatchGravityProbe(h);
+                PatchBulletPitch(h);
             }
             if (mode == "explode")
             {
@@ -593,15 +595,250 @@ namespace ProjectZ.Dev
             {
                 MtnTile();
             }
-            if (SeedArg.HasValue || mode == "wallheight" || mode == "debrisstale" || mode == "mtn" || mode == "tallmtn" || mode == "rocktop" || mode == "tallfog" || mode == "minebody" || mode == "xray" || mode == "minetint" || mode == "mineup" || mode == "outcroptop" || mode == "thickrock" || mode == "minedown" || mode == "stepaside" || mode == "mineabove2" || mode == "holefog" || mode == "reachfog" || mode == "mtnslab" || mode == "finders" || mode == "drops" || mode.StartsWith("radial") || mode.StartsWith("gravity"))
+        }
+
+        // ------------------------------------------------------------------ seeds: one source
+        // The quick test's world, tile and colonists (and this postfix's tile pick) come from IsoRim's central seed: a harness
+        // starts the game with -isorimseed=N (IsoRim Api 72), which seeds SetupForQuickTestPlay and the new game, and pauses it
+        // before its first tick. Without it they are random. Everything the runner decides after that draws from fixture
+        // seeds: FixtureSeed(name) mixes the run's fixture seed with the fixture's name. The fixture seed is -projectzseed=N
+        // (an optional override), else the harness seed, else DefaultSeed.
+
+        // The fixture seed of a run without -projectzseed and -isorimseed (the regress seed, tools\regress\config.js).
+        internal const int DefaultSeed = 7;
+
+        // The stride between the random states of successive ticks (or frames) of one seeded run.
+        internal const int SeedStride = 7919;
+
+        // Seeded ticks before a mode's first stage (stage start). A harness quick test is paused before its first tick
+        // (IsoRim, -isorimseed), and some of vanilla's state is only right once the game has ticked: a pawn's drawn position
+        // (PawnTweener.PreDrawPosCalculation resets after a teleport only when lastDrawTick < TicksGame - 1, never at tick 0),
+        // so a shot right after the setup left from where the shooter stood before. One tick: nothing moves yet (more
+        // let the colonists wander and reveal fog before the as-generated checks).
+        private const int StartTicksCount = 1;
+        private static string startNext;
+
+        // The next number the random state would give, read without moving it on (drawn inside a push and pop).
+        private static int RandPeek()
+        {
+            Rand.PushState();
+            try
             {
-                Rand.PopState();   // pushed in WallHeightSeedPrefix: the same world, tile and colonists every run
+                return Rand.Int;
+            }
+            finally
+            {
+                Rand.PopState();
             }
         }
 
-        private static void WallHeightSeedPrefix()
+        // Test only (-projectzseeddebug): a line per stage in log.txt with a hash of the pawns' places, to find where two runs part.
+        private static readonly bool SeedDebug = GenCommandLine.CommandLineArgPassed("projectzseeddebug");
+
+        internal static int? SeedArg => GenCommandLine.TryGetCommandLineArg("projectzseed", out string s) && int.TryParse(s, out int n) ? n : (int?)null;
+
+        private static int? fixtureSeedBase;
+
+        // The run's fixture seed (read once the game runs: the harness seed is IsoRim's).
+        internal static int FixtureSeedBase => fixtureSeedBase ??= Math.Max(0, SeedArg ?? IsoRimBridge.HarnessSeed ?? DefaultSeed);
+
+        // A fixture's random state: the run's fixture seed and the fixture's name.
+        internal static int FixtureSeed(string fixture) => (int)(StableHash(fixture) ^ (uint)FixtureSeedBase);
+
+        // FNV-1a: a string hash that is the same in every process (string.GetHashCode is not).
+        private static uint StableHash(string s)
         {
-            Rand.PushState(SeedArg ?? 717);
+            uint h = 2166136261u;
+            foreach (char c in s)
+            {
+                h ^= c;
+                h *= 16777619u;
+            }
+            return h;
+        }
+
+        // Every stage's code runs under its own random state (Step): this mode and stage's fixture seed, and how often the
+        // stage has run (a stage that waits on a condition runs once a frame). The ticks a stage starts are seeded tick by
+        // tick (StartTicks, DoTicks), and the game's own ticks too (GameTicksPrefix): after the first tick vanilla's frame
+        // drawing still draws from the shared random state, so nothing a test decides may come from it.
+        private static string seededStage;
+        private static int seededStageRuns, tickRuns, gameTicks;
+
+        // The game's own ticks while a test runs (a test unpauses it, TimeSpeed.Normal, for per-frame updates such as the
+        // facing): vanilla ticks as often as real time says, which differs from run to run. Here a frame gets them only when
+        // the runner steps a stage or a Wait this frame (not while its own ticks, a screenshot or a load are pending), the
+        // speed's multiplier of them, each under its own random state. Test only (-projectztest).
+        private static AccessTools.FieldRef<TickManager, int> ticksThisFrameRefBound;
+        private static AccessTools.FieldRef<TickManager, int> ticksThisFrameRef => ticksThisFrameRefBound ??= AccessTools.FieldRefAccess<TickManager, int>("ticksThisFrame");   // (bound on first use: nothing for players)
+
+        private static bool GameTicksPrefix(TickManager __instance)
+        {
+            if (!Active || stage == "done" || Current.ProgramState != ProgramState.Playing)
+            {
+                return true;
+            }
+            ticksThisFrameRef(__instance) = 0;
+            if (__instance.Paused || ticksLeft > 0 || WaitsOnRealTime)
+            {
+                return false;
+            }
+            int n = Mathf.Max(1, Mathf.RoundToInt(__instance.TickRateMultiplier));
+            for (int i = 0; i < n && !__instance.Paused; i++)
+            {
+                Rand.PushState(FixtureSeed(mode + "_gameticks") + gameTicks++ * SeedStride);
+                try
+                {
+                    __instance.DoSingleTick();
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
+                ticksThisFrameRef(__instance)++;
+            }
+            return false;
+        }
+
+        // The game's frame (Game.UpdatePlay: the game's own ticks, every map's and component's once-a-frame update and drawing,
+        // then the runner's step) under its own random state while a test runs, from this mode's fixture seed and the frame's
+        // index: the game's per-frame work (a component's update, the map's drawing) draws from it instead of whatever the
+        // shared random state holds, which the frame drawing outside it moves on by a different amount every run. Only the
+        // frames the runner steps count (WaitsOnRealTime: a frame that waits for a screenshot file or a load keeps the last
+        // index), so the index of a frame is the same every run. Popped in the finalizer.
+        private static int gameFrames;
+
+        private static void FramePrefix(out bool __state)
+        {
+            __state = Active && stage != "done";
+            if (__state)
+            {
+                if (!WaitsOnRealTime)
+                {
+                    gameFrames++;
+                }
+                Rand.PushState(FixtureSeed(mode + "_frame") + gameFrames * SeedStride);
+            }
+        }
+
+        // A frame that only waits on real time: a screenshot being written, a saved game loading, a long event.
+        private static bool WaitsOnRealTime => pendingShot != null || pendingLoad != null || loadFrom != null || LongEventHandler.ShouldWaitForEvent;
+
+        // Vanilla tick work that only makes flecks and is timed by a per-process hash: FishShadowComponent spawns a water
+        // body's fish fleck on GenTicks.IsTickInterval(body.GetHashCode(), ..), and WaterBody's hash includes the object's
+        // own (runtime) hash, different every launch. While a test runs it leaves the random state as it found it (the
+        // flecks still come, at whatever ticks), so the rest of the tick draws the same numbers every run.
+        private static void VisualTickPrefix(out bool __state)
+        {
+            __state = Active && stage != "done";
+            if (__state)
+            {
+                Rand.PushState();
+            }
+        }
+
+        // A saved game loaded while a test runs (Game.LoadGame, in the load's long event) under its own random state: what
+        // the load sets up afresh (post-load inits that draw from the random state) is the same every run.
+        private static int loads;
+
+        private static void LoadPrefix(out bool __state)
+        {
+            __state = Active && stage != "done";
+            if (__state)
+            {
+                Rand.PushState(FixtureSeed(mode + "_load_" + loads++));
+            }
+        }
+
+        private static Exception FrameFinalizer(bool __state, Exception __exception)
+        {
+            if (__state)
+            {
+                Rand.PopState();
+            }
+            return __exception;
+        }
+
+        // ------------------------------------------------------------------ test options
+        // An IsoRim option or a ProjectZ setting a test changes: the value before the first change is kept and put back at
+        // Finish (or by RestoreOption). In memory only.
+        private static readonly Dictionary<string, Action> optionRestores = new Dictionary<string, Action>();
+
+        // An IsoRim option by the name it is saved under (IsoRimBridge.SetOption); nothing without IsoRim.
+        internal static void SetIsoRimOption(string field, object value)
+        {
+            object old = IsoRimBridge.SetOption(field, value);
+            string key = "isorim:" + field;
+            if (old == null && IsoRimBridge.Present)
+            {
+                Result("test option " + field, false, "IsoRim has no option of that name");
+                return;
+            }
+            if (old != null && !optionRestores.ContainsKey(key))
+            {
+                optionRestores[key] = () => IsoRimBridge.SetOption(field, old);
+            }
+        }
+
+        // A ProjectZ setting by its field name (ProjectZSettings).
+        internal static void SetProjectZSetting(string field, object value)
+        {
+            FieldInfo f = AccessTools.Field(typeof(ProjectZSettings), field);
+            if (f == null || ProjectZMod.Settings == null)
+            {
+                Result("test setting " + field, false, "no such ProjectZ setting");
+                return;
+            }
+            string key = "projectz:" + field;
+            if (!optionRestores.ContainsKey(key))
+            {
+                object old = f.GetValue(ProjectZMod.Settings);
+                optionRestores[key] = () => f.SetValue(ProjectZMod.Settings, old);
+            }
+            f.SetValue(ProjectZMod.Settings, value);
+        }
+
+        // Put an IsoRim option back now (the value before the test first changed it).
+        internal static void RestoreIsoRimOption(string field) => RestoreOption("isorim:" + field);
+
+        internal static void RestoreProjectZSetting(string field) => RestoreOption("projectz:" + field);
+
+        private static void RestoreOption(string key)
+        {
+            if (optionRestores.TryGetValue(key, out Action restore))
+            {
+                optionRestores.Remove(key);
+                try
+                {
+                    restore();
+                }
+                catch (Exception e)
+                {
+                    Out($"putting back test option {key} failed: {e.Message}");
+                }
+            }
+        }
+
+        private static void RestoreOptions()
+        {
+            foreach (string key in optionRestores.Keys.ToList())
+            {
+                RestoreOption(key);
+            }
+        }
+
+        // IsoRim's mining x-ray as the x-ray tests and shots expect it: on, with its crosshair (IsoRim's options mineXray and
+        // mineCrosshair, off by default since IsoRim 84a9e8d). Put back at Finish.
+        internal static void XrayOn()
+        {
+            SetIsoRimOption("mineXray", true);
+            SetIsoRimOption("mineCrosshair", true);
+        }
+
+        // The player's x-ray options back right after the shots and checks that need them.
+        internal static void XrayOff()
+        {
+            RestoreIsoRimOption("mineXray");
+            RestoreIsoRimOption("mineCrosshair");
         }
 
         public static void Out(string s)
@@ -680,7 +917,15 @@ namespace ProjectZ.Dev
             {
                 Action act = guiAction;
                 guiAction = null;
-                act();
+                Rand.PushState(FixtureSeed(mode + "_gui_" + stage));
+                try
+                {
+                    act();
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
             }
             if (!Active || pendingLoad == null || Event.current.type != EventType.Repaint)
             {
@@ -726,6 +971,29 @@ namespace ProjectZ.Dev
                 DoTicks(map);
                 return;
             }
+            if (stage != seededStage)
+            {
+                seededStage = stage;
+                seededStageRuns = 0;
+                if (SeedDebug)
+                {
+                    // (-projectzseeddebug: where two runs part, stage by stage)
+                    Out($"SEEDDEBUG {stage} tick {Find.TickManager.TicksGame} pawns {StableHash(string.Join(";", map.mapPawns.AllPawnsSpawned.Select(p => p.ThingID + p.Position).OrderBy(s => s, StringComparer.Ordinal))):x8} things {map.listerThings.AllThings.Count(t => t.def.category != ThingCategory.Mote)} rand {RandPeek():x8}");
+                }
+            }
+            Rand.PushState(FixtureSeed(mode + "_stage_" + stage) + seededStageRuns++ * SeedStride);
+            try
+            {
+                StepStage(map);
+            }
+            finally
+            {
+                Rand.PopState();
+            }
+        }
+
+        private static void StepStage(Map map)
+        {
             if (stage.StartsWith("b_"))
             {
                 StepM1b(map);
@@ -945,7 +1213,7 @@ namespace ProjectZ.Dev
             {
                 // (each stage's own code under a fixed random state: the same finder samples, raids and pods every run)
                 // and its ticks seeded tick by tick
-                Rand.PushState((int)(StableHash("drops_" + stage) ^ (uint)(SeedArg ?? 717)));
+                Rand.PushState(FixtureSeed("drops_" + stage));
                 SeedTicks("drops_ticks_" + stage);
                 try
                 {
@@ -1041,7 +1309,7 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("xd_"))
             {
                 // (reprodrops: each stage under a fixed random state; fires and ticks seeded per run inside)
-                Rand.PushState((int)(StableHash("reprodrops_" + stage) ^ (uint)(SeedArg ?? 717)));
+                Rand.PushState(FixtureSeed("reprodrops_" + stage));
                 try
                 {
                     if (!StepReproDropsScene(map))
@@ -1258,7 +1526,7 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("fg_"))
             {
                 // (each stage's code under a fixed random state, its ticks seeded tick by tick: the same flows every run)
-                Rand.PushState((int)(StableHash("tallfog_" + stage) ^ (uint)(SeedArg ?? 717)));
+                Rand.PushState(FixtureSeed("tallfog_" + stage));
                 SeedTicks("tallfog_ticks_" + stage);
                 try
                 {
@@ -1305,7 +1573,15 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    Wait(30, mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "pathsave" ? "ps_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "outcroptop" ? "ot_setup" : mode == "thickrock" ? (GenCommandLine.CommandLineArgPassed("projectztkold") ? "tk_old_load" : "tk_setup") : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "mineabove2" ? "ma_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode == "mtnslab" ? "ms_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : mode == "shrinkgrid" ? "gx_start" : "gencheck");
+                    Info($"seeds: harness seed {(IsoRimBridge.HarnessSeed.HasValue ? IsoRimBridge.HarnessSeed + " (-isorimseed: world, tile and colonists fixed)" : "none, world random")}; "
+                        + $"fixture seed {FixtureSeedBase} ({(SeedArg.HasValue ? "-projectzseed" : IsoRimBridge.HarnessSeed.HasValue ? "the harness seed" : "DefaultSeed")})");
+                    // (the game has not ticked yet: IsoRim pauses a harness quick test before its first tick; a seeded tick
+                    // first, as a game a player plays has always ticked: StartTicksCount)
+                    startNext = mode == "plain" ? "plain_save" : mode == "save" ? "v_load" : mode == "pathsave" ? "ps_load" : mode == "voidload" ? "vl_load" : mode == "slabold" ? "p_oldload" : mode == "worldfloors" ? "f_start" : mode == "tallmtn" ? "tm_setup" : mode == "rocktop" ? "rt_setup" : mode == "tallfog" ? "fg_setup" : mode == "minebody" ? "mb_setup" : mode == "xray" ? "xr_setup" : mode == "minetint" ? "mk_setup" : mode == "mineup" ? "mu_setup" : mode == "outcroptop" ? "ot_setup" : mode == "thickrock" ? (GenCommandLine.CommandLineArgPassed("projectztkold") ? "tk_old_load" : "tk_setup") : mode == "minedown" ? "md_setup" : mode == "stepaside" ? "sa_setup" : mode == "mineabove2" ? "ma_setup" : mode == "holefog" ? "hf_setup" : mode == "reachfog" ? "rf_setup" : mode == "mtnslab" ? "ms_setup" : mode.StartsWith("radial") ? "rd_start" : mode.StartsWith("gravity") ? "gv_start" : mode == "shrinkgrid" ? "gx_start" : "gencheck";
+                    StartTicks(StartTicksCount, "start_wait");
+                    break;
+                case "start_wait":
+                    Wait(30, startNext);
                     break;
 
                 // ---- plain: a save made "before the addon": no annex, no AnnexMapComponent node
@@ -1806,13 +2082,15 @@ namespace ProjectZ.Dev
         private static int savedTicks;
         private static int ticksAfterLoad;
 
-        // Seeded ticks (opt-in: SeedTicks before StartTicks / TickUntil): every tick of that run under its own random state
-        // (the run's seed + the tick's index), so the game's randomness does not depend on how many ticks a frame takes.
-        private static int? tickSeed, nextTickSeed;
+        // Seeded ticks (every StartTicks / TickUntil; SeedTicks before it names the run's seed): every tick of that run under
+        // its own random state (the run's seed + the tick's index), so the game's randomness does not depend on how many
+        // ticks a frame takes.
+        private static int tickSeed;
+        private static int? nextTickSeed;
 
         private static void SeedTicks(string name)
         {
-            nextTickSeed = (int)(StableHash(name) ^ (uint)Math.Max(0, SeedArg ?? 717));
+            nextTickSeed = FixtureSeed(name);
         }
 
         private static void StartTicks(int n, string next)
@@ -1820,43 +2098,46 @@ namespace ProjectZ.Dev
             ticksLeft = n;
             ticksTotal = n;
             stage = next;
-            tickSeed = nextTickSeed;
+            // (every run of ticks seeded tick by tick: by SeedTicks' name, else by this mode, the next stage and the run's
+            // index; the same ticks every run however many a frame takes)
+            tickSeed = nextTickSeed ?? FixtureSeed($"{mode}_ticks_{next}_{tickRuns}");
+            tickRuns++;
             nextTickSeed = null;
         }
 
+        // Ticks of a run per frame: a fixed count, not a time budget, so what happens once a frame between them (the drawing:
+        // where a shot is first drawn from, a pawn's drawn position and facing; the reach fog's batched run) falls on the same
+        // ticks every run.
+        private const int TicksPerFrame = 500;
+
         private static void DoTicks(Map map)
         {
-            Stopwatch sw = Stopwatch.StartNew();
             TickManager tm = Find.TickManager;
-            while (ticksLeft > 0 && sw.ElapsedMilliseconds < 200)
+            int frameTicks = 0;
+            while (ticksLeft > 0 && frameTicks++ < TicksPerFrame)
             {
-                if (tickSeed.HasValue)
-                {
-                    Rand.PushState(tickSeed.Value + (ticksTotal - ticksLeft) * 7919);
-                    try
-                    {
-                        tm.DoSingleTick();
-                    }
-                    finally
-                    {
-                        Rand.PopState();
-                    }
-                }
-                else
+                bool met = false;
+                Rand.PushState(tickSeed + (ticksTotal - ticksLeft) * SeedStride);
+                try
                 {
                     tm.DoSingleTick();
-                }
-                ticksLeft--;
-                if (tickWatch != null && (ticksTotal - ticksLeft) % watchEvery == 0)
-                {
-                    TickHook(map);
-                    if (tickWatch())
+                    ticksLeft--;
+                    if (tickWatch != null && (ticksTotal - ticksLeft) % watchEvery == 0)
                     {
-                        Out($"  condition met after {ticksTotal - ticksLeft} of {ticksTotal} ticks");
-                        ticksTotal -= ticksLeft;
-                        ticksLeft = 0;
-                        break;
+                        TickHook(map);
+                        met = tickWatch();
                     }
+                }
+                finally
+                {
+                    Rand.PopState();
+                }
+                if (met)
+                {
+                    Out($"  condition met after {ticksTotal - ticksLeft} of {ticksTotal} ticks");
+                    ticksTotal -= ticksLeft;
+                    ticksLeft = 0;
+                    break;
                 }
                 if ((ticksTotal - ticksLeft) % 15000 == 0)
                 {
@@ -1880,15 +2161,16 @@ namespace ProjectZ.Dev
         private static void Finish()
         {
             stage = "done";
-            if (BandRadial.AnyAnnex)
-            {
-                // (every mode on a map with floors: what gravity did, e.g. gravship landings in shipfly / shipstack)
-                results.Add("INFO gravity counters: " + Gravity.Counters);
-            }
-            results.Add($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
-            Out($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
+            // The run's results first: nothing after them (putting options back, the probe's file) may lose the run.
             try
             {
+                if (BandRadial.AnyAnnex)
+                {
+                    // (every mode on a map with floors: what gravity did, e.g. gravship landings in shipfly / shipstack)
+                    results.Add("INFO gravity counters: " + Gravity.Counters);
+                }
+                results.Add($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
+                Out($"SUMMARY fails={fails} errors={errors} warnings={warnings}");
                 File.WriteAllLines(Path.Combine(outDir, "results.txt"), results);
                 File.WriteAllText(Path.Combine(outDir, "done.txt"), DateTime.Now.ToString("o") + $" fails={fails} errors={errors}");
             }
@@ -1896,7 +2178,19 @@ namespace ProjectZ.Dev
             {
                 Out("write failed: " + e);
             }
-            Root.Shutdown();
+            finally
+            {
+                RestoreOptions();   // (each restore catches its own failure)
+                try
+                {
+                    RandFlush();
+                }
+                catch (Exception e)
+                {
+                    Out("random probe flush failed: " + e.Message);
+                }
+                Root.Shutdown();
+            }
         }
 
         // ------------------------------------------------------------------ checks

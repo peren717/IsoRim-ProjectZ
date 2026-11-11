@@ -64,8 +64,8 @@ namespace ProjectZ.Dev
         private static readonly Func<Designator_MoveGravship, IntVec3, IntVec3> sfAdjusted =
             AccessTools.MethodDelegate<Func<Designator_MoveGravship, IntVec3, IntVec3>>(AccessTools.Method(typeof(Designator_MoveGravship), "GetSizeRotAdjustedCell"));
 
-        private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, float> sfTimeLeft =
-            AccessTools.FieldRefAccess<WorldComponent_GravshipController, float>("timeLeft");
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, float> sfTimeLeftBound;
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, float> sfTimeLeft => sfTimeLeftBound ??= AccessTools.FieldRefAccess<WorldComponent_GravshipController, float>("timeLeft");   // (bound on first use: nothing for players)
 
         // Cutscene frames (progress 0-1 over vanilla's 10 s): take-off at rest, rising, leaving; landing coming in, low, at the swap.
         private static readonly float[] SfTakeoffAt = { 0.02f, 0.45f, 0.62f };

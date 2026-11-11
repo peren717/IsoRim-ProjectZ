@@ -115,14 +115,23 @@ namespace ProjectZ.Dev
                         postfix: new HarmonyMethod(typeof(TestRunner), nameof(BmAimRead)) { priority = Priority.Last });
                     bmHarmony.Patch(AccessTools.Method(typeof(Pawn), nameof(Pawn.PreApplyDamage)),
                         postfix: new HarmonyMethod(typeof(TestRunner), nameof(BmAbsorb)));
-                    IsoRimBridge.SetOption("freeYaw", 0f);
-                    Info($"beamaim: area {r2Area}, platform {BmPlatform} (level 1), colonists {string.Join(", ", bmCols)}, IsoRim {IsoRimBridge.Present} (Api {IsoRimBridge.ApiVersion}), aim on the target's floor {(Combat.AimFloor.Off ? "OFF" : "on")}, seed {Seed}");
+                    SetIsoRimOption("freeYaw", 0f);
+                    Info($"beamaim: area {r2Area}, platform {BmPlatform} (level 1), colonists {string.Join(", ", bmCols)}, IsoRim {IsoRimBridge.Present} (Api {IsoRimBridge.ApiVersion}), aim on the target's floor {(Combat.AimFloor.Off ? "OFF" : "on")}, seed {FixtureSeedBase}");
                     bmI = 0;
                     stage = "bm_fixture";
                     return true;
                 }
                 case "bm_fixture":
-                    BmFixture(map);
+                    // (this phase's own random state; the game's ticks after it are seeded by the runner, GameTicksPrefix)
+                    Rand.PushState(FixtureSeed("beamaim_" + BmNow.name));
+                    try
+                    {
+                        BmFixture(map);
+                    }
+                    finally
+                    {
+                        Rand.PopState();
+                    }
                     return true;
                 case "bm_run":
                     BmRun(map);
@@ -158,9 +167,6 @@ namespace ProjectZ.Dev
             R2Feed(map);
             R2Floor(map, BmPlatform, 1);
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
-            // this phase's own random stream (as Rand.Seed would set it, without its "initial seed" error)
-            AccessTools.Field(typeof(Rand), "seed").SetValue(null, StableHash("beamaim_" + ph.name) ^ (uint)Math.Max(0, Seed));
-            AccessTools.Field(typeof(Rand), "iterations").SetValue(null, 0u);
             ThingDef graser = DefDatabase<ThingDef>.GetNamed("Gun_BeamGraser");
             for (int i = 0; i < bmCols.Count; i++)
             {

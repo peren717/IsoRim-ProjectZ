@@ -204,7 +204,7 @@ namespace ProjectZ.Dev
             PlaceIf("Bookcase", W(17, 5), map, Rot4.South, ThingDefOf.WoodLog);
 
             // colonists: 2 under the slab, 1 first-person, 2 on floor 2, 1 outside
-            Rand.PushState(718);
+            Rand.PushState(FixtureSeed($"{mode}_colonists"));
             while (cols.Count < 6)
             {
                 Pawn np = PawnGenerator.GeneratePawn(PawnKindDefOf.Colonist, Faction.OfPlayer);
@@ -230,10 +230,10 @@ namespace ProjectZ.Dev
             map.weatherManager.lastWeather = WeatherDefOf.Clear;
             SetHour(map, 11);
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-            IsoRimBridge.SetOption("isometric", true);
-            IsoRimBridge.SetOption("perspective", false);
-            IsoRimBridge.SetOption("freeYaw", 0f);
-            IsoRimBridge.SetOption("turn", 0);
+            SetIsoRimOption("isometric", true);
+            SetIsoRimOption("perspective", false);
+            SetIsoRimOption("freeYaw", 0f);
+            SetIsoRimOption("turn", 0);
 
             whShots.Clear();
             whShots.Add(new KeyValuePair<string, Action<Map>>("1_wide", m => WhView(m, 35.3f, new Vector3(11f, 1f, 4f), 11f)));
@@ -250,8 +250,8 @@ namespace ProjectZ.Dev
         private static void WhView(Map map, float pitch, Vector3 at, float size, float yaw = 0f)
         {
             FpLeave();
-            IsoRimBridge.SetOption("isoPitch", pitch);
-            IsoRimBridge.SetOption("freeYaw", yaw);
+            SetIsoRimOption("isoPitch", pitch);
+            SetIsoRimOption("freeYaw", yaw);
             Find.CameraDriver.config.sizeRange.min = 1f;
             FloorView.Set(1);
             IsoRimBridge.SetRoofs(false);

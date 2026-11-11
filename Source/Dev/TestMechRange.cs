@@ -33,7 +33,7 @@ namespace ProjectZ.Dev
     // with N (run with -projectzmapsize=160 for N = 40).
     public static partial class TestRunner
     {
-        private const int MrSeed = 9300;
+        private const int MrFix = 9300;   // the base of this mode's fixture ids (FixtureSeed of the mode and the id)
         private static float mrRange;    // the test mod's range (0: unmodified)
         private static float mrR2 = 620.01f;   // the expected flat reach, squared
         private static int mrGrid = 28;   // the compared grid's half width
@@ -118,7 +118,7 @@ namespace ProjectZ.Dev
             mrMn = r2P;
             mrMn.health.AddHediff(HediffDefOf.MechlinkImplant, mrMn.health.hediffSet.GetBrain());
             PawnKindDef militor = DefDatabase<PawnKindDef>.GetNamed("Mech_Militor");
-            Rand.PushState(MrSeed);
+            Rand.PushState(FixtureSeed($"{mode}_{MrFix}"));
             try
             {
                 for (int i = 0; i < 2; i++)
@@ -205,7 +205,7 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, mrMn);
             R2Feed(map);
-            Rand.PushState(seed);
+            Rand.PushState(FixtureSeed($"{mode}_{seed}"));
             try
             {
                 mrC = RG(32, 30);
@@ -239,7 +239,7 @@ namespace ProjectZ.Dev
                 return;
             }
             var cs = MrCases[mrCase];
-            MrScene(map, MrSeed + 10 * mrCase, cs.mk, cs.bk);
+            MrScene(map, MrFix + 10 * mrCase, cs.mk, cs.bk);
             IntVec3 g = new IntVec3(mrC.x + 4, 0, mrC.z);
             if (cs.v3d)
             {
@@ -402,7 +402,7 @@ namespace ProjectZ.Dev
             Find.Selector.ClearSelection();
             Find.Selector.Select(pin, playSound: false, forceDesignatorDeselect: false);
             oin.action();
-            nextTickSeed = MrSeed + 77;
+            nextTickSeed = FixtureSeed($"{mode}_ticks_{MrFix + 77}");
             TickUntil(2000, () => pin.Position == mrInTarget || pin.CurJobDef != JobDefOf.Goto && pin.Position.DistanceTo(mrInTarget) < 1.5f, "mr_orders_check", 5);
         }
 
@@ -425,7 +425,7 @@ namespace ProjectZ.Dev
         private static void MrDerive(Map map)
         {
             mrCapture = false;
-            MrScene(map, MrSeed + 500, 0, 1);
+            MrScene(map, MrFix + 500, 0, 1);
             object rule = MrRule();
             if (rule is Combat.GameRange.Rule r)
             {

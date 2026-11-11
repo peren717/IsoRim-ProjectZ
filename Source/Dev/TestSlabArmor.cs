@@ -52,7 +52,7 @@ namespace ProjectZ.Dev
 
         private static bool StepSlabArmor(Map map)
         {
-            Rand.PushState((int)(StableHash("slabarmor_" + stage + "_" + saIdx + "_" + saThrows) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("slabarmor_" + stage + "_" + saIdx + "_" + saThrows));
             try
             {
                 return StepSlabArmorInner(map);

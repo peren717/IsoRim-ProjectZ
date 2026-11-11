@@ -684,7 +684,7 @@ namespace ProjectZ.Dev
             int lines = 0, through = 0, bad = 0;
             string first = null;
             int gz = a.groundZ;
-            Rand.PushState(4242);
+            Rand.PushState(FixtureSeed($"{mode}_lines"));
             for (int i = 0; i < 30000; i++)
             {
                 IntVec3 g1 = new IntVec3(Rand.Range(2, map.Size.x - 2), 0, Rand.Range(2, gz - 2));

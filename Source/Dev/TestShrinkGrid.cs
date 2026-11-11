@@ -16,7 +16,8 @@ namespace ProjectZ.Dev
     // Args: -projectzsgcase=gen|t1|t2|t5, -projectzseed=N, -projectzfloors=N, optional -projectzscenario=<ScenarioDef>
     // (the quick test's scenario instead of Crashlanded; a forced map, e.g. an orbit start, keeps its own tile and map
     // generator) and -projectzgravship=<VGE StartingGravshipDef> (the scenario's chosen starting gravship). Every case is one
-    // launch (its own fixture). Map.NextGenSeed is made process-independent in this mode (see GxNextGenSeedPrefix).
+    // launch (its own fixture). Base vs head needs the harness's -isorimseed=N: IsoRim then makes Map.NextGenSeed and the
+    // other generation seeds the same in every process (Api 72), so the generated maps match.
     //   gen  right after generation, before any tick: SNAP lines (map size, ground rows, things by def and position with a
     //        hash, things in the annex, VEF pipe nets and their grid sizes, the areas' grid sizes, GridFixer's count),
     //        compared base vs head by the runner. The full thing list goes to sg_things.txt.
@@ -37,8 +38,6 @@ namespace ProjectZ.Dev
         private static ScenarioDef gxScenarioDef;
         private static bool gxSwitched;
         private static int gxIoor;
-        private static int gxFixerCount = -1;
-        private static readonly List<string> gxFixerLines = new List<string>();
         private static int gxErrors0;
 
         // t1 fixture
@@ -55,19 +54,15 @@ namespace ProjectZ.Dev
 
         private static void GxInit(Harmony h)
         {
+            GridFixer.Recorder = new List<string>();   // (what GridFixer resizes, read by the SNAP lines)
             if (GenCommandLine.TryGetCommandLineArg("projectzscenario", out string sn))
             {
                 gxScenarioName = sn;
                 h.Patch(AccessTools.Method(typeof(Scenario), nameof(Scenario.PreConfigure)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GxPreConfigurePrefix)));
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxSetupPostfix)) { priority = Priority.Low });
             }
-            h.Patch(AccessTools.PropertyGetter(typeof(Map), nameof(Map.NextGenSeed)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GxNextGenSeedPrefix)));
             h.Patch(AccessTools.Method(typeof(Game), nameof(Game.InitNewGame)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxInitNewGamePostfix)));
-            h.Patch(AccessTools.Method(typeof(GridFixer), nameof(GridFixer.Fix)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxFixerPostfix)));
             h.Patch(AccessTools.Method(typeof(Log), nameof(Log.Error), new[] { typeof(string) }), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxErrorPostfix)));
-            h.Patch(AccessTools.Method(typeof(Log), nameof(Log.Message), new[] { typeof(string) }), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxMessagePostfix)));
-            // (GridFixer's backstop line for a grid is a warning; its plain-array line a debug message)
-            h.Patch(AccessTools.Method(typeof(Log), nameof(Log.Warning), new[] { typeof(string) }), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GxMessagePostfix)));
         }
 
         private static void GxErrorPostfix(string text)
@@ -76,33 +71,6 @@ namespace ProjectZ.Dev
             {
                 gxIoor++;
             }
-        }
-
-        // GridFixer's per-grid lines: base "resized X.f (BoolGrid) to the full map", head "GridFixer backstop: grid ...".
-        private static void GxMessagePostfix(string text)
-        {
-            if (text != null && text.StartsWith("[ProjectZ]") && text.Contains("to the full map") && !text.Contains("annex "))
-            {
-                gxFixerLines.Add(text);
-            }
-        }
-
-        private static void GxFixerPostfix(int __result)
-        {
-            gxFixerCount = __result;
-        }
-
-        // Test only, for base vs head on one harness: vanilla's Map.NextGenSeed combines (tile hash or uniqueID,
-        // generatedId++, world seed) with System.HashCode, which is seeded per process (mapseed investigation 2026-11-10).
-        // Same inputs, combined with the game's own stable Gen.HashCombineInt. Copied from vanilla Map.NextGenSeed (inputs).
-        private static readonly AccessTools.FieldRef<Map, int> GxGenId = AccessTools.FieldRefAccess<Map, int>("generatedId");
-
-        private static bool GxNextGenSeedPrefix(Map __instance, ref int __result)
-        {
-            int a = __instance.TileInfo.tile.Valid ? __instance.TileInfo.tile.GetHashCode() : __instance.uniqueID;
-            int id = GxGenId(__instance)++;
-            __result = Gen.HashCombineInt(Gen.HashCombineInt(a, id), Find.World.info.Seed);
-            return false;
         }
 
         // The quick test's Crashlanded is swapped for the chosen scenario before it configures (pawns, parts).
@@ -150,7 +118,7 @@ namespace ProjectZ.Dev
             {
                 return;
             }
-            Rand.PushState((int)(StableHash("shrinkgrid_tile") ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("shrinkgrid_tile"));
             try
             {
                 foreach (ScenPart_ForcedMap p in forced)
@@ -365,13 +333,14 @@ namespace ProjectZ.Dev
                     Info($"SNAP oxygen pipes {shipPipes}");
                 }
             }
-            Info($"SNAP GridFixer count {gxFixerCount} (grids and plain arrays it resized at FinalizeInit)");
-            foreach (string l in gxFixerLines)
+            List<string> fixedFields = GridFixer.Recorder ?? new List<string>();
+            int fixerGrids = fixedFields.Count(l => l.StartsWith("grid "));
+            Info($"SNAP GridFixer count {fixedFields.Count} (grids and plain arrays it resized at FinalizeInit, every map so far)");
+            foreach (string l in fixedFields)
             {
-                Info("SNAP GridFixer line: " + l);
+                Info("SNAP GridFixer resized: " + l);
             }
-            int fixerGrids = gxFixerLines.Count(l => !l.Contains("[]"));
-            Info($"SNAP GridFixer grids resized {fixerGrids} (backstop; 0 expected with the full-size rule)");
+            Info($"SNAP GridFixer grids resized {fixerGrids} (backstop; 0 expected with the full-size rule), plain arrays {fixedFields.Count - fixerGrids}");
             if (GxCase == "t5")
             {
                 GxTerrainHashes(map, groundZ);
@@ -401,7 +370,7 @@ namespace ProjectZ.Dev
 
         private static bool StepShrinkGrid(Map map)
         {
-            Rand.PushState((int)(StableHash("shrinkgrid_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("shrinkgrid_" + stage));
             try
             {
                 return StepShrinkGridInner(map);

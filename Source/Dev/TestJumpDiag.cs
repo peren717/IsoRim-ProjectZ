@@ -60,12 +60,18 @@ namespace ProjectZ.Dev
             jdForce = null;   // once
         }
 
-        private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> jdEff = AccessTools.FieldRefAccess<PawnFlyer, Vector3>("effectivePos");
-        private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> jdGround = AccessTools.FieldRefAccess<PawnFlyer, Vector3>("groundPos");
-        private static readonly AccessTools.FieldRef<PawnFlyer, Vector3> jdStart = AccessTools.FieldRefAccess<PawnFlyer, Vector3>("startVec");
-        private static readonly AccessTools.FieldRef<PawnFlyer, IntVec3> jdDest = AccessTools.FieldRefAccess<PawnFlyer, IntVec3>("destCell");
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> jdTicks = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> jdTotal = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdEffBound;
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdEff => jdEffBound ??= AccessTools.FieldRefAccess<PawnFlyer, Vector3>("effectivePos");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdGroundBound;
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdGround => jdGroundBound ??= AccessTools.FieldRefAccess<PawnFlyer, Vector3>("groundPos");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdStartBound;
+        private static AccessTools.FieldRef<PawnFlyer, Vector3> jdStart => jdStartBound ??= AccessTools.FieldRefAccess<PawnFlyer, Vector3>("startVec");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, IntVec3> jdDestBound;
+        private static AccessTools.FieldRef<PawnFlyer, IntVec3> jdDest => jdDestBound ??= AccessTools.FieldRefAccess<PawnFlyer, IntVec3>("destCell");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, int> jdTicksBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> jdTicks => jdTicksBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, int> jdTotalBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> jdTotal => jdTotalBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");   // (bound on first use: nothing for players)
 
         private static IntVec3 jdO;
         private static List<JdCase> jdCases;

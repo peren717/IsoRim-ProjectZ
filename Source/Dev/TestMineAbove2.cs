@@ -317,7 +317,7 @@ namespace ProjectZ.Dev
                         map.designationManager.AddDesignation(new Designation(c, DesignationDefOf.Mine));
                     }
                     MuCrew(map, WorkTypeDefOf.Mining, 3);
-                    MuRun(800, 61000, () => dig.All(c => c.GetEdifice(map) == null), "ma_dug");
+                    MuRun(800, "61000", () => dig.All(c => c.GetEdifice(map) == null), "ma_dug");
                     return true;
                 }
 
@@ -343,11 +343,11 @@ namespace ProjectZ.Dev
                     MuStart(map, MuRect(muA, map, 4), false);
                     MaOrder(map, "A1", new[] { muA[2] });
                     MuCrew(map, WorkTypeDefOf.Mining, 1);
-                    MuRun(300, 62000, () => MaAllGone(map), "ma_a1_more", () => MaWatch(map));
+                    MuRun(300, "62000", () => MaAllGone(map), "ma_a1_more", () => MaWatch(map));
                     return true;
 
                 case "ma_a1_more":
-                    MuRun(2, 62100, () => false, "ma_a1_done");
+                    MuRun(2, "62100", () => false, "ma_a1_done");
                     return true;
 
                 case "ma_a1_done":
@@ -360,11 +360,11 @@ namespace ProjectZ.Dev
                     MuStart(map, MuRect(muA, map, 4), false);
                     MaOrder(map, "A2", muA.Take(4));
                     MuCrew(map, WorkTypeDefOf.Mining, 2);
-                    MuRun(500, 63000, () => MaAllGone(map), "ma_a2_more", () => MaWatch(map));
+                    MuRun(500, "63000", () => MaAllGone(map), "ma_a2_more", () => MaWatch(map));
                     return true;
 
                 case "ma_a2_more":
-                    MuRun(2, 63100, () => false, "ma_a2_done");
+                    MuRun(2, "63100", () => false, "ma_a2_done");
                     return true;
 
                 case "ma_a2_done":
@@ -400,13 +400,13 @@ namespace ProjectZ.Dev
                     bool reach = cells.All(c => maUpper.CanReach(MuUp(c, map), PathEndMode.Touch, Danger.Deadly));
                     Info($"{check} pocket {string.Join(" ", maPocket)}; {maUpper} on {maUpper.Position} L{ProjectZ.FloorOf(maUpper.Position, map)} touches every U on level 1: {reach}");
                     MaOrder(map, check, cells);
-                    MuRun(a4 ? 60 : 500, a4 ? 65000 : 64000, () => MaAllGone(map), a4 ? "ma_a4_more" : "ma_a3_more", () => MaWatch(map));
+                    MuRun(a4 ? 60 : 500, a4 ? "65000" : "64000", () => MaAllGone(map), a4 ? "ma_a4_more" : "ma_a3_more", () => MaWatch(map));
                     return true;
                 }
 
                 case "ma_a3_more":
                 case "ma_a4_more":
-                    MuRun(2, 64100, () => false, stage == "ma_a4_more" ? "ma_a4_done" : "ma_a3_done");
+                    MuRun(2, "64100", () => false, stage == "ma_a4_more" ? "ma_a4_done" : "ma_a3_done");
                     return true;
 
                 case "ma_a3_done":
@@ -458,12 +458,12 @@ namespace ProjectZ.Dev
                     FloorView.Set(0);
                     int vanilla = cells.Count(c => map.designationManager.DesignationAt(MuUp(c, map), DesignationDefOf.Mine) != null);
                     Info($"A5 vanilla Mine on the rocks above too: {vanilla}/{cells.Count}; {maUpper} on {maUpper.Position} L{ProjectZ.FloorOf(maUpper.Position, map)} (the only miner)");
-                    MuRun(300, 66000, () => MaAllGone(map), "ma_a5_more", () => MaWatch(map));
+                    MuRun(300, "66000", () => MaAllGone(map), "ma_a5_more", () => MaWatch(map));
                     return true;
                 }
 
                 case "ma_a5_more":
-                    MuRun(2, 66100, () => false, "ma_a5_done");
+                    MuRun(2, "66100", () => false, "ma_a5_done");
                     return true;
 
                 case "ma_a5_done":
@@ -476,11 +476,11 @@ namespace ProjectZ.Dev
                     MuStart(map, MuRect(muB, map, 4), false);
                     MaOrder(map, "T1", new[] { muB[1] });
                     MuCrew(map, WorkTypeDefOf.Mining, 1);
-                    MuRun(300, 67000, () => MaAllGone(map), "ma_t1_more", () => MaTopWatch(map));
+                    MuRun(300, "67000", () => MaAllGone(map), "ma_t1_more", () => MaTopWatch(map));
                     return true;
 
                 case "ma_t1_more":
-                    MuRun(2, 67100, () => false, "ma_t1_done");
+                    MuRun(2, "67100", () => false, "ma_t1_done");
                     return true;
 
                 case "ma_t1_done":
@@ -493,12 +493,12 @@ namespace ProjectZ.Dev
                     Info($"T1 work time: {maWorkTicks} ticks from the first work tick to the open top by {maWorker} ({JobDriver_MineVertical.TopWork} work at {MineValues.RoofWorkPerTick} x mining speed a tick; speed 1: about {JobDriver_MineVertical.TopWork / MineValues.RoofWorkPerTick:0} ticks, as vanilla Remove roof at construction speed 1)");
                     // the two cells beside it, then stairs under the three holes
                     MaOrder(map, "T1b", new[] { muB[0], muB[2] });
-                    MuRun(300, 67200, () => MaAllGone(map), "ma_t1b_more", () => MaTopWatch(map));
+                    MuRun(300, "67200", () => MaAllGone(map), "ma_t1b_more", () => MaTopWatch(map));
                     return true;
                 }
 
                 case "ma_t1b_more":
-                    MuRun(2, 67300, () => false, "ma_t1b_done");
+                    MuRun(2, "67300", () => false, "ma_t1b_done");
                     return true;
 
                 case "ma_t1b_done":
@@ -519,12 +519,12 @@ namespace ProjectZ.Dev
                     Result("T2 fixture: one drag over rock-above and top-above cells", maTops.Count > 0 && maTops.Count < maCells.Count,
                         $"{(maM.Count > 0 ? "tunnel M" : "tunnels A and B")}: {maCells.Count - maTops.Count} rock, {maTops.Count} top");
                     MuCrew(map, WorkTypeDefOf.Mining, 2);
-                    MuRun(600, 68000, () => MaAllGone(map), "ma_t2_more", () => MaTopWatch(map));
+                    MuRun(600, "68000", () => MaAllGone(map), "ma_t2_more", () => MaTopWatch(map));
                     return true;
                 }
 
                 case "ma_t2_more":
-                    MuRun(2, 68100, () => false, "ma_t2_done");
+                    MuRun(2, "68100", () => false, "ma_t2_done");
                     return true;
 
                 case "ma_t2_done":
@@ -551,7 +551,7 @@ namespace ProjectZ.Dev
                     map.designationManager.AddDesignation(new Designation(c1, PZMineDefOf.PZ_MineAbove));
                     maTops0 = MineUp.TopsOpened;
                     MuCrew(map, WorkTypeDefOf.Mining, 1);
-                    MuRun(10, 69000, () => false, "ma_t3_done");
+                    MuRun(10, "69000", () => false, "ma_t3_done");
                     return true;
                 }
 
@@ -583,12 +583,12 @@ namespace ProjectZ.Dev
                     maStandAt = u;
                     maStep0 = Shaft.SteppedAside;
                     MaOrder(map, "T4", new[] { c });
-                    MuRun(300, 70000, () => MaAllGone(map), "ma_t4_more", () => MaTopWatch(map));
+                    MuRun(300, "70000", () => MaAllGone(map), "ma_t4_more", () => MaTopWatch(map));
                     return true;
                 }
 
                 case "ma_t4_more":
-                    MuRun(2, 70100, () => false, "ma_t4_done");
+                    MuRun(2, "70100", () => false, "ma_t4_done");
                     return true;
 
                 case "ma_t4_done":

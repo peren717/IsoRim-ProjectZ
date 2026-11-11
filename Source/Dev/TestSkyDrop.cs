@@ -37,7 +37,7 @@ namespace ProjectZ.Dev
         private static int skCase, skShot;
         private static DropPodIncoming skPod;
         private static IntVec3 skPodCell;
-        private static float skOldYaw, skOldMin;
+        private static float skOldMin;
 
         private static bool StepSkyDrop(Map map)
         {
@@ -50,7 +50,7 @@ namespace ProjectZ.Dev
                 {
                     if (skCase >= skCases.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", skOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Find.CameraDriver.config.sizeRange.min = skOldMin;
                         Finish();
                         return true;
@@ -76,7 +76,7 @@ namespace ProjectZ.Dev
                         c.upper ? ProjectZ.FloorOf(skPodCell, map) == 1 && skPlat.Contains(ProjectZ.GroundCellOf(skPodCell, map)) : ProjectZ.FloorOf(skPodCell, map) == 0,
                         $"pod cell {skPodCell}");
                     skShot = 0;
-                    IsoRimBridge.SetOption("freeYaw", c.yaw);
+                    SetIsoRimOption("freeYaw", c.yaw);
                     NextSkyShot(map);
                     return true;
                 }
@@ -208,7 +208,7 @@ namespace ProjectZ.Dev
                 Teleport(p, CellFinder.RandomClosewalkCellNear(new IntVec3(found.minX > map.Size.x / 2 ? 5 : map.Size.x - 6, 0, 5), map, 4));
             }
             Info($"field {found}, platform {skPlat} (slab on floor 2 over a roofed ground area); storey {IsoRimBridge.StoreyHeight:0.00}");
-            skOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             skOldMin = Find.CameraDriver.config.sizeRange.min;
             skCase = 0;
             Wait(10, "sk_case");

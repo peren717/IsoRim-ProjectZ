@@ -230,7 +230,7 @@ namespace ProjectZ.Dev
                 case "ot_t1off_mine":
                     Find.UIRoot.screenshotMode.Active = false;
                     OtMine(map, new[] { otO1 }, otS1, true);
-                    MuRun(400, 70100, () => !OtRock(otO1, map), "ot_t1off_shot");
+                    MuRun(400, "70100", () => !OtRock(otO1, map), "ot_t1off_shot");
                     return true;
 
                 case "ot_t1off_shot":
@@ -244,7 +244,7 @@ namespace ProjectZ.Dev
 
                 case "ot_t1":
                     OtMine(map, new[] { otO1 }, otS1, false);
-                    MuRun(400, 70100, () => !OtRock(otO1, map), "ot_t1_check");
+                    MuRun(400, "70100", () => !OtRock(otO1, map), "ot_t1_check");
                     return true;
 
                 case "ot_t1_check":
@@ -269,7 +269,7 @@ namespace ProjectZ.Dev
                     wood.stackCount = 20;
                     GenSpawn.Spawn(wood, L1(otO2, map), map);
                     OtMine(map, new[] { otO2 }, otS2, false);
-                    MuRun(400, 70200, () => !OtRock(otO2, map), "ot_t2_check");
+                    MuRun(400, "70200", () => !OtRock(otO2, map), "ot_t2_check");
                     return true;
                 }
 
@@ -295,7 +295,7 @@ namespace ProjectZ.Dev
                     OtMine(map, new[] { otO3 }, otS3, false);
                     Teleport(stand, L1(otO3, map));
                     Draft(stand, true);
-                    MuRun(400, 70300, () => !OtRock(otO3, map), "ot_t3_check", () =>
+                    MuRun(400, "70300", () => !OtRock(otO3, map), "ot_t3_check", () =>
                     {
                         if (!stand.Drafted)
                         {
@@ -319,7 +319,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ T4: rock above
                 case "ot_t4":
                     OtMine(map, new[] { otI }, otSI, false);
-                    MuRun(400, 70400, () => !OtRock(otI, map), "ot_t4_check");
+                    MuRun(400, "70400", () => !OtRock(otI, map), "ot_t4_check");
                     return true;
 
                 case "ot_t4_check":
@@ -339,7 +339,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ T5 / T6: the lone outcrop mined out whole
                 case "ot_t5":
                     OtMine(map, otK, otKS, false);
-                    MuRun(1500, 70500, () => otK.All(c => !OtRock(c, map)), "ot_t5_check");
+                    MuRun(1500, "70500", () => otK.All(c => !OtRock(c, map)), "ot_t5_check");
                     return true;
 
                 case "ot_t5_check":
@@ -362,7 +362,7 @@ namespace ProjectZ.Dev
 
                 case "ot_t6":
                     OtMine(map, otK, otKS, true);
-                    MuRun(1500, 70500, () => otK.All(c => !OtRock(c, map)), "ot_t6_ticks");
+                    MuRun(1500, "70500", () => otK.All(c => !OtRock(c, map)), "ot_t6_ticks");
                     return true;
 
                 case "ot_t6_ticks":

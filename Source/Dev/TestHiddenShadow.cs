@@ -34,7 +34,8 @@ namespace ProjectZ.Dev
         {
             ("g09", 9, 0), ("g15", 15, 0), ("f1_12", 12, 1),
         };
-        private static readonly Type hzSunType = AccessTools.TypeByName("Verse.SectionLayer_SunShadows");
+        private static Type hzSunTypeBound;
+        private static Type hzSunType => hzSunTypeBound ??= AccessTools.TypeByName("Verse.SectionLayer_SunShadows");   // (bound on first use: nothing for players)
         private static readonly List<double> hzFrameMs = new List<double>();
         private static readonly List<double> hzOnFrame = new List<double>(), hzOffFrame = new List<double>(), hzOnMesh = new List<double>(), hzOffMesh = new List<double>();
         private static int hzBlock;

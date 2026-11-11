@@ -35,8 +35,10 @@ namespace ProjectZ.Dev
         private static bool shotDown, shotUp;
         private static int startInjuriesShooter, startInjuriesRaiders;
 
-        private static readonly AccessTools.FieldRef<Projectile, Vector3> projOrigin = AccessTools.FieldRefAccess<Projectile, Vector3>("origin");
-        private static readonly AccessTools.FieldRef<Projectile, Vector3> projDest = AccessTools.FieldRefAccess<Projectile, Vector3>("destination");
+        private static AccessTools.FieldRef<Projectile, Vector3> projOriginBound;
+        private static AccessTools.FieldRef<Projectile, Vector3> projOrigin => projOriginBound ??= AccessTools.FieldRefAccess<Projectile, Vector3>("origin");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<Projectile, Vector3> projDestBound;
+        private static AccessTools.FieldRef<Projectile, Vector3> projDest => projDestBound ??= AccessTools.FieldRefAccess<Projectile, Vector3>("destination");   // (bound on first use: nothing for players)
 
         private static IntVec3 Up(IntVec3 g, Map map) => ProjectZ.CellOnFloor(g, 1, map);
 

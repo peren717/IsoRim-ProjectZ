@@ -38,7 +38,7 @@ namespace ProjectZ.Dev
         private static readonly int[] d3Ticks = new int[2];
         private static long d3CallsOn;
 
-        private const int D3Seed = 7300;
+        private const int D3Fix = 7300;   // the base of this mode's fixture ids (FixtureSeed of the mode and the id)
 
         private static IntVec3 D3Up(Map map) => RL(14, 15, 1, map);
 
@@ -124,7 +124,7 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, r2P);
             R2Feed(map);
-            Rand.PushState(seed);
+            Rand.PushState(FixtureSeed($"{mode}_{seed}"));
             try
             {
                 R2Floor(map, new CellRect(RG(8, 12).x, RG(8, 12).z, 24, 12), 1);
@@ -209,7 +209,7 @@ namespace ProjectZ.Dev
 
         private static void D3Food(Map map)
         {
-            D3Scene(map, D3Seed + 1);
+            D3Scene(map, D3Fix + 1);
             d3Up = D3Spawn(ThingDefOf.MealSimple, 1, D3Up(map), map);
             d3Far = D3Spawn(ThingDefOf.MealSimple, 1, D3Far, map);
             Thing off = D3Control(() => FoodUtility.TryFindBestFoodSourceFor(r2P, r2P, false, out Thing f, out _) ? f : null, true);
@@ -239,14 +239,14 @@ namespace ProjectZ.Dev
 
         private static void D3Store(Map map)
         {
-            D3Scene(map, D3Seed + 2, WorkTypeDefOf.Hauling);
+            D3Scene(map, D3Fix + 2, WorkTypeDefOf.Hauling);
             D3Wipe(map);
             Zone_Stockpile up = D3Zone(map, new CellRect(RG(13, 14).x, RG(13, 14).z, 3, 3).Cells.Select(g => Levels.Cell(g, 1, map)));
             Zone_Stockpile far = D3Zone(map, new CellRect(D3Far.x - 1, D3Far.z - 1, 3, 3).Cells);
             d3Item = D3Spawn(ThingDefOf.WoodLog, 20, RG(14, 7), map);
             IntVec3 Pick(bool off) => D3Control(() =>
             {
-                Rand.PushState(D3Seed + 20);
+                Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 20}"));
                 try
                 {
                     return StoreUtility.TryFindBestBetterStoreCellFor(d3Item, r2P, map, StoragePriority.Unstored, Faction.OfPlayer, out IntVec3 c) ? c : IntVec3.Invalid;
@@ -290,14 +290,14 @@ namespace ProjectZ.Dev
 
         private static void D3Build(Map map)
         {
-            D3Scene(map, D3Seed + 3, WorkTypeDefOf.Construction);
+            D3Scene(map, D3Fix + 3, WorkTypeDefOf.Construction);
             d3Up = GenConstruct.PlaceBlueprintForBuild(ThingDefOf.Wall, D3Up(map), map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
             d3Far = GenConstruct.PlaceBlueprintForBuild(ThingDefOf.Wall, D3Far, map, Rot4.North, Faction.OfPlayer, ThingDefOf.WoodLog);
             D3Spawn(ThingDefOf.WoodLog, 30, RG(14, 7), map);
             JobGiver_Work jg = new JobGiver_Work();
             string Pick(bool off) => D3Control(() =>
             {
-                Rand.PushState(D3Seed + 30);
+                Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 30}"));
                 try
                 {
                     Job j = jg.TryIssueJobPackage(r2P, default(JobIssueParams)).Job;
@@ -335,7 +335,7 @@ namespace ProjectZ.Dev
 
         private static void D3Snow(Map map)
         {
-            D3Scene(map, D3Seed + 4, WorkTypeDefOf.Cleaning);
+            D3Scene(map, D3Fix + 4, WorkTypeDefOf.Cleaning);
             D3Wipe(map);
             List<IntVec3> up = new List<IntVec3> { RL(13, 15, 1, map), RL(14, 15, 1, map), RL(15, 15, 1, map) };
             List<IntVec3> far = new List<IntVec3> { D3Far, D3Far + IntVec3.East, D3Far + IntVec3.West };
@@ -347,7 +347,7 @@ namespace ProjectZ.Dev
             JobGiver_Work jg = new JobGiver_Work();
             string Pick(bool off) => D3Control(() =>
             {
-                Rand.PushState(D3Seed + 40);
+                Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 40}"));
                 try
                 {
                     Job j = jg.TryIssueJobPackage(r2P, default(JobIssueParams)).Job;
@@ -398,7 +398,7 @@ namespace ProjectZ.Dev
             {
                 for (int s = 0; s < 20; s++)
                 {
-                    D3Scene(map, D3Seed + 100 + 50 * L + s, WorkTypeDefOf.Hauling, WorkTypeDefOf.Cleaning);
+                    D3Scene(map, D3Fix + 100 + 50 * L + s, WorkTypeDefOf.Hauling, WorkTypeDefOf.Cleaning);
                     D3Wipe(map);
                     if (L == 1)
                     {
@@ -406,7 +406,7 @@ namespace ProjectZ.Dev
                         R2Floor(map, new CellRect(r2Area.minX + 1, r2Area.minZ + 1, r2Area.Width - 2, r2Area.Height - 2), 1);
                         map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
                     }
-                    Rand.PushState(D3Seed + 1000 + 50 * L + s);
+                    Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 1000 + 50 * L + s}"));
                     try
                     {
                         IntVec3 Rnd() => Levels.Cell(new IntVec3(r2Area.minX + Rand.RangeInclusive(2, r2Area.Width - 4), 0, r2Area.minZ + Rand.RangeInclusive(2, r2Area.Height - 4)), L, map);
@@ -436,7 +436,7 @@ namespace ProjectZ.Dev
                         string Decide(bool off) => D3Control(() =>
                         {
                             Thing f = FoodUtility.TryFindBestFoodSourceFor(r2P, r2P, false, out Thing ff, out _) ? ff : null;
-                            Rand.PushState(D3Seed + 7);
+                            Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 7}"));
                             IntVec3 sc = wood != null && StoreUtility.TryFindBestBetterStoreCellFor(wood, r2P, map, StoragePriority.Unstored, Faction.OfPlayer, out IntVec3 x) ? x : IntVec3.Invalid;
                             Job j = jg.TryIssueJobPackage(r2P, default(JobIssueParams)).Job;
                             Rand.PopState();
@@ -473,7 +473,7 @@ namespace ProjectZ.Dev
         // (over 50) is what the game's flat distance would leave it (its fallbacks go for buildings).
         private static void D3Sapper(Map map)
         {
-            D3Scene(map, D3Seed + 5);
+            D3Scene(map, D3Fix + 5);
             R2Hide(map, r2P);
             Teleport(r2P, RL(20, 18, 1, map));
             Draft(r2P, true);
@@ -517,7 +517,7 @@ namespace ProjectZ.Dev
 
         private static void D3Raid(Map map)
         {
-            D3Scene(map, D3Seed + 6);
+            D3Scene(map, D3Fix + 6);
             R2Hide(map, r2P, r2Q);
             Teleport(r2P, RL(10, 15, 1, map));
             Teleport(r2Q, RG(43, 4));
@@ -634,10 +634,10 @@ namespace ProjectZ.Dev
             }
             bool on = d3Round % 2 == 1;
             D3Patched(on);
-            D3Scene(map, D3Seed + 9, WorkTypeDefOf.Hauling, WorkTypeDefOf.Construction, WorkTypeDefOf.Cleaning);
+            D3Scene(map, D3Fix + 9, WorkTypeDefOf.Hauling, WorkTypeDefOf.Construction, WorkTypeDefOf.Cleaning);
             D3Wipe(map);
             List<Pawn> crew = Colonists(map).Take(5).ToList();
-            Rand.PushState(D3Seed + 900);
+            Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 900}"));
             try
             {
                 R2Floor(map, new CellRect(r2Area.minX + 24, r2Area.minZ + 2, 18, 10), 1);
@@ -694,7 +694,7 @@ namespace ProjectZ.Dev
             }
             long calls0 = Dist3D.Calls;
             TickManager tm = Find.TickManager;
-            Rand.PushState(D3Seed + 901);   // (the ticks too: both kinds of round see the same colony)
+            Rand.PushState(FixtureSeed($"{mode}_{D3Fix + 901}"));   // (the ticks too: both kinds of round see the same colony)
             Stopwatch sw = Stopwatch.StartNew();
             try
             {

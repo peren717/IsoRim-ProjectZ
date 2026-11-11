@@ -54,7 +54,7 @@ namespace ProjectZ.Dev
 
         private static bool StepLadders(Map map)
         {
-            Rand.PushState((int)(StableHash("ladders_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("ladders_" + stage));
             try
             {
                 return StepLaddersInner(map);

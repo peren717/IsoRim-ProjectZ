@@ -30,7 +30,7 @@ namespace ProjectZ.Dev
 
         private static bool StepSlabHole(Map map)
         {
-            Rand.PushState((int)(StableHash("slabhole_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("slabhole_" + stage));
             try
             {
                 return StepSlabHoleInner(map);

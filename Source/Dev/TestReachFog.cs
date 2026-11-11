@@ -320,7 +320,7 @@ namespace ProjectZ.Dev
             Find.Storyteller.storytellerComps.Clear();
             Find.Storyteller.incidentQueue.Clear();
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-            IsoRimBridge.SetOption("fogLid", true);
+            SetIsoRimOption("fogLid", true);
         }
 
         private static void RfNext(string next)
@@ -784,7 +784,7 @@ namespace ProjectZ.Dev
                     Info($"R1 pathing: {rfPawn} can reach the terrace goal {rfGoal1}: {can}; ordered there (drafted)");
                     rfFog1 = can ? 1 : 0;
                     rfPawn.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, rfGoal1), JobTag.DraftedOrder);
-                    MuRun(30, 71711, () => Levels.LevelOf(rfPawn.Position, map) != 2, "rf_r1_order");
+                    MuRun(30, "71711", () => Levels.LevelOf(rfPawn.Position, map) != 2, "rf_r1_order");
                     return true;
                 }
 
@@ -903,7 +903,7 @@ namespace ProjectZ.Dev
                         $"face {rfTunF} L{Levels.LevelOf(rfTunF, map)} {rfTunF.GetEdifice(map)?.def.defName}, area round {rfTunLand} (L{Levels.LevelOf(rfTunLand, map)}): {rfFog0} of {rfArea.Count} fogged");
                     map.designationManager.AddDesignation(new Designation(rfTunF, DesignationDefOf.Mine));
                     Info($"E3 {rfPawn} mines the face {rfTunF} sideways (open air beyond it, dir {rfTunD})");
-                    MuRun(300, 71720, () => rfTunF.GetEdifice(map) == null, "rf_e3_mined");
+                    MuRun(300, "71720", () => rfTunF.GetEdifice(map) == null, "rf_e3_mined");
                     return true;
                 }
 
@@ -1017,7 +1017,7 @@ namespace ProjectZ.Dev
                         map.designationManager.AddDesignation(new Designation(solid, DesignationDefOf.Mine));
                         MuCrew(map, WorkTypeDefOf.Mining, 2);
                         Info($"R3 the solid end {solid} is rock: mined first");
-                        MuRun(200, 71720, () => solid.GetFirstMineable(map) == null, "rf_r3_place");
+                        MuRun(200, "71720", () => solid.GetFirstMineable(map) == null, "rf_r3_place");
                         return true;
                     }
                     stage = "rf_r3_place";
@@ -1031,7 +1031,7 @@ namespace ProjectZ.Dev
                         $"solid {solid} rock {solid.GetFirstMineable(map)?.def.defName ?? "none"}, exit {rfExit} {rfExit.GetTerrain(map)?.defName}");
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
                     Info($"R3 stairs {rfStairs} facing {rfRot}, exit {rfExit}; plateau {rfArea.Count} cells, fogged {RfFogged(rfArea, map)}");
-                    MuRun(400, 71730, () => MuStairs(map, rfStairs) != null, "rf_r3_built");
+                    MuRun(400, "71730", () => MuStairs(map, rfStairs) != null, "rf_r3_built");
                     return true;
                 }
 
@@ -1078,7 +1078,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     ReachFogMap.For(map)?.Forget();
-                    MuRun(10, 71740, () => false, "rf_r4_check");
+                    MuRun(10, "71740", () => false, "rf_r4_check");
                     return true;
                 }
 
@@ -1119,7 +1119,7 @@ namespace ProjectZ.Dev
                     MdWork(map, crew, WorkTypeDefOf.Mining);
                     map.designationManager.AddDesignation(new Designation(rfCaveE + rfCaveD, DesignationDefOf.Mine));
                     Info($"R5 cave of {rfArea.Count} cells round {c0} (fogged {RfFogged(rfArea, map)}), sealed by rock; {crew[0]} mines {rfCaveE + rfCaveD}");
-                    MuRun(200, 71750, () => (rfCaveE + rfCaveD).GetEdifice(map) == null, "rf_r5_first");
+                    MuRun(200, "71750", () => (rfCaveE + rfCaveD).GetEdifice(map) == null, "rf_r5_first");
                     return true;
                 }
 
@@ -1137,7 +1137,7 @@ namespace ProjectZ.Dev
                     Result("R5 colonists mined towards a cave sealed by rock (under no edge): it stays fogged while rock still seals it", (rfCaveE + rfCaveD).GetEdifice(map) == null && fog == rfArea.Count,
                         $"cave cells fogged {fog} of {rfArea.Count}; runs {ReachFog.Runs}");
                     map.designationManager.AddDesignation(new Designation(rfCaveE + rfCaveD * 2, DesignationDefOf.Mine));
-                    MuRun(200, 71751, () => (rfCaveE + rfCaveD * 2).GetEdifice(map) == null, "rf_r5_second");
+                    MuRun(200, "71751", () => (rfCaveE + rfCaveD * 2).GetEdifice(map) == null, "rf_r5_second");
                     return true;
                 }
 
@@ -1197,7 +1197,7 @@ namespace ProjectZ.Dev
                     Draft(p, true);
                     rfPawn = p;
                     p.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, rfRoomE + rfRoomD), JobTag.DraftedOrder);
-                    MuRun(60, 71760, () => rfPawn.Position == rfRoomE + rfRoomD, "rf_r6_opened");
+                    MuRun(60, "71760", () => rfPawn.Position == rfRoomE + rfRoomD, "rf_r6_opened");
                     return true;
                 }
 

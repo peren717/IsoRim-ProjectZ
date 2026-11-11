@@ -21,7 +21,7 @@ namespace ProjectZ.Dev
     {
         private static CellRect dbPav, dbRoom;
         private static readonly List<IntVec3> dbColumns = new List<IntVec3>();
-        private static float dbOldYaw, dbOldPitch, dbOldMin;
+        private static float dbOldMin;
         private static string dbCase;
         private static int dbShot, dbPerfFrames, dbLive, dbWait;
         private static float dbPerfSum, dbPerfWith;
@@ -277,8 +277,8 @@ namespace ProjectZ.Dev
                     return true;
                 case "db_end":
                     IsoRimBridge.DebrisHold = false;
-                    IsoRimBridge.SetOption("freeYaw", dbOldYaw);
-                    IsoRimBridge.SetOption("isoPitch", dbOldPitch);
+                    RestoreIsoRimOption("freeYaw");
+                    RestoreIsoRimOption("isoPitch");
                     Find.CameraDriver.config.sizeRange.min = dbOldMin;
                     Finish();
                     return true;
@@ -398,8 +398,8 @@ namespace ProjectZ.Dev
                 p.drafter.Drafted = true;
                 Teleport(p, CellFinder.RandomClosewalkCellNear(new IntVec3(found.minX > map.Size.x / 2 ? 5 : map.Size.x - 6, 0, 5), map, 4));
             }
-            dbOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
-            dbOldPitch = (float)IsoRimBridge.SetOption("isoPitch", 35.3f);
+            SetIsoRimOption("freeYaw", 0f);
+            SetIsoRimOption("isoPitch", 35.3f);
             dbOldMin = Find.CameraDriver.config.sizeRange.min;
             Find.CameraDriver.config.sizeRange.min = 2f;
             Info($"field {found}, pavilion {dbPav} (columns {string.Join(" ", dbColumns)}), room {dbRoom}; on the slab: walls, {string.Join(", ", placed)}; storey {IsoRimBridge.StoreyHeight:0.00}; IsoRim API {IsoRimBridge.ApiVersion}");

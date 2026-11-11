@@ -9,7 +9,7 @@ namespace ProjectZ.Dev
 {
     // Mode mtnslab (player report 2026-11-10, repro only): inside a mountain, levels 0 and 1 both mined out (a two-storey
     // firing hall); the natural rock floor between them (level 1's floor = level 0's ceiling) can't be removed. Run with
-    // -projectztallmountains -projectzfloors=4 -projectzmapsize=250 (fixed seed 717, the tallmtn tile). Setup: a 3x3 block
+    // -projectztallmountains -projectzfloors=4 -projectzmapsize=250 (the map from the harness seed -isorimseed, the tallmtn tile). Setup: a 3x3 block
     // with rock on levels 0..2 and a rock ring, carved by the mining end path (Mineable.DestroyMined) level 0 first, then
     // level 1 (the player's order); one worker in each room; a built-slab control over open ground (slab on level 1 and
     // level 2). Saved (pz_mtnslab); every path reloads it, designates with the game's designator on the viewed level and
@@ -193,7 +193,7 @@ namespace ProjectZ.Dev
 
         private static bool StepMtnSlab(Map map)
         {
-            Rand.PushState((int)(StableHash("mtnslab_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("mtnslab_" + stage));
             try
             {
                 return StepMtnSlabInner(map);
@@ -398,7 +398,7 @@ namespace ProjectZ.Dev
                     }
                     msJobs.Clear();
                     Pawn wk = worker;
-                    MuRun(60, 91000 + i * 100, () => !ProjectZ.HasFloor(x1, map), "ms_path_done", () =>
+                    MuRun(60, $"91000_{i}", () => !ProjectZ.HasFloor(x1, map), "ms_path_done", () =>
                     {
                         Job j = wk?.CurJob;
                         if (j != null && j.def == JobDefOf.RemoveFoundation && wk.Position == x1 && ProjectZ.HasFloor(x1, map))

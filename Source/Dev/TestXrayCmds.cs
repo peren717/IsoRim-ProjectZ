@@ -9,7 +9,6 @@ namespace ProjectZ.Dev
     //   X9 Mine above with mineXray and mineCrosshair off: nothing   xray_cmds_off.png
     public static partial class TestRunner
     {
-        private static object xrOldXray, xrOldCross;
 
         private static bool StepXrayCmds(Map map)
         {
@@ -40,8 +39,8 @@ namespace ProjectZ.Dev
                 case "xr_c8":
                     Capture("xray_minebelow_l1");
                     XrOnly("X8: Mine below, level 1 viewed: only the floor below", true, false);
-                    xrOldXray = IsoRimBridge.SetOption("mineXray", false);
-                    xrOldCross = IsoRimBridge.SetOption("mineCrosshair", false);
+                    SetIsoRimOption("mineXray", false);
+                    SetIsoRimOption("mineCrosshair", false);
                     Find.DesignatorManager.Select(new Designator_MineAbove());
                     Wait(40, "xr_c9");
                     return true;
@@ -53,10 +52,8 @@ namespace ProjectZ.Dev
 
                 case "xr_c9_check":
                     Result("xray X9: Mine above with the x-ray options off: nothing", XrGet("Shown") is bool s9 && !s9, $"shown {XrGet("Shown")}");
-                    IsoRimBridge.SetOption("mineXray", xrOldXray ?? true);
-                    IsoRimBridge.SetOption("mineCrosshair", xrOldCross ?? false);
                     Find.DesignatorManager.Deselect();
-                    Finish();
+                    Finish();   // (puts the player's x-ray options back)
                     return true;
             }
             return false;

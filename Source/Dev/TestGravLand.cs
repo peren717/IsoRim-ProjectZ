@@ -25,10 +25,10 @@ namespace ProjectZ.Dev
         private static readonly List<(int, IntVec3, float, string)> glShots = new List<(int, IntVec3, float, string)>();
         private static readonly HashSet<string> glRoofShots = new HashSet<string>();   // shots taken with the roof display on
 
-        private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, bool> glIsTakeoff =
-            AccessTools.FieldRefAccess<WorldComponent_GravshipController, bool>("isTakeoff");
-        private static readonly AccessTools.FieldRef<WorldComponent_GravshipController, GravshipLandingMarker> glMarker =
-            AccessTools.FieldRefAccess<WorldComponent_GravshipController, GravshipLandingMarker>("landingMarker");
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, bool> glIsTakeoffBound;
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, bool> glIsTakeoff => glIsTakeoffBound ??= AccessTools.FieldRefAccess<WorldComponent_GravshipController, bool>("isTakeoff");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, GravshipLandingMarker> glMarkerBound;
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, GravshipLandingMarker> glMarker => glMarkerBound ??= AccessTools.FieldRefAccess<WorldComponent_GravshipController, GravshipLandingMarker>("landingMarker");   // (bound on first use: nothing for players)
 
         private static void GlShot(int floor, IntVec3 g, float size, string name) => glShots.Add((floor, g, size, name));
 

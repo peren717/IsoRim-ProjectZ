@@ -411,7 +411,7 @@ namespace ProjectZ.Dev
                 {
                     Rect r = FloorHud.LastRect;
                     Result("reset puts the HUD back in its slot", !ProjectZMod.Settings.floorHudMoved && Mathf.Abs(r.x - oDragFrom.x) < 0.5f && Mathf.Abs(r.y - oDragFrom.y) < 0.5f, $"{R(r)}, slot {R(oDragFrom)}");
-                    ProjectZMod.Settings.hideFloorHud = true;
+                    SetProjectZSetting("hideFloorHud", true);
                     FloorHud.LastRect = Rect.zero;
                     Wait(5, "o_hide_check");
                     return true;
@@ -422,7 +422,7 @@ namespace ProjectZ.Dev
                     Wait(3, "o_settings");
                     return true;
                 case "o_settings":
-                    ProjectZMod.Settings.hideFloorHud = false;
+                    RestoreProjectZSetting("hideFloorHud");
                     Find.WindowStack.Add(new Dialog_ModSettings(LoadedModManager.GetMod<ProjectZMod>()));
                     Wait(30, "o_settings_shot");
                     return true;

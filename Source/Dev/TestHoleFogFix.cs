@@ -171,7 +171,7 @@ namespace ProjectZ.Dev
                         HfEnd(map, "F1", "hf_f2");
                         return true;
                     }
-                    MuRun(400, 47000, () => HL(g, 1, map).GetFirstMineable(map) == null && ShaftMarks.Has(HL(g, 1, map), map), "hf_f1_pit1");
+                    MuRun(400, "47000", () => HL(g, 1, map).GetFirstMineable(map) == null && ShaftMarks.Has(HL(g, 1, map), map), "hf_f1_pit1");
                     return true;
                 }
 
@@ -205,7 +205,7 @@ namespace ProjectZ.Dev
                         Info($"F1 {faller} fell into the pit: {fell}, now at {faller.Position} L{Levels.LevelOf(faller.Position, map)}");
                     }
                     hfSeen = HfFogged(hfCave, map) == hfCave.Count;
-                    MuRun(600, 47100, () => g.GetFirstMineable(map) == null && Shaft.Is(g, map), "hf_f1_pit2");
+                    MuRun(600, "47100", () => g.GetFirstMineable(map) == null && Shaft.Is(g, map), "hf_f1_pit2");
                     return true;
                 }
 
@@ -270,7 +270,7 @@ namespace ProjectZ.Dev
                         HfEnd(map, "F2", "hf_f3");
                         return true;
                     }
-                    MuRun(400, 48000, () => HL(g, 1, map).GetFirstMineable(map) == null && Shaft.Is(g, map), "hf_f2_done");
+                    MuRun(400, "48000", () => HL(g, 1, map).GetFirstMineable(map) == null && Shaft.Is(g, map), "hf_f2_done");
                     return true;
                 }
 
@@ -318,7 +318,7 @@ namespace ProjectZ.Dev
                     HfWatch(map, g);
                     new Designator_AreaNoRoof().DesignateMultiCell(new[] { g });
                     Info($"F3 site {g}: chamber {g} {w}, plateau round the top: {hfFogAround}/{hfCave.Count} fogged; no-roof area on {g}: {map.areaManager.NoRoof[g]}");
-                    MuRun(300, 49000, () => Shaft.Is(g, map), "hf_f3_done");
+                    MuRun(300, "49000", () => Shaft.Is(g, map), "hf_f3_done");
                     return true;
                 }
 

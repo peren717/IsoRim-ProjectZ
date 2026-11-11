@@ -58,8 +58,10 @@ namespace ProjectZ.Dev
 
         private static readonly float[] ljFracs = { 0.25f, 0.5f, 0.75f };
 
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> ljTicksFlying = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> ljTicksTotal = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");
+        private static AccessTools.FieldRef<PawnFlyer, int> ljTicksFlyingBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> ljTicksFlying => ljTicksFlyingBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, int> ljTicksTotalBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> ljTicksTotal => ljTicksTotalBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");   // (bound on first use: nothing for players)
 
         // ground cell (x, z) of lane i; the same lifted to floor 2
         private static IntVec3 LjG(int lane, int x, int z) => new IntVec3(ljO.x + lane * LjLaneWidth + x, 0, ljO.z + z);
@@ -345,7 +347,7 @@ namespace ProjectZ.Dev
         private static Pawn LjMakeLocust(Map map, string seedName, Faction faction, IntVec3 c)
         {
             Pawn p;
-            Rand.PushState((int)(StableHash(seedName) ^ (uint)Math.Max(0, SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed(seedName));
             try
             {
                 p = PawnGenerator.GeneratePawn(new PawnGenerationRequest(ljKind, faction, forceGenerateNewPawn: true, fixedBiologicalAge: 1f, fixedChronologicalAge: 1f));

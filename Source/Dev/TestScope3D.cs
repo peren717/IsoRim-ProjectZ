@@ -454,7 +454,8 @@ namespace ProjectZ.Dev
                 $"{real} pairs, {realDiff} differ; worker {onWorker}, main {onMain}, fallbacks +{Verb_CanHitCell_Patch.Fallbacks - fb1}");
         }
 
-        private static readonly Func<Verb, IntVec3, IntVec3, bool, bool> z3CanHit = AccessTools.MethodDelegate<Func<Verb, IntVec3, IntVec3, bool, bool>>(AccessTools.Method(typeof(Verb), "CanHitCellFromCellIgnoringRange"), null, true, null);
+        private static Func<Verb, IntVec3, IntVec3, bool, bool> z3CanHitBound;
+        private static Func<Verb, IntVec3, IntVec3, bool, bool> z3CanHit => z3CanHitBound ??= AccessTools.MethodDelegate<Func<Verb, IntVec3, IntVec3, bool, bool>>(AccessTools.Method(typeof(Verb), "CanHitCellFromCellIgnoringRange"), null, true, null);   // (bound on first use: nothing for players)
 
         private static bool Z3CanHit(Verb v, IntVec3 a, IntVec3 b) => z3CanHit(v, a, b, false);
 

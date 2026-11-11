@@ -170,9 +170,9 @@ namespace ProjectZ.Dev
                     DebugSettings.enableRandomMentalStates = false;
                     Find.PlaySettings.autoRebuild = false;
                     map.weatherManager.TransitionTo(WeatherDefOf.Clear);
-                    ExClear(map, new CellRect(5, 10, 140, 25));
-                    ExClear(map, new CellRect(20, 35, 115, 60));
-                    ExClear(map, new CellRect(45, 95, 55, gz - 95));
+                    ExClear(map, new CellRect(5, 10, 140, 25), strangers: true);
+                    ExClear(map, new CellRect(20, 35, 115, 60), strangers: true);
+                    ExClear(map, new CellRect(45, 95, 55, gz - 95), strangers: true);
                     foreach (Pawn p in Colonists(map))
                     {
                         Draft(p, true);

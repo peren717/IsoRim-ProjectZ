@@ -58,7 +58,7 @@ namespace ProjectZ.Dev
         };
 
         private static int apI, apT0, apWarmFrames, apPieFrames, apLastCount, apCount0, apFloorPies0, apWrongAngle, apGrow;
-        private static float apOldYaw, apFirstDeg, apLastDeg, apMaxDiff, apExpect, apSeenAngle;
+        private static float apFirstDeg, apLastDeg, apMaxDiff, apExpect, apSeenAngle;
         private static bool apShot, apWarm, apEnded;
         private static Thing apWall;
         private static Pawn apShooter;
@@ -94,7 +94,7 @@ namespace ProjectZ.Dev
                     var cols = Colonists(map);
                     r2P = cols.OrderBy(p => p.thingIDNumber).FirstOrDefault(p => !p.WorkTagIsDisabled(WorkTags.Violent)) ?? cols.First();
                     r2Q = cols.FirstOrDefault(p => p != r2P);
-                    apOldYaw = (float)(IsoRimBridge.SetOption("freeYaw", 0f) ?? 0f);
+                    SetIsoRimOption("freeYaw", 0f);
                     Info($"aimpie: shooter {r2P}, IsoRim present {IsoRimBridge.Present} (Api {IsoRimBridge.ApiVersion})");
                     apI = 0;
                     stage = "ap_fixture";
@@ -117,8 +117,8 @@ namespace ProjectZ.Dev
                     return true;
                 case "ap_end":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    IsoRimBridge.SetOption("freeYaw", apOldYaw);
-                    IsoRimBridge.SetOption("pawns3D", true);
+                    RestoreIsoRimOption("freeYaw");
+                    SetIsoRimOption("pawns3D", true);
                     FloorView.Set(0);
                     Finish();
                     return true;
@@ -135,7 +135,7 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, r2P);
             R2Feed(map);
-            IsoRimBridge.SetOption("pawns3D", !c.cards);
+            SetIsoRimOption("pawns3D", !c.cards);
             IntVec3 at = RG(12, 13);
             if (c.upper)
             {
@@ -160,7 +160,7 @@ namespace ProjectZ.Dev
                 r2P.equipment.AddEquipment((ThingWithComps)ThingMaker.MakeThing(DefDatabase<ThingDef>.GetNamed(c.gun)));
                 Draft(r2P, true);
             }
-            IsoRimBridge.SetOption("freeYaw", c.yaw);
+            SetIsoRimOption("freeYaw", c.yaw);
             ShotAt(map, c.upper ? 1 : 0, RG(12 + c.dx / 3, 13 + c.dz / 3), 7f);
             Wait(120, "ap_go");   // (the camera turns over some frames)
         }
@@ -319,8 +319,8 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, r2P);
             R2Feed(map);
-            IsoRimBridge.SetOption("pawns3D", true);
-            IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("pawns3D", true);
+            SetIsoRimOption("freeYaw", 0f);
             Teleport(r2P, RG(12, 13));
             Draft(r2P, true);
             PawnKindDef kind = DefDatabase<PawnKindDef>.GetNamed("Muffalo");

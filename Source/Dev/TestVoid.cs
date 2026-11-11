@@ -51,8 +51,10 @@ namespace ProjectZ.Dev
 
         private static void VoLaunchPostfix() => voLaunches++;
 
-        private static readonly AccessTools.FieldRef<BattleLogEntry_DamageTaken, Pawn> dtRecipient = AccessTools.FieldRefAccess<BattleLogEntry_DamageTaken, Pawn>("recipientPawn");
-        private static readonly AccessTools.FieldRef<BattleLogEntry_DamageTaken, RulePackDef> dtRule = AccessTools.FieldRefAccess<BattleLogEntry_DamageTaken, RulePackDef>("ruleDef");
+        private static AccessTools.FieldRef<BattleLogEntry_DamageTaken, Pawn> dtRecipientBound;
+        private static AccessTools.FieldRef<BattleLogEntry_DamageTaken, Pawn> dtRecipient => dtRecipientBound ??= AccessTools.FieldRefAccess<BattleLogEntry_DamageTaken, Pawn>("recipientPawn");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<BattleLogEntry_DamageTaken, RulePackDef> dtRuleBound;
+        private static AccessTools.FieldRef<BattleLogEntry_DamageTaken, RulePackDef> dtRule => dtRuleBound ??= AccessTools.FieldRefAccess<BattleLogEntry_DamageTaken, RulePackDef>("ruleDef");   // (bound on first use: nothing for players)
 
         // The game logged a falling roof hitting this pawn (its roof crush; armour may still stop the damage).
         internal static bool Ceilinged(Pawn p)
@@ -83,7 +85,8 @@ namespace ProjectZ.Dev
             }
         }
 
-        private static readonly AccessTools.FieldRef<WeatherEvent_LightningStrike, IntVec3> strikeLocRef = AccessTools.FieldRefAccess<WeatherEvent_LightningStrike, IntVec3>("strikeLoc");
+        private static AccessTools.FieldRef<WeatherEvent_LightningStrike, IntVec3> strikeLocRefBound;
+        private static AccessTools.FieldRef<WeatherEvent_LightningStrike, IntVec3> strikeLocRef => strikeLocRefBound ??= AccessTools.FieldRefAccess<WeatherEvent_LightningStrike, IntVec3>("strikeLoc");   // (bound on first use: nothing for players)
 
         private static void VoWeatherPostfix(WeatherEvent newEvent)
         {

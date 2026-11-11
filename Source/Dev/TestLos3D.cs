@@ -33,25 +33,11 @@ namespace ProjectZ.Dev
     // frozen mid-flight at yaw 45 and 225.
     public static partial class TestRunner
     {
-        // ---- seed (-projectzseed=N): the world/map setup and each check's random state
-        internal static int Seed = -1;
-
-        private static uint StableHash(string s)
-        {
-            uint h = 2166136261u;
-            foreach (char c in s)
-            {
-                h ^= c;
-                h *= 16777619u;
-            }
-            return h;
-        }
-
-        // A check's fixture is built under its own random state (the seed and its name). The game empties the random state
-        // stack every frame, so it covers the check's setup only; the ticks after it draw from the game's own stream.
+        // A check's fixture is built under its own random state (FixtureSeed of its name). The game empties the random state
+        // stack every frame, so it covers the check's setup only; the ticks after it are seeded by the runner (DoTicks).
         private static void Seeded(string name, Action run)
         {
-            Rand.PushState((int)(StableHash(name) ^ (uint)Math.Max(0, Seed)));
+            Rand.PushState(FixtureSeed(name));
             try
             {
                 run();
@@ -69,7 +55,7 @@ namespace ProjectZ.Dev
         private static int mFrame, mLaunchesAt;
         private static Projectile mProj;
         private static ShootLine mLine;
-        private static float mOldYaw, mOldMin;
+        private static float mOldMin;
         private static bool mPatched;
         private static readonly Dictionary<int, IntVec3> mSpawnCell = new Dictionary<int, IntVec3>();
         private static readonly Dictionary<int, string> mImpact = new Dictionary<int, string>();
@@ -272,7 +258,7 @@ namespace ProjectZ.Dev
                         LShotTicks(map);
                         return true;
                     }
-                    IsoRimBridge.SetOption("freeYaw", mFrame == 1 ? 180f : 0f);
+                    SetIsoRimOption("freeYaw", mFrame == 1 ? 180f : 0f);
                     int top = Mathf.Max(ProjectZ.FloorOf(mShooter.Position, map), ProjectZ.FloorOf(mTarget.Position, map));
                     IntVec3 gs = ProjectZ.GroundCellOf(mShooter.Position, map);
                     IntVec3 gt = ProjectZ.GroundCellOf(mTarget.Position, map);
@@ -294,7 +280,7 @@ namespace ProjectZ.Dev
                         Wait(1, "m_yaw");
                         return true;
                     }
-                    IsoRimBridge.SetOption("freeYaw", 0f);
+                    SetIsoRimOption("freeYaw", 0f);
                     LShotTicks(map);
                     return true;
                 case "m_ai_end":
@@ -426,9 +412,9 @@ namespace ProjectZ.Dev
                 }
             }
             MPatchLaunch();
-            mOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             mOldMin = Find.CameraDriver.config.sizeRange.min;
-            Info($"field {found}; A {mA}, B {mB}; hut {mHut}; seed {Seed}; storey {IsoRimBridge.StoreyHeight:0.00}, wall {IsoRimBridge.WallHeight:0.00}; eye {Los3D.Eye}, aims {Los3D.AimHead}/{Los3D.AimChest}/{Los3D.AimWaist}");
+            Info($"field {found}; A {mA}, B {mB}; hut {mHut}; seed {FixtureSeedBase}; storey {IsoRimBridge.StoreyHeight:0.00}, wall {IsoRimBridge.WallHeight:0.00}; eye {Los3D.Eye}, aims {Los3D.AimHead}/{Los3D.AimChest}/{Los3D.AimWaist}");
             BuildChecks();
             lIdx = 0;
             Wait(10, "m_check");
@@ -1209,7 +1195,7 @@ namespace ProjectZ.Dev
                 }
             }
             int canG = hit[0].Count(b => b), seeG = see[0].Count(b => b);
-            Result($"parity: the same random layout on the ground and on floor 2 gives the same can hit and can see ({pairs.Count} pairs, seed {Seed})", diff == 0, $"different {diff}; can hit {canG}, sees {seeG} of {pairs.Count}; {first}");
+            Result($"parity: the same random layout on the ground and on floor 2 gives the same can hit and can see ({pairs.Count} pairs, seed {FixtureSeedBase})", diff == 0, $"different {diff}; can hit {canG}, sees {seeG} of {pairs.Count}; {first}");
             Result("parity: Los3D never called for pairs on one floor (the game's own code)", calls[0] == 0 && calls[1] == 0, $"Los3D calls ground {calls[0]}, floor 2 {calls[1]}");
             Info("parity layout (ground = floor 2), north up:\n" + string.Join("\n", Enumerable.Range(0, size).Reverse().Select(z => new string(Enumerable.Range(0, size).Select(x => lay[x, z]).ToArray()))));
         }
@@ -1666,7 +1652,7 @@ namespace ProjectZ.Dev
 
         private static void LEnd(Map map)
         {
-            IsoRimBridge.SetOption("freeYaw", mOldYaw);
+            RestoreIsoRimOption("freeYaw");
             Find.CameraDriver.config.sizeRange.min = mOldMin;
             if (mode == "finalsay" || mode == "lobbed")
             {

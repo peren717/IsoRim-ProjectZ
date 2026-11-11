@@ -27,7 +27,7 @@ namespace ProjectZ.Dev
 
         private static bool StepAnimalLadders(Map map)
         {
-            Rand.PushState((int)(StableHash("animalladders_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("animalladders_" + stage));
             try
             {
                 return StepAnimalLaddersInner(map);

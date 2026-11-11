@@ -70,8 +70,10 @@ namespace ProjectZ.Dev
         public static bool PathPre(ref PawnPath __result) { if (!Path || !Lying) return true; __result = PawnPath.NotFound; return false; }
         public static void PathPost(ref PawnPath __result) { if (Path && Lying) __result = PawnPath.NotFound; }
 
-        private static readonly AccessTools.FieldRef<Pawn_PathFollower, Pawn> pawnRef = AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");
-        private static readonly AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> modeRef = AccessTools.FieldRefAccess<Pawn_PathFollower, PathEndMode>("peMode");
+        private static AccessTools.FieldRef<Pawn_PathFollower, Pawn> pawnRefBound;
+        private static AccessTools.FieldRef<Pawn_PathFollower, Pawn> pawnRef => pawnRefBound ??= AccessTools.FieldRefAccess<Pawn_PathFollower, Pawn>("pawn");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> modeRefBound;
+        private static AccessTools.FieldRef<Pawn_PathFollower, PathEndMode> modeRef => modeRefBound ??= AccessTools.FieldRefAccess<Pawn_PathFollower, PathEndMode>("peMode");   // (bound on first use: nothing for players)
 
         // the pawn's path request answered at once with "no path"
         public static void RequestPost(Pawn_PathFollower __instance, ref PathRequest __result)
@@ -117,7 +119,8 @@ namespace ProjectZ.Dev
         private static Action<Map> fThen;
         private static bool fPatched;
 
-        private static readonly AccessTools.FieldRef<Projectile, Vector3> fDestRef = AccessTools.FieldRefAccess<Projectile, Vector3>("destination");
+        private static AccessTools.FieldRef<Projectile, Vector3> fDestRefBound;
+        private static AccessTools.FieldRef<Projectile, Vector3> fDestRef => fDestRefBound ??= AccessTools.FieldRefAccess<Projectile, Vector3>("destination");   // (bound on first use: nothing for players)
 
         private static void FImpactPrefix(Projectile __instance, Thing hitThing)
         {
@@ -587,8 +590,10 @@ namespace ProjectZ.Dev
         // (sight and target picking), can hit it (CanHitCell), its shells land on the top of their columns (on the slab
         // over it). Slab over: a slab on floor 3 over the whole slab, the raider ordered as the forced target: every shell
         // lands on floor 3 over it, none on floor 2 under it.
-        private static readonly AccessTools.FieldRef<VerbProperties, float> missRef = AccessTools.FieldRefAccess<VerbProperties, float>("forcedMissRadius");
-        private static readonly AccessTools.FieldRef<VerbProperties, float> missClassicRef = AccessTools.FieldRefAccess<VerbProperties, float>("forcedMissRadiusClassicMortars");
+        private static AccessTools.FieldRef<VerbProperties, float> missRefBound;
+        private static AccessTools.FieldRef<VerbProperties, float> missRef => missRefBound ??= AccessTools.FieldRefAccess<VerbProperties, float>("forcedMissRadius");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<VerbProperties, float> missClassicRefBound;
+        private static AccessTools.FieldRef<VerbProperties, float> missClassicRef => missClassicRefBound ??= AccessTools.FieldRefAccess<VerbProperties, float>("forcedMissRadiusClassicMortars");   // (bound on first use: nothing for players)
 
         private static void LbMortar(Map map, bool slabOver, bool scatter)
         {

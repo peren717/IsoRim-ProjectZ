@@ -40,7 +40,7 @@ namespace ProjectZ.Dev
         private static readonly List<string> scPicks = new List<string>();
         private static bool scHooked;
 
-        private const int ScSeed = 7700;
+        private const int ScFix = 7700;   // the base of this mode's fixture ids (FixtureSeed of the mode and the id)
 
         private static bool StepSmartCon(Map map)
         {
@@ -127,7 +127,7 @@ namespace ProjectZ.Dev
                 PawnKindDef kind = DefDatabase<PawnKindDef>.GetNamedSilentFail("Mech_Constructoid");
                 if (kind != null && ModsConfig.BiotechActive)
                 {
-                    Rand.PushState(ScSeed);
+                    Rand.PushState(FixtureSeed($"{mode}_{ScFix}"));
                     try
                     {
                         if (scM.mechanitor == null)
@@ -199,7 +199,7 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, builders);
             R2Feed(map);
-            Rand.PushState(seed);
+            Rand.PushState(FixtureSeed($"{mode}_{seed}"));
             try
             {
                 build();
@@ -305,7 +305,7 @@ namespace ProjectZ.Dev
             SmarterConstruction.Off = off;
             scWalls = new List<IntVec3>();
             Pawn b = null;
-            ScBase(map, ScSeed + (mech ? 2 : 1), () =>
+            ScBase(map, ScFix + (mech ? 2 : 1), () =>
             {
                 ScSlab(map);
                 foreach (IntVec2 w in new[] { new IntVec2(12, 15), new IntVec2(13, 15), new IntVec2(14, 15), new IntVec2(11, 18) })
@@ -356,7 +356,7 @@ namespace ProjectZ.Dev
             SmarterConstruction.Off = off;
             scWalls = new List<IntVec3>();
             Building_Stairs a = null, bStairs = null;
-            ScBase(map, ScSeed + 3, () =>
+            ScBase(map, ScFix + 3, () =>
             {
                 for (int x = 24; x <= 30; x++)
                 {
@@ -408,7 +408,7 @@ namespace ProjectZ.Dev
         {
             SmarterConstruction.Off = false;
             scWalls = new List<IntVec3>();
-            ScBase(map, ScSeed + 4, () =>
+            ScBase(map, ScFix + 4, () =>
             {
                 for (int x = 29; x <= 33; x++)
                 {
@@ -452,7 +452,7 @@ namespace ProjectZ.Dev
         {
             SmarterConstruction.Off = false;
             scWalls = new List<IntVec3>();
-            ScBase(map, ScSeed + 7, () =>
+            ScBase(map, ScFix + 7, () =>
             {
                 ScSlab(map);
                 for (int x = 11; x <= 15; x++)
@@ -499,7 +499,7 @@ namespace ProjectZ.Dev
         {
             SmarterConstruction.Off = off;
             scWalls = new List<IntVec3>();
-            ScBase(map, ScSeed + 5, () =>
+            ScBase(map, ScFix + 5, () =>
             {
                 ScSlab(map);
                 scUp = ScFrame(map, RL(12, 14, 1, map));
@@ -533,7 +533,7 @@ namespace ProjectZ.Dev
             SmarterConstruction.Off = off;
             scWalls = new List<IntVec3>();
             List<Thing> frames = new List<Thing>();
-            ScBase(map, ScSeed + 100 + layout, () =>
+            ScBase(map, ScFix + 100 + layout, () =>
             {
                 Teleport(scP, RG(20, 15));
                 HashSet<IntVec3> used = new HashSet<IntVec3>();
@@ -576,7 +576,7 @@ namespace ProjectZ.Dev
         {
             SmarterConstruction.Off = false;
             scWalls = new List<IntVec3>();
-            ScBase(map, ScSeed + 6, () =>
+            ScBase(map, ScFix + 6, () =>
             {
                 ScSlab(map);
                 scUp = ScFrame(map, RL(13, 17, 1, map));

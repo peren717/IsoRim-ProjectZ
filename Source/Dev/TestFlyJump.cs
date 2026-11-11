@@ -283,7 +283,7 @@ namespace ProjectZ.Dev
                 return null;
             }
             Pawn p;
-            Rand.PushState((int)(StableHash(seedName) ^ (uint)Math.Max(0, SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed(seedName));
             try
             {
                 float adult = k.RaceProps.lifeStageAges.Last().minAge + 0.5f;

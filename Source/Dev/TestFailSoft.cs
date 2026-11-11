@@ -33,7 +33,8 @@ namespace ProjectZ.Dev
     //      (Harmony re-runs every transpiler twice more here)
     public static partial class TestRunner
     {
-        private static readonly MethodInfo fsClipVanilla = AccessTools.Method(typeof(CellRect), nameof(CellRect.ClipInsideMap), new[] { typeof(Map) });
+        private static MethodInfo fsClipVanillaBound;
+        private static MethodInfo fsClipVanilla => fsClipVanillaBound ??= AccessTools.Method(typeof(CellRect), nameof(CellRect.ClipInsideMap), new[] { typeof(Map) });   // (bound on first use: nothing for players)
 
         private static void StepFailSoftChecks()
         {

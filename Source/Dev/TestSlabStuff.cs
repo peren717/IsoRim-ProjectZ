@@ -32,7 +32,7 @@ namespace ProjectZ.Dev
         private static readonly Dictionary<ThingDef, int> pStock = new Dictionary<ThingDef, int>();
         private static IntVec3 pRemove;
         private static int pRemoveBefore, pRemoveBeforeLow, pShot, pCollapses;
-        private static float pOldYaw, pOldMin;
+        private static float pOldMin;
         private static Thing pSteelSite;
         private static readonly List<IntVec3> pPavilion = new List<IntVec3>();
 
@@ -157,14 +157,14 @@ namespace ProjectZ.Dev
                 {
                     if (pShot >= PShots.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", pOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Find.CameraDriver.config.sizeRange.min = pOldMin;
                         Wait(5, "p_arch");
                         return true;
                     }
                     if (pShot == 0)
                     {
-                        pOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                         pOldMin = Find.CameraDriver.config.sizeRange.min;
                         Find.CameraDriver.config.sizeRange.min = 3f;
                         SetHour(map, 12);
@@ -176,7 +176,7 @@ namespace ProjectZ.Dev
                         Messages.Clear();
                     }
                     var s = PShots[pShot];
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
+                    SetIsoRimOption("freeYaw", s.yaw);
                     ShotAt(map, s.floor, pHouse.CenterCell, s.size, roofs: s.floor == 0);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     Wait(40, "p_shot_take");

@@ -51,6 +51,7 @@ namespace ProjectZ.Dev
 
                 case "xr_place":
                 {
+                    XrayOn();
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     DebugSettings.enableRandomMentalStates = false;
                     Find.Storyteller.storytellerComps.Clear();
@@ -102,7 +103,7 @@ namespace ProjectZ.Dev
                 case "xr_dig":
                 {
                     System.Func<bool> dug = () => xrCells.All(c => c.GetFirstMineable(map) == null);
-                    Rand.PushState(7100 + xrFrame);
+                    Rand.PushState(FixtureSeed($"{mode}_dig") + xrFrame * SeedStride);
                     try
                     {
                         for (int t = 0; t < 300 && !dug(); t++)
@@ -152,8 +153,8 @@ namespace ProjectZ.Dev
                 case "xr_wide":
                     Capture("xray_tool_wide");
                     xrShot = 0;
-                    xrOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
-                    xrOldPitch = (float)IsoRimBridge.SetOption("isoPitch", 35.3f);
+                    SetIsoRimOption("freeYaw", 0f);
+                    SetIsoRimOption("isoPitch", 35.3f);
                     Wait(5, "xr_views");
                     return true;
 
@@ -162,8 +163,8 @@ namespace ProjectZ.Dev
                 case "xr_views":
                     if (xrShot >= XrViews.GetLength(0))
                     {
-                        IsoRimBridge.SetOption("freeYaw", 0f);
-                        IsoRimBridge.SetOption("isoPitch", 35.3f);
+                        SetIsoRimOption("freeYaw", 0f);
+                        SetIsoRimOption("isoPitch", 35.3f);
                         Wait(5, "xr_none_set");
                         return true;
                     }
@@ -213,8 +214,8 @@ namespace ProjectZ.Dev
                 case "xr_stairs":
                     if (xrShot >= XrViews.GetLength(0))
                     {
-                        IsoRimBridge.SetOption("freeYaw", xrOldYaw);
-                        IsoRimBridge.SetOption("isoPitch", xrOldPitch);
+                        RestoreIsoRimOption("freeYaw");
+                        RestoreIsoRimOption("isoPitch");
                         Find.DesignatorManager.Deselect();
                         Wait(5, "xr_cmds");   // X6-X9: Mine above / Mine below (TestXrayCmds)
                         return true;
@@ -237,14 +238,13 @@ namespace ProjectZ.Dev
         // The views of X4 and X5: (pitch, camera turn).
         private static readonly float[,] XrViews = { { 35.3f, 0f }, { 35.3f, 90f }, { 60f, 0f }, { 60f, 90f } };
         private static int xrShot;
-        private static float xrOldYaw, xrOldPitch;
 
         private static string XrViewName() => $"p{Mathf.RoundToInt(XrViews[xrShot, 0])}_y{Mathf.RoundToInt(XrViews[xrShot, 1])}";
 
         private static void XrView(Map map, int floor)
         {
-            IsoRimBridge.SetOption("isoPitch", XrViews[xrShot, 0]);
-            IsoRimBridge.SetOption("freeYaw", XrViews[xrShot, 1]);
+            SetIsoRimOption("isoPitch", XrViews[xrShot, 0]);
+            SetIsoRimOption("freeYaw", XrViews[xrShot, 1]);
             ShotAt(map, floor, xrCells[4], 9f);
             Find.UIRoot.screenshotMode.Active = true;
         }

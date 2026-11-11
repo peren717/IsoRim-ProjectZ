@@ -38,7 +38,6 @@ namespace ProjectZ.Dev
 
         private static readonly List<PoTrack> poTracks = new List<PoTrack>();
         private static Pawn poMech;
-        private static float poOldYaw;
         private static int poIdx, poView;
         private static readonly float[] poYaws = { 0f, 90f, 270f };
         private static readonly float[] poPcts = { 0.1f, 0.3f, 0.5f, 0.7f, 0.9f };
@@ -431,7 +430,7 @@ namespace ProjectZ.Dev
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             Teleport(r2P, LdG(16, 13));
             Draft(r2P, true);
-            poOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             poIdx = 0;
             poView = 0;
             ldDest = LdL(24, 13, 2, map);
@@ -455,7 +454,7 @@ namespace ProjectZ.Dev
             tickWatch = null;
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
             r2P.rotationTracker.UpdateRotation();
-            IsoRimBridge.SetOption("freeYaw", poYaws[poView]);
+            SetIsoRimOption("freeYaw", poYaws[poView]);
             ShotAt(map, 2, ldFoot + IntVec3.East, 5f);
             Wait(120, "ld_ps_take");   // (the camera turns over some frames)
         }
@@ -476,10 +475,10 @@ namespace ProjectZ.Dev
             }
             poView = 0;
             poIdx++;
-            IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             if (poIdx >= poPcts.Length * 2)
             {
-                IsoRimBridge.SetOption("freeYaw", poOldYaw);
+                RestoreIsoRimOption("freeYaw");
                 Wait(3, "ld_ps_end");   // (after the last screenshot is written)
                 return;
             }

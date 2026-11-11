@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HarmonyLib;
 using ProjectZ.Combat;
 using RimWorld;
 using UnityEngine;
@@ -47,7 +48,7 @@ namespace ProjectZ.Dev
         private static CellRect iTower;
         private static Projectile iProj;
         private static Building_TurretGun iMortar;
-        private static float iOldYaw, iOldMin;
+        private static float iOldMin;
         private static int iFrame;
         private static bool iOrdered;
 
@@ -64,7 +65,7 @@ namespace ProjectZ.Dev
                 {
                     if (iCase >= iCases.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", iOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Find.CameraDriver.config.sizeRange.min = iOldMin;
                         Info($"pitch draws: tilted {ProjectilePitch.tiltedDraws}, flat {ProjectilePitch.flatDraws}; cross-floor shots {PZCombatStats.crossFloorShots}");
                         WatchCheck(map, "bulletpitch end");
@@ -80,7 +81,8 @@ namespace ProjectZ.Dev
                     PitchCase c = iCases[iCase];
                     if (iProj == null)
                     {
-                        Result($"{c.name}: a projectile mid-flight", false, $"none within {ticksTotal} ticks; shooter job {Shooter(c)?.CurJobDef?.defName}, stance {Shooter(c)?.stances?.curStance}");
+                        Result($"{c.name}: a projectile mid-flight", false, $"none within {ticksTotal} ticks; shooter job {Shooter(c)?.CurJobDef?.defName}, stance {Shooter(c)?.stances?.curStance}; "
+                            + $"seen: {(iSeen.Count == 0 ? "no projectile of the shooter" : string.Join(", ", iSeen.Values))}");
                         EndCase(map);
                         return true;
                     }
@@ -101,7 +103,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     ProjectilePitch.Disabled = iFrame == 1;
-                    IsoRimBridge.SetOption("freeYaw", iFrame == 2 ? 180f : 0f);
+                    SetIsoRimOption("freeYaw", iFrame == 2 ? 180f : 0f);
                     IntVec3 g = ProjectZ.GroundCellOf(iProj.Position, map);
                     Find.CameraDriver.config.sizeRange.min = 2f;
                     // (a mortar shell flies its arc high over the ground cell under it: framed wide enough to show it)
@@ -168,6 +170,7 @@ namespace ProjectZ.Dev
             FloorView.Set(0);
             Pawn s = Shooter(c);
             iProj = null;
+            iSeen.Clear();
             iOrdered = false;
             bool ok;
             if (c.target == 'm')
@@ -206,17 +209,40 @@ namespace ProjectZ.Dev
 
         // A projectile from this shooter between 30 and 60 % of its flat way, between floors or not (a miss up that comes
         // down on open air falls back onto the shooter's floor: skipped).
+        // How often the game drew each projectile (Projectile.DrawAt, whoever draws it: IsoRim replaces the drawing), by
+        // thingIDNumber.
+        private static readonly Dictionary<int, int> iDraws = new Dictionary<int, int>();
+
+        internal static void PatchBulletPitch(Harmony h)
+        {
+            h.Patch(AccessTools.DeclaredMethod(typeof(Projectile), "DrawAt", new[] { typeof(Vector3), typeof(bool) }), postfix: new HarmonyMethod(typeof(TestRunner), nameof(IDrawPostfix)));
+        }
+
+        private static void IDrawPostfix(Projectile __instance)
+        {
+            iDraws[__instance.thingIDNumber] = iDraws.TryGetValue(__instance.thingIDNumber, out int n) ? n + 1 : 1;
+        }
+
+        // (every projectile of the shooter seen this case, for the report when none is found mid-flight)
+        private static readonly Dictionary<int, string> iSeen = new Dictionary<int, string>();
+
         private static Projectile MidFlightOf(Map map, Thing from, Pawn launcher, bool cross)
         {
             foreach (Thing t in map.listerThings.ThingsInGroup(ThingRequestGroup.Projectile))
             {
-                if (!(t is Projectile p) || p.Launcher != launcher && p.Launcher != from || cross != Flights.cross.TryGetValue(p, out _))
+                if (!(t is Projectile p) || p.Launcher != launcher && p.Launcher != from)
                 {
                     continue;
                 }
                 Vector3 o = projOrigin(p), d = projDest(p);
                 float total = (d - o).MagnitudeHorizontal();
                 float f = total > 0.1f ? (p.ExactPosition - o).MagnitudeHorizontal() / total : 0f;
+                bool isCross = Flights.cross.TryGetValue(p, out _);
+                iSeen[p.thingIDNumber] = $"{p.def.defName} {(isCross ? "between floors" : "one floor")} from {o.ToIntVec3()} to {d.ToIntVec3()} (launcher at {launcher.Position}) {f:P0} of {total:0.0} cells";
+                if (cross != isCross)
+                {
+                    continue;
+                }
                 if (f >= 0.3f && f <= 0.6f)
                 {
                     return p;
@@ -282,6 +308,17 @@ namespace ProjectZ.Dev
                 // target, nose along the arc; it never asks for a pitched card (ProjectilePitch only tilts flat flights), so
                 // no pitch is recorded for it: that is the expected drawing, not a missing one.
                 Result($"{c.name}: drawn on its lobbed arc, not pitched as a straight flight", !drawn, detail);
+                return;
+            }
+            Thing weapon = c.target == 'm' ? null : Shooter(c).equipment?.Primary;
+            if (IsoRimBridge.ThrownWithModel(weapon))
+            {
+                // A thrown weapon IsoRim shows as its own model (the frag grenade; IsoRim's answer, Api.ReadThingModel) flies as
+                // that model, turned only about the vertical (its spin), never as a card: it is drawn (the game drew the
+                // projectile) but never asks for a pitched card, so no pitch is recorded. An accepted limitation (user
+                // 2026-11-10): the model is not tilted along a flight between floors.
+                int draws = iDraws.TryGetValue(p.thingIDNumber, out int n) ? n : 0;
+                Result($"{c.name}: a thrown weapon with an IsoRim model is drawn as that model, not tilted", draws > 0 && !drawn, $"drawn {draws} times; {detail}");
                 return;
             }
             bool sign = c.toFloor < c.fromFloor ? pitch < -1f : pitch > 1f;
@@ -414,7 +451,7 @@ namespace ProjectZ.Dev
                 Teleport(p, away);
             }
             Info($"field {found} (centre x {icx}), tower {iTower} (slabs on floors 2 and 3), edge row {iEz}; storey {IsoRimBridge.StoreyHeight:0.00}, squash {IsoRimBridge.Squash:0.000}; A {iA}, B {iB}, D {iD}");
-            iOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             iOldMin = Find.CameraDriver.config.sizeRange.min;
             iCase = 0;
             ProjectilePitch.drawnPitch.Clear();

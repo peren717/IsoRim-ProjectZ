@@ -14,9 +14,11 @@ namespace ProjectZ.Combat
     // the launch patch tells IsoRim with SetLaunchPoint) to the destination, plus the change of IsoRim's own drawn
     // height over it (Api.ProjectileHeight, true cells). The card is turned in true space and then squashed as IsoRim
     // draws everything (drawn y = true / Squash), so it shows the true angle and length. Bullets, arrows, rockets and
-    // thrown things alike (a spinning thing's spin plane tilts with it); a lobbed shell's or grenade's arc stays as
-    // IsoRim draws it (height, no pitch, as on one floor), only the floor-to-floor slope pitches it. Shots on one
-    // floor are drawn exactly as before (Card returns false). Not saved: a shot in flight on load flies on flat.
+    // thrown things drawn as cards alike (a spinning thing's spin plane tilts with it); a lobbed shell's or grenade's arc
+    // stays as IsoRim draws it (height, no pitch, as on one floor), only the floor-to-floor slope pitches it. A thrown
+    // weapon with an IsoRim model (a frag grenade) is drawn by IsoRim as that model, turned only about the vertical: it
+    // never asks for a card, so it is not tilted (an accepted limitation, user 2026-11-10). Shots on one floor are drawn
+    // exactly as before (Card returns false). Not saved: a shot in flight on load flies on flat.
     public static class ProjectilePitch
     {
         private static readonly AccessTools.FieldRef<Projectile, Vector3> originRef = AccessTools.FieldRefAccess<Projectile, Vector3>("origin");

@@ -464,7 +464,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ T: the tunnel
                 case "tk_t":
                     OtMine(map, tkTunnel, tkS, false);
-                    MuRun(2500, 71000, () => tkTunnel.All(c => !OtRock(c, map)), "tk_t_ticks");
+                    MuRun(2500, "71000", () => tkTunnel.All(c => !OtRock(c, map)), "tk_t_ticks");
                     return true;
 
                 case "tk_t_ticks":
@@ -507,7 +507,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     d.DesignateSingleCell(w);
-                    MuRun(800, 71100, () => !OtRock(FloorRoof.Above(w, map), map), "tk_ma_check");
+                    MuRun(800, "71100", () => !OtRock(FloorRoof.Above(w, map), map), "tk_ma_check");
                     return true;
                 }
 
@@ -523,7 +523,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ O, E, K: rock that opens
                 case "tk_o":
                     OtMine(map, new[] { tkOre }, tkOreS, false);
-                    MuRun(600, 71200, () => !OtRock(tkOre, map), "tk_o_check");
+                    MuRun(600, "71200", () => !OtRock(tkOre, map), "tk_o_check");
                     return true;
 
                 case "tk_o_check":
@@ -538,7 +538,7 @@ namespace ProjectZ.Dev
 
                 case "tk_e":
                     OtMine(map, new[] { tkThin }, tkThinS, false);
-                    MuRun(600, 71300, () => !OtRock(tkThin, map), "tk_e_check");
+                    MuRun(600, "71300", () => !OtRock(tkThin, map), "tk_e_check");
                     return true;
 
                 case "tk_e_check":
@@ -553,7 +553,7 @@ namespace ProjectZ.Dev
 
                 case "tk_k":
                     OtMine(map, new[] { tkLone }, tkLoneS, false);
-                    MuRun(600, 71400, () => !OtRock(tkLone, map), "tk_k_check");
+                    MuRun(600, "71400", () => !OtRock(tkLone, map), "tk_k_check");
                     return true;
 
                 case "tk_k_check":
@@ -564,7 +564,7 @@ namespace ProjectZ.Dev
                 // ------------------------------------------------------------ U: a tunnel on level 1
                 case "tk_u":
                     OtMine(map, tkUp, tkUpS, false);
-                    MuRun(2500, 71500, () => tkUp.All(c => !OtRock(c, map)), "tk_u_ticks");
+                    MuRun(2500, "71500", () => tkUp.All(c => !OtRock(c, map)), "tk_u_ticks");
                     return true;
 
                 case "tk_u_ticks":
@@ -619,7 +619,7 @@ namespace ProjectZ.Dev
                     MuStart(map, MuRect(new[] { tkMbTop, tkMbS }, map, 2), false);
                     IntVec3 t = tkMbTop;
                     bool marked = false;
-                    MuRun(1000, 71600, () => !OtRock(FloorRoof.Below(t, map), map), "tk_mb_check", () =>
+                    MuRun(1000, "71600", () => !OtRock(FloorRoof.Below(t, map), map), "tk_mb_check", () =>
                     {
                         Designator_MineBelow d = new Designator_MineBelow();
                         if (!marked && d.CanDesignateCell(t).Accepted)

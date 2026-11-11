@@ -32,7 +32,8 @@ namespace ProjectZ.Dev
         private static float omMaxTurn, omLastRot = float.NaN;
         private static readonly List<float> omTurns = new List<float>();
         private static Thing omEngine2;
-        private static readonly AccessTools.FieldRef<Building_TurretGun, TurretTop> omTop = AccessTools.FieldRefAccess<Building_TurretGun, TurretTop>("top");
+        private static AccessTools.FieldRef<Building_TurretGun, TurretTop> omTopBound;
+        private static AccessTools.FieldRef<Building_TurretGun, TurretTop> omTop => omTopBound ??= AccessTools.FieldRefAccess<Building_TurretGun, TurretTop>("top");   // (bound on first use: nothing for players)
 
         internal static void OtherModsInit(Harmony h)
         {

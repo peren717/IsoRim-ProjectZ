@@ -250,7 +250,7 @@ namespace ProjectZ.Dev
                     tkTunnel.AddRange(line);
                     otMinerId = Colonists(map).First(p => !p.Downed && !p.WorkTypeIsDisabled(WorkTypeDefOf.Mining)).thingIDNumber;
                     OtMine(map, line, s0, true);
-                    MuRun(2500, 73000, () => tkTunnel.All(c => !OtRock(c, map)), "tk_old_made");
+                    MuRun(2500, "73000", () => tkTunnel.All(c => !OtRock(c, map)), "tk_old_made");
                     return true;
                 }
 
@@ -322,7 +322,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     OtMine(map, new[] { tkOldNext }, tkOldFrom, false);
-                    MuRun(600, 73100, () => !OtRock(tkOldNext, map), "tk_old_3");
+                    MuRun(600, "73100", () => !OtRock(tkOldNext, map), "tk_old_3");
                     return true;
                 }
 
@@ -345,7 +345,7 @@ namespace ProjectZ.Dev
                     tkOldUp = tkUp[0];
                     Info($"O4 before: {TkCell(tkOldUp, map)}; below {TkCell(FloorRoof.Below(tkOldUp, map), map)}");
                     OtMine(map, new[] { tkOldUp }, tkUpS, false);
-                    MuRun(600, 73200, () => !OtRock(tkOldUp, map), "tk_old_5");
+                    MuRun(600, "73200", () => !OtRock(tkOldUp, map), "tk_old_5");
                     return true;
                 }
 
@@ -385,7 +385,7 @@ namespace ProjectZ.Dev
                     Info($"S1 aim on the thick roof {TkCell(deep, map)}: can hit {m.AttackVerb.CanHitTarget(new LocalTargetInfo(deep))}, on its level-1 rock {TkCell(L1(deep, map), map)}: can hit {m.AttackVerb.CanHitTarget(new LocalTargetInfo(L1(deep, map)))}, Column.Top {Column.Top(deep, map)}");
                     m.OrderAttack(new LocalTargetInfo(tkG));
                     Info($"S1 a manned mortar at {at} fires on {TkCell(tkG, map)} ({tkG.DistanceTo(at):0} cells), Column.Top {Column.Top(tkG, map)}; can hit {m.AttackVerb.CanHitTarget(new LocalTargetInfo(tkG))}");
-                    MuRun(60, 72000, () => sxShells.Count >= 10, "tk_s_mortar2", () =>
+                    MuRun(60, "72000", () => sxShells.Count >= 10, "tk_s_mortar2", () =>
                     {
                         man.ManForATick(p);
                         if (!load.Loaded)
@@ -430,7 +430,7 @@ namespace ProjectZ.Dev
                     Verb v = SxTargeter(p, "OrbitalTargeterBombardment");
                     v?.OrderForceTarget(new LocalTargetInfo(tkG));
                     Info($"S2 bombardment on {TkCell(tkG, map)} by {p} at {p.Position}: job {p.CurJob?.def?.defName}; can hit {v?.CanHitTarget(new LocalTargetInfo(tkG))}; on the thick roof {TkDeep(map)}: can hit {v?.CanHitTarget(new LocalTargetInfo(TkDeep(map)))}");
-                    MuRun(30, 72100, () =>
+                    MuRun(30, "72100", () =>
                     {
                         bool now = map.listerThings.ThingsOfDef(ThingDefOf.Bombardment).Any();
                         tkSeen |= now;
@@ -462,7 +462,7 @@ namespace ProjectZ.Dev
                     Verb v = SxTargeter(p, "OrbitalTargeterPowerBeam");
                     v?.OrderForceTarget(new LocalTargetInfo(tkG));
                     Info($"S3 power beam on {TkCell(tkG, map)} by {p} at {p.Position}: job {p.CurJob?.def?.defName}; can hit {v?.CanHitTarget(new LocalTargetInfo(tkG))}; on the thick roof {TkDeep(map)}: can hit {v?.CanHitTarget(new LocalTargetInfo(TkDeep(map)))}");
-                    MuRun(30, 72200, () =>
+                    MuRun(30, "72200", () =>
                     {
                         bool now = map.listerThings.ThingsOfDef(ThingDefOf.PowerBeam).Any();
                         tkSeen |= now;
@@ -486,7 +486,7 @@ namespace ProjectZ.Dev
                     tkG = TkTarget(map, out _);
                     TkStrikeStart(map);
                     tkFalls.Clear();
-                    Rand.PushState(72300);
+                    Rand.PushState(FixtureSeed($"{mode}_strike"));
                     foreach (string name in new[] { "MeteoriteImpact", "ShipChunkDrop", "ResourcePodCrash" })
                     {
                         IncidentDef d = DefDatabase<IncidentDef>.GetNamedSilentFail(name);
@@ -508,7 +508,7 @@ namespace ProjectZ.Dev
                     IntVec3 aim = deep;
                     SkyfallerMaker.SpawnSkyfaller(ThingDefOf.MeteoriteIncoming, new List<Thing> { ThingMaker.MakeThing(ThingDefOf.Steel) }, aim, map);
                     SkyfallerMaker.SpawnSkyfaller(ThingDefOf.ShipChunkIncoming, ThingDefOf.ShipChunk, aim + IntVec3.West, map);
-                    MuRun(20, 72400, () => TkFlying(map).Count == 0, "tk_s_sky2");
+                    MuRun(20, "72400", () => TkFlying(map).Count == 0, "tk_s_sky2");
                     return true;
                 }
 
@@ -551,7 +551,7 @@ namespace ProjectZ.Dev
                     }
                     GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_EmergencyLadder, tkLP1, map, tkLR1, Faction.OfPlayer, null);
                     GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_EmergencyLadder, tkLT, map, tkLR2, Faction.OfPlayer, null);
-                    MuRun(400, 72500, () => TkLadderAt(tkLP1, map) != null && TkLadderAt(tkLT, map) != null, "tk_l_built");
+                    MuRun(400, "72500", () => TkLadderAt(tkLP1, map) != null && TkLadderAt(tkLT, map) != null, "tk_l_built");
                     return true;
                 }
 
@@ -562,7 +562,7 @@ namespace ProjectZ.Dev
                         $"ladder 1 {TkLadderAt(tkLP1, map)}, ladder 2 {TkLadderAt(tkLT, map)}; builder at {miner.Position} level {Levels.LevelOf(miner.Position, map)}, job {miner.CurJob?.def?.defName}");
                     Info($"L1 from {miner.Position}: reach the top {miner.CanReach(tkLDest, PathEndMode.OnCell, Danger.Deadly)}, reach the ground {miner.CanReach(tkLA, PathEndMode.OnCell, Danger.Deadly)}");
                     TkOrderedGoto(miner, tkLDest);
-                    MuRun(120, 72600, () => miner.Position == tkLDest, "tk_l_top");
+                    MuRun(120, "72600", () => miner.Position == tkLDest, "tk_l_top");
                     return true;
                 }
 
@@ -580,7 +580,7 @@ namespace ProjectZ.Dev
                     Find.UIRoot.screenshotMode.Active = false;
                     Pawn miner = OtPawn(map, otMinerId);
                     TkOrderedGoto(miner, tkLA);
-                    MuRun(120, 72700, () => miner.Position == tkLA, "tk_l_end");
+                    MuRun(120, "72700", () => miner.Position == tkLA, "tk_l_end");
                     return true;
                 }
 

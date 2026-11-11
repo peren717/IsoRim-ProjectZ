@@ -41,13 +41,12 @@ namespace ProjectZ.Dev
 
         private static List<LmCase> lmCases;
         private static int lmIdx, lmView;
-        private static float lmOldYaw;
         private static readonly List<Building_Elevator> lmElevators = new List<Building_Elevator>();
         private static readonly List<Building_SiegeLadder> lmLadders = new List<Building_SiegeLadder>();
 
         private static bool StepLiftModels(Map map)
         {
-            Rand.PushState((int)(StableHash("liftmodels_" + stage + "_" + lmIdx) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("liftmodels_" + stage + "_" + lmIdx));
             try
             {
                 switch (stage)
@@ -98,7 +97,7 @@ namespace ProjectZ.Dev
             r2P = cols.First();
             r2Q = cols.FirstOrDefault(p => p != r2P);
             R2Park(map);
-            lmOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             LmCases();
             lmIdx = 0;
             stage = "lm_case";
@@ -270,7 +269,7 @@ namespace ProjectZ.Dev
         {
             if (lmIdx >= lmCases.Count)
             {
-                IsoRimBridge.SetOption("freeYaw", lmOldYaw);
+                RestoreIsoRimOption("freeYaw");
                 FloorView.Set(0);
                 Finish();
                 return;
@@ -291,7 +290,7 @@ namespace ProjectZ.Dev
             LmCase c = lmCases[lmIdx];
             LmView v = c.views[lmView];
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;   // (a rider stays mid-ride over the views)
-            IsoRimBridge.SetOption("freeYaw", v.yaw);
+            SetIsoRimOption("freeYaw", v.yaw);
             IsoRim.Api.PeekUpperFloors = v.peek;
             LiftModels.DrawAboveView = v.above;
             if (v.flat)

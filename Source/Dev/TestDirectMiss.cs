@@ -48,7 +48,7 @@ namespace ProjectZ.Dev
                 {
                     ThingDef gun = dmGun;
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;   // (only the seeded ticks below run)
-                    Rand.PushState((int)(StableHash("dm_order") ^ (uint)Math.Max(0, SeedArg ?? 717)));
+                    Rand.PushState(FixtureSeed("dm_order"));
                     dmShooter.equipment.DestroyAllEquipment();
                     dmShooter.equipment.AddEquipment((ThingWithComps)ThingMaker.MakeThing(gun));
                     Job j = JobMaker.MakeJob(JobDefOf.AttackStatic, new LocalTargetInfo(dmAim));
@@ -88,7 +88,7 @@ namespace ProjectZ.Dev
             // The fixture is the same on any map (the generated map is not the same run to run, even with the seed): a 15x30
             // field at a fixed place (the first, in a fixed order from the map's south middle, with nothing indestructible
             // in it), made bare soil without roofs, things or animals; the setup's random picks under a fixed state.
-            Rand.PushState((int)(StableHash("dm_setup") ^ (uint)Math.Max(0, SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("dm_setup"));
             CellRect found = CellRect.Empty;
             int x0 = map.Size.x / 2 - 7;
             for (int i = 0; i < 40 && found.Area == 0; i++)

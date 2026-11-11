@@ -43,7 +43,7 @@ namespace ProjectZ.Dev
 
         private static bool StepStairApi(Map map)
         {
-            Rand.PushState((int)(StableHash("stairapi_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("stairapi_" + stage));
             try
             {
                 return StepStairApiInner(map);

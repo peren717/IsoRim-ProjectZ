@@ -51,7 +51,7 @@ namespace ProjectZ.Dev
         private static List<ShFrame> shFrames;
         private static int shFrame;
         private static readonly List<Vector3> shPoses = new List<Vector3>();   // (ticks, height, floor height)
-        private static float shOldYaw, shOldMin;
+        private static float shOldMin;
 
         private static IntVec3 ShP(int dx, int dz) => new IntVec3(shPlat.minX + dx, 0, shPlat.minZ + dz);
 
@@ -189,7 +189,7 @@ namespace ProjectZ.Dev
                 {
                     tickWatch = null;
                     ShFrame f = shFrames[shFrame];
-                    IsoRimBridge.SetOption("freeYaw", f.yaw);
+                    SetIsoRimOption("freeYaw", f.yaw);
                     IntVec3 g = ProjectZ.GroundCellOf(shSkyCell, map);
                     Find.CameraDriver.config.sizeRange.min = 2f;
                     ShotAt(map, f.view, g + new IntVec3(-2, 0, 2), 9f);
@@ -659,7 +659,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "sh_end":
-                    IsoRimBridge.SetOption("freeYaw", shOldYaw);
+                    RestoreIsoRimOption("freeYaw");
                     Find.CameraDriver.config.sizeRange.min = shOldMin;
                     Finish();
                     return true;
@@ -1074,7 +1074,7 @@ namespace ProjectZ.Dev
                 }
             }
             Info($"field {found}, slab {shPlat} on floor 2 (ground rect); storey {IsoRimBridge.StoreyHeight:0.00}; hour {GenLocalDate.HourOfDay(map)}; colonists: ground {cols[0].LabelShort}, caller {cols[1].LabelShort} ({cols[1].royalty?.GetCurrentTitle(shEmpire)?.defName}), {cols[2].LabelShort}, {cols[3].LabelShort}");
-            shOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             shOldMin = Find.CameraDriver.config.sizeRange.min;
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
             StartTicks(300, "sh_power");

@@ -36,7 +36,7 @@ namespace ProjectZ.Dev
 
         private static bool StepAtrium(Map map)
         {
-            Rand.PushState((int)(StableHash("atrium_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("atrium_" + stage));
             try
             {
                 return StepAtriumInner(map);

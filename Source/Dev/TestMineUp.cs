@@ -147,15 +147,16 @@ namespace ProjectZ.Dev
             pendingLoad = "pz_mineup";
         }
 
-        // Real ticks: up to 300 a frame, each frame under its own fixed seed, until cond (checked every tick) or maxFrames.
-        private static void MuRun(int maxFrames, int seed, Func<bool> cond, string next, Action each = null)
+        // Real ticks: up to 300 a frame, each frame under its own random state (the fixture's FixtureSeed and the frame), until
+        // cond (checked every tick) or maxFrames. fixture: the run's name (two runs that share one compare the same flow).
+        private static void MuRun(int maxFrames, string fixture, Func<bool> cond, string next, Action each = null)
         {
             muCond = cond;
             muEach = each;
             muNext = next;
             muFrame = 0;
             muMax = maxFrames;
-            muSeed = seed;
+            muSeed = FixtureSeed($"{mode}_run_{fixture}");
             stage = "mu_run";
         }
 
@@ -390,7 +391,7 @@ namespace ProjectZ.Dev
                 case "mu_run":
                 {
                     bool done = muCond();
-                    Rand.PushState(muSeed + muFrame);
+                    Rand.PushState(muSeed + muFrame * SeedStride);
                     try
                     {
                         for (int t = 0; t < 300 && !done && muInterrupt == null; t++)
@@ -496,7 +497,7 @@ namespace ProjectZ.Dev
                     }
                     MuCrew(map, WorkTypeDefOf.Mining, 3);
                     Info($"setup: tunnels A {string.Join(" ", muA.Take(6))}, B {string.Join(" ", muB.Take(4))}");
-                    MuRun(400, 31000, () => dig.All(c => c.GetEdifice(map) == null), "mu_dug");
+                    MuRun(400, "31000", () => dig.All(c => c.GetEdifice(map) == null), "mu_dug");
                     return true;
                 }
 
@@ -568,6 +569,7 @@ namespace ProjectZ.Dev
                     Result("M1 Mine above: from the tunnel cell the rock over it is mined from below; from a rock wall cell refused ('Mine this rock first')", overTunnel && overWall && MuRock(uw, map),
                         $"over tunnel '{(fromTunnel.Accepted ? "ok" : fromTunnel.Reason)}' {overTunnel}, over wall {uw} ({uw.GetEdifice(map)?.def.defName ?? "no rock"}) '{(fromWall.Accepted ? "ok" : fromWall.Reason)}' {overWall}");
                     // shot: the Mine tool on level 1 over the tunnel, the x-ray and the marks
+                    XrayOn();
                     dm.DesignateMultiCell(muA.Skip(2).Take(2).Select(t => MuUp(t, map)));
                     MuPointer(MuUp(muA[3], map));
                     MuShot(map, "mu_mark_xray", 1, muA[2], 6f, "mu_m1_end", mineTool: true);
@@ -575,6 +577,7 @@ namespace ProjectZ.Dev
                 }
 
                 case "mu_m1_end":
+                    XrayOff();   // (only mu_mark_xray needs the x-ray: the later Mine tool shots are drawn as the player's default)
                     muPointer = IntVec3.Invalid;
                     Find.UIRoot.screenshotMode.Active = false;
                     MuEnd(map, "M1", "mu_m3");
@@ -615,7 +618,7 @@ namespace ProjectZ.Dev
                     FloorView.Set(0);
                     IntVec3 u1 = MuUp(muA[2], map), u2 = MuUp(muA[4], map);
                     muOrder = "";
-                    MuRun(200, 33000, () => !MuRockOrOre(u1, map) && !MuRockOrOre(u2, map), "mu_m3_settle", () =>
+                    MuRun(200, "33000", () => !MuRockOrOre(u1, map) && !MuRockOrOre(u2, map), "mu_m3_settle", () =>
                     {
                         if (!MuRockOrOre(u1, map) && MuRockOrOre(u2, map) && !MineSide.MarkAt(muA[4], map, MineDir.FromBelow))
                         {
@@ -737,7 +740,7 @@ namespace ProjectZ.Dev
                     }
                     MuStart(map, MuRect(muA, map, 3), true);
                     map.roofCollapseBuffer.MarkToCollapse(u1);
-                    MuRun(2, 33500, () => !map.roofCollapseBuffer.IsMarkedToCollapse(u1), "mu_m10");
+                    MuRun(2, "33500", () => !map.roofCollapseBuffer.IsMarkedToCollapse(u1), "mu_m10");
                     return true;
                 }
 
@@ -780,7 +783,7 @@ namespace ProjectZ.Dev
                     new Designator_AreaNoRoof().DesignateMultiCell(new[] { c });
                     muFlag = false;
                     Info($"M4: hole over {c} (top {u}), colonist {muP1} and steel on it, stool at {muStoolAt}; worker {muP2}");
-                    MuRun(120, 34000, () => u.GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m4_done", () =>
+                    MuRun(120, "34000", () => u.GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m4_done", () =>
                     {
                         if (!muFlag && muP2.CurJobDef == JobDefOf.RemoveRoof && muP2.jobs.curDriver.CurToilIndex >= 1)
                         {
@@ -800,7 +803,7 @@ namespace ProjectZ.Dev
                 {
                     Find.UIRoot.screenshotMode.Active = false;
                     IntVec3 u = MuUp(muB[1], map);
-                    MuRun(120, 34100, () => u.GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m4_done");
+                    MuRun(120, "34100", () => u.GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m4_done");
                     return true;
                 }
 
@@ -827,7 +830,7 @@ namespace ProjectZ.Dev
                     Find.UIRoot.screenshotMode.Active = false;
                     IntVec3 c = muB[1];
                     MuCrew(map, WorkTypeDefOf.Construction, 2);
-                    MuRun(17, 34200, () => false, "mu_m4_kept");
+                    MuRun(17, "34200", () => false, "mu_m4_kept");
                     return true;
                 }
 
@@ -838,7 +841,7 @@ namespace ProjectZ.Dev
                     // M14 (c): the area cleared, a roof built over the hole (as auto-roofing marks it): it stays
                     map.areaManager.NoRoof[c] = false;
                     map.areaManager.BuildRoof[c] = true;
-                    MuRun(60, 34300, () => map.roofGrid.Roofed(c), "mu_m4_roofed");
+                    MuRun(60, "34300", () => map.roofGrid.Roofed(c), "mu_m4_roofed");
                     return true;
                 }
 
@@ -846,7 +849,7 @@ namespace ProjectZ.Dev
                 {
                     IntVec3 c = muB[1];
                     muNote = MuRoof(c, map);
-                    MuRun(17, 34400, () => false, "mu_m4_roofed2");
+                    MuRun(17, "34400", () => false, "mu_m4_roofed2");
                     return true;
                 }
 
@@ -871,7 +874,7 @@ namespace ProjectZ.Dev
                     List<Pawn> crew = MuCrew(map, WorkTypeDefOf.Mining, 2);
                     muP1 = crew.FirstOrDefault();
                     muFlag = false;
-                    MuRun(400, 35000, () => muA.Take(4).All(t => !MuRockOrOre(MuUp(t, map), map)), "mu_m5_mined", () =>
+                    MuRun(400, "35000", () => muA.Take(4).All(t => !MuRockOrOre(MuUp(t, map), map)), "mu_m5_mined", () =>
                     {
                         Pawn w = crew.FirstOrDefault(p => p.CurJobDef == PZMineDefOf.PZ_MineFromBelow && p.jobs.curDriver.CurToilIndex >= 1 && !p.pather.Moving && p.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints);
                         if (!muFlag && w != null && muA.Take(4).Count(t => MuRockOrOre(MuUp(t, map), map)) <= 3)
@@ -899,7 +902,7 @@ namespace ProjectZ.Dev
                     Find.UIRoot.screenshotMode.Active = false;
                     Find.DesignatorManager.Deselect();
                     FloorView.Set(0);
-                    MuRun(400, 35100, () => muA.Take(4).All(t => !MuRockOrOre(MuUp(t, map), map)), "mu_m5_mined");
+                    MuRun(400, "35100", () => muA.Take(4).All(t => !MuRockOrOre(MuUp(t, map), map)), "mu_m5_mined");
                     return true;
 
                 case "mu_m5_mined":
@@ -917,7 +920,7 @@ namespace ProjectZ.Dev
                     MuWood(map, muSA - muDA);
                     GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, muA[1], map, muRotA, Faction.OfPlayer, ThingDefOf.WoodLog);
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
-                    MuRun(300, 35200, () => MuStairs(map, muA[1]) != null, "mu_m5_built");
+                    MuRun(300, "35200", () => MuStairs(map, muA[1]) != null, "mu_m5_built");
                     return true;
                 }
 
@@ -937,7 +940,7 @@ namespace ProjectZ.Dev
                     muNote = string.Join(" ", muA.Take(3).Select(t => MuRoof(t, map)));
                     muFlag = false;
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
-                    MuRun(17, 35300, () => false, "mu_m5_noroof", () =>
+                    MuRun(17, "35300", () => false, "mu_m5_noroof", () =>
                     {
                         if (Colonists(map).Any(p => p.CurJobDef == JobDefOf.RemoveRoof))
                         {
@@ -960,7 +963,7 @@ namespace ProjectZ.Dev
                     Draft(muP3, false);
                     IntVec3 e = MuUp(muA[3], map);
                     muP3.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, e), JobTag.Misc);
-                    MuRun(60, 35400, () => muP3.Position == e, "mu_m5_up");
+                    MuRun(60, "35400", () => muP3.Position == e, "mu_m5_up");
                     return true;
                 }
 
@@ -994,7 +997,7 @@ namespace ProjectZ.Dev
                         }
                     }
                     FgWork(map, new[] { muP3 }, WorkTypeDefOf.Construction);
-                    MuRun(120, 35500, () => MuUp(x, map).GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m7_done");
+                    MuRun(120, "35500", () => MuUp(x, map).GetTerrain(map) == PZDefOf.PZ_OpenAir, "mu_m7_done");
                     return true;
                 }
 
@@ -1021,7 +1024,7 @@ namespace ProjectZ.Dev
                         Draft(p, false);
                     }
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
-                    MuRun(200, 35600, () => MuStairs(map, muA[1]) == null, "mu_m5_gone");
+                    MuRun(200, "35600", () => MuStairs(map, muA[1]) == null, "mu_m5_gone");
                     return true;
 
                 case "mu_m5_gone":
@@ -1045,7 +1048,7 @@ namespace ProjectZ.Dev
                     Result("M6 stairs under the bare tops are refused: 'Ceiling is rock: mine it, or remove roof'", !before.Accepted && before.Reason == "PZ_CeilingIsRock".Translate(), $"'{before.Reason}'");
                     new Designator_AreaNoRoof().DesignateMultiCell(muB.Take(3));
                     MuCrew(map, WorkTypeDefOf.Construction, 3);
-                    MuRun(200, 36000, () => muB.Take(3).All(t => MuUp(t, map).GetTerrain(map) == PZDefOf.PZ_OpenAir), "mu_m6_holes");
+                    MuRun(200, "36000", () => muB.Take(3).All(t => MuUp(t, map).GetTerrain(map) == PZDefOf.PZ_OpenAir), "mu_m6_holes");
                     return true;
                 }
 
@@ -1064,7 +1067,7 @@ namespace ProjectZ.Dev
                     }
                     MuWood(map, muSB - muDB);
                     GenConstruct.PlaceBlueprintForBuild(PZDefOf.PZ_Stairs, muB[1], map, muRotB, Faction.OfPlayer, ThingDefOf.WoodLog);
-                    MuRun(300, 36100, () => MuStairs(map, muB[1]) != null, "mu_m6_built");
+                    MuRun(300, "36100", () => MuStairs(map, muB[1]) != null, "mu_m6_built");
                     return true;
                 }
 
@@ -1086,7 +1089,7 @@ namespace ProjectZ.Dev
                     muP3 = MuCrew(map, null, 1).FirstOrDefault();
                     Draft(muP3, false);
                     muP3.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, walk), JobTag.Misc);
-                    MuRun(60, 36200, () => muP3.Position == muAt, "mu_m6_up");
+                    MuRun(60, "36200", () => muP3.Position == muAt, "mu_m6_up");
                     return true;
                 }
 
@@ -1109,7 +1112,7 @@ namespace ProjectZ.Dev
                     new Designator_MineAbove().DesignateMultiCell(new[] { muA[1] });
                     muP1 = MuCrew(map, WorkTypeDefOf.Mining, 1).FirstOrDefault();
                     muRock = u.GetFirstMineable(map);
-                    MuRun(100, 37000, () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muRock.HitPoints < muRock.MaxHitPoints, "mu_m9_cancel");
+                    MuRun(100, "37000", () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muRock.HitPoints < muRock.MaxHitPoints, "mu_m9_cancel");
                     return true;
                 }
 
@@ -1119,7 +1122,7 @@ namespace ProjectZ.Dev
                     muHp = muRock.HitPoints;
                     // cancelled as the game's cancel tool does (the designation removed)
                     new Designator_Cancel().DesignateSingleCell(muA[1]);   // (the Mine above mark sits on the tunnel cell)
-                    MuRun(1, 37100, () => false, "mu_m9_cancelled");
+                    MuRun(1, "37100", () => false, "mu_m9_cancelled");
                     return true;
                 }
 
@@ -1148,7 +1151,7 @@ namespace ProjectZ.Dev
                         Teleport(muP2, muA[3]);
                     }
                     Func<Pawn, bool> working = p => p != null && p.CurJobDef == PZMineDefOf.PZ_MineFromBelow && p.jobs.curDriver.CurToilIndex >= 1;
-                    MuRun(100, 37200, () => working(muP1) && working(muP2), "mu_m9b_both");
+                    MuRun(100, "37200", () => working(muP1) && working(muP2), "mu_m9b_both");
                     return true;
                 }
 
@@ -1171,7 +1174,7 @@ namespace ProjectZ.Dev
                     bool resumed = muP1?.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muP2?.CurJobDef == PZMineDefOf.PZ_MineFromBelow;
                     Result("M9 saved mid-job and reloaded: both jobs still on", resumed, $"{muP1?.CurJobDef?.defName}, {muP2?.CurJobDef?.defName}");
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                    MuRun(200, 37300, () => !MuRockOrOre(MuUp(muA[1], map), map) && !MuRockOrOre(MuUp(muA[2], map), map), "mu_m9b_done");
+                    MuRun(200, "37300", () => !MuRockOrOre(MuUp(muA[1], map), map) && !MuRockOrOre(MuUp(muA[2], map), map), "mu_m9b_done");
                     return true;
                 }
 
@@ -1205,7 +1208,7 @@ namespace ProjectZ.Dev
                     muInt = drag.Count;
                     muNote = string.Join(";", drag);
                     Info($"M13a: stairs {st?.Position} exit {st?.TopCell} ({st?.TopCell.GetTerrain(map)?.defName}); drag {drag.Count} rock: {muNote}");
-                    MuRun(500, 38000, () => drag.All(u => !MuRockOrOre(u, map)), "mu_m13_done");
+                    MuRun(500, "38000", () => drag.All(u => !MuRockOrOre(u, map)), "mu_m13_done");
                     return true;
                 }
 
@@ -1227,7 +1230,7 @@ namespace ProjectZ.Dev
                     MuStart(map, MuRect(muA.Concat(new[] { muSA - muDA * 4 }), map, 4), false);
                     new Designator_MineAbove().DesignateMultiCell(muA.Take(3));
                     muP1 = MuCrew(map, WorkTypeDefOf.Mining, 1).FirstOrDefault();
-                    MuRun(150, 38500, () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muP1.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints, "mu_m13b_flip");
+                    MuRun(150, "38500", () => muP1.CurJobDef == PZMineDefOf.PZ_MineFromBelow && muP1.CurJob.targetA.Thing is Thing r && r.HitPoints < r.MaxHitPoints, "mu_m13b_flip");
                     return true;
                 }
 
@@ -1249,7 +1252,7 @@ namespace ProjectZ.Dev
                     muFlag2 = false;    // vanilla's job took it
                     muInt = -1;         // HP when vanilla's job took it
                     muNote = null;      // the job that finished it
-                    MuRun(400, 38600, () => muRock.Destroyed, "mu_m13b_done", () =>
+                    MuRun(400, "38600", () => muRock.Destroyed, "mu_m13b_done", () =>
                     {
                         if (!muFlag && muP1.CurJobDef != PZMineDefOf.PZ_MineFromBelow)
                         {

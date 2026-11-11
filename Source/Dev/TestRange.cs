@@ -32,7 +32,7 @@ namespace ProjectZ.Dev
         private static readonly List<Pawn> gRaiders = new List<Pawn>();
         private static Building_TurretGun gTurret;
         private static int gShot;
-        private static float gOldYaw, gOldMax;
+        private static float gOldMax;
         private static readonly HashSet<Thing> gTurretTargets = new HashSet<Thing>();
         private static readonly List<string> gMoves = new List<string>();
         private static IntVec3 gFirstShotFrom = IntVec3.Invalid;
@@ -307,7 +307,7 @@ namespace ProjectZ.Dev
                 {
                     if (gShot >= GShots.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", gOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Find.CameraDriver.config.sizeRange.max = gOldMax;
                         Find.Targeter.StopTargeting();
                         Find.Selector.ClearSelection();
@@ -316,13 +316,13 @@ namespace ProjectZ.Dev
                     }
                     if (gShot == 0)
                     {
-                        gOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                         gOldMax = Find.CameraDriver.config.sizeRange.max;
                         Find.CameraDriver.config.sizeRange.max = 70f;
                     }
                     var s = GShots[gShot];
                     Find.Targeter.StopTargeting();
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
+                    SetIsoRimOption("freeYaw", s.yaw);
                     if (s.gun == null)
                     {
                         Teleport(gA, ProjectZ.CellOnFloor(new IntVec3(gTower.maxX, 0, gTower.minZ + 1), 1, map));

@@ -264,7 +264,7 @@ namespace ProjectZ.Dev
 
         private static bool StepFireFloors(Map map)
         {
-            Rand.PushState((int)(StableHash("firefloors_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("firefloors_" + stage));
             try
             {
                 return StepFireFloorsInner(map);

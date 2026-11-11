@@ -89,7 +89,7 @@ namespace ProjectZ.Dev
             }
             FdTrackReset();
             FdEnd();
-            Rand.PushState(7170 + check);
+            Rand.PushState(FixtureSeed($"{mode}_{check}"));
             fdSeeded = true;
         }
 

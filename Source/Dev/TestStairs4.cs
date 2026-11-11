@@ -34,7 +34,7 @@ namespace ProjectZ.Dev
 
         private static bool StepStairs4(Map map)
         {
-            Rand.PushState((int)(StableHash("stairs4_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("stairs4_" + stage));
             try
             {
                 return StepStairs4Inner(map);
@@ -110,10 +110,12 @@ namespace ProjectZ.Dev
                     Wait(40, s4GhostIdx < 2 ? "s4_s_ghost2" : "s4_end");
                     return true;
                 case "s4_s_ghost2":
+                    XrayOn();   // (stairs4_ghost_xray: the x-ray shows the floor over the built stairs)
                     S4GhostView(map);
                     Wait(5, "s4_s_ghost_point");
                     return true;
                 case "s4_end":
+                    XrayOff();   // (only the stairs4_ghost_xray shot needs it)
                     fakeMouse = null;
                     Find.DesignatorManager.Deselect();
                     Find.UIRoot.screenshotMode.Active = false;

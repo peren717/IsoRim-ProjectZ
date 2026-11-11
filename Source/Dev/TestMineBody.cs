@@ -37,7 +37,8 @@ namespace ProjectZ.Dev
         private static readonly List<IntVec3> mbCells = new List<IntVec3>();
         private static int mbLevel;
         private static StreamWriter mbLog;
-        private static readonly HarmonyLib.AccessTools.FieldRef<Pawn_DrawTracker, JitterHandler> mbJitter = HarmonyLib.AccessTools.FieldRefAccess<Pawn_DrawTracker, JitterHandler>("jitterer");
+        private static HarmonyLib.AccessTools.FieldRef<Pawn_DrawTracker, JitterHandler> mbJitterBound;
+        private static HarmonyLib.AccessTools.FieldRef<Pawn_DrawTracker, JitterHandler> mbJitter => mbJitterBound ??= HarmonyLib.AccessTools.FieldRefAccess<Pawn_DrawTracker, JitterHandler>("jitterer");   // (bound on first use: nothing for players)
 
         private static string MbShot(int check, int frame) => Path.Combine(outDir, $"minebody_m{check + 1}_f{frame:000}.png");
 
@@ -149,7 +150,7 @@ namespace ProjectZ.Dev
                 {
                     // up to 300 ticks a frame (each frame's ticks under their own fixed seed) until the miner works at the cell
                     System.Func<bool> working = () => mbPawn.jobs.curDriver is JobDriver_Mine && mbPawn.CurJob.targetA.Cell == mbTarget && mbPawn.jobs.curDriver.CurToilIndex >= 1 && !mbPawn.pather.Moving;
-                    Rand.PushState(9600 + mbCheck * 1000 + mbFrame);
+                    Rand.PushState(FixtureSeed($"{mode}_{mbCheck}_work") + mbFrame * SeedStride);
                     try
                     {
                         for (int t = 0; t < 300 && !working(); t++)
@@ -202,7 +203,7 @@ namespace ProjectZ.Dev
                         Wait(20, "mb_count");
                         return true;
                     }
-                    Rand.PushState(9700 + mbCheck * 1000 + mbFrame);
+                    Rand.PushState(FixtureSeed($"{mode}_{mbCheck}_mine") + mbFrame * SeedStride);
                     try
                     {
                         for (int t = 0; t < MbTicksPerFrame; t++)

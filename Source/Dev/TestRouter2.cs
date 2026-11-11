@@ -612,7 +612,7 @@ namespace ProjectZ.Dev
                 return;
             }
             r2SeedsLeft--;
-            int seed = (SeedArg ?? 7) * 1000 + r2Seed++;
+            int seed = FixtureSeed("router2_layout_" + r2Seed++);
             R2Layout(map, seed);
             R2Feed(map);
             Draft(r2P, true);
@@ -976,7 +976,7 @@ namespace ProjectZ.Dev
             {
                 zone.AddCell(Levels.Cell(g, 1, map));
             }
-            Rand.PushState((SeedArg ?? 7) + 501);
+            Rand.PushState(FixtureSeed("router2_wood"));
             try
             {
                 for (int i = 0; i < 14; i++)

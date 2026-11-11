@@ -17,7 +17,7 @@ namespace ProjectZ.Dev
     // -projectznoradialclip: nothing patched (the game's cells); a check that the clip alone decides is then named
     // "LEAK ..." and expects the old leak; one that the void rule's rooms and sight also cover keeps its expectation.
     // -projectzradialref=<tag>: compare this run's fingerprints (N1, N2) with that run's (renders/<tag>/fingerprints.txt).
-    // Every check: its own fixed seed for its whole (synchronous) part, ticks included (Rand.PushState(7300 + check));
+    // Every check: its own random state for its whole (synchronous) part, ticks included (FixtureSeed of the mode and check);
     // its own fixture in an x-strip (all rows of 11 columns), everything it spawned destroyed and the strip's terrain,
     // roofs, pollution and snow put back at its end; counters reset. Real flows: incidents through their workers, pawn
     // jobs, verbs and abilities cast by pawns, comps ticking through TickManager.DoSingleTick.
@@ -78,7 +78,6 @@ namespace ProjectZ.Dev
 
         internal static void PatchRadialProbe(Harmony h)
         {
-            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.LoadGame)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(RdLoadedPostfix)));
             h.Patch(AccessTools.Method(typeof(Thing), nameof(Thing.TakeDamage)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(RdDamagePrefix)));
             h.Patch(AccessTools.Method(typeof(Pawn_MindState), "Notify_DangerousExploderAboutToExplode"), postfix: new HarmonyMethod(typeof(TestRunner), nameof(RdWarnPostfix)));
             h.Patch(AccessTools.PropertyGetter(typeof(MapTemperature), nameof(MapTemperature.OutdoorTemp)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(RdColdPrefix)));
@@ -95,14 +94,6 @@ namespace ProjectZ.Dev
             }
             __result = -10f;
             return false;
-        }
-
-        // The compared runs load one save: the game's rand fixed once it is loaded (the load itself draws from the
-        // start-up seed: chunk rotations), and the game paused after its one tick (Prefs pauseOnLoad, not saved).
-        private static void RdLoadedPostfix()
-        {
-            AccessTools.Field(typeof(Rand), "seed").SetValue(null, 7300u);
-            AccessTools.Field(typeof(Rand), "iterations").SetValue(null, 0u);
         }
 
         // fire damage taken by things off the ground (R2)
@@ -185,7 +176,7 @@ namespace ProjectZ.Dev
             BandRadial.ResetCounters();
             BandRadial.Counting = true;
             rdWarned.Clear();
-            Rand.PushState(7300 + check);
+            Rand.PushState(FixtureSeed($"{mode}_{check}"));
             rdSeeded = true;
         }
 

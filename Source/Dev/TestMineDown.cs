@@ -377,7 +377,7 @@ namespace ProjectZ.Dev
                     mdAt = mdAt2 = IntVec3.Invalid;
                     mdFlag = mdFlag2 = mdFlag3 = mdTouch = false;
                     mdNote = null;
-                    MuRun(300, 41000, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", () =>
+                    MuRun(300, "41000", () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", () =>
                     {
                         if (!mdAt.IsValid && !MuRockOrOre(MdM2, map))
                         {
@@ -427,7 +427,7 @@ namespace ProjectZ.Dev
                     muPointer = IntVec3.Invalid;
                     Find.UIRoot.screenshotMode.Active = false;
                     FloorView.Set(0);
-                    MuRun(300, 41100, () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", muEach);
+                    MuRun(300, "41100", () => !MuRockOrOre(MdM1, map) && !MuRockOrOre(MdM2, map), "md_d2_settle", muEach);
                     return true;
 
                 case "md_d2_settle":
@@ -512,7 +512,7 @@ namespace ProjectZ.Dev
                     }
                     MdWork(map, crew, WorkTypeDefOf.Mining);
                     mdFlag = false;
-                    MuRun(400, 42000, () => mdF.Take(3).All(t => !MuRockOrOre(t, map)), "md_d3_done", () =>
+                    MuRun(400, "42000", () => mdF.Take(3).All(t => !MuRockOrOre(t, map)), "md_d3_done", () =>
                     {
                         if (Colonists(map).Any(p => p.CurJobDef == PZMineDefOf.PZ_MineFromAbove))
                         {
@@ -556,7 +556,7 @@ namespace ProjectZ.Dev
                     Info($"D3b: rock {r}, top {top} (was fogged {fogged}), Mine below '{(mb.Accepted ? "ok" : mb.Reason)}', marked {MineSide.Get(r, map)}, ground miner {ground}");
                     mdOpened = Mineable_MinedMarked_Patch.Opened;
                     mdNote = null;
-                    MuRun(300, 42500, () => !MuRockOrOre(r, map), "md_d3b_done", () =>
+                    MuRun(300, "42500", () => !MuRockOrOre(r, map), "md_d3b_done", () =>
                     {
                         foreach (Pawn p in Colonists(map))
                         {
@@ -593,7 +593,7 @@ namespace ProjectZ.Dev
                     new Designator_MineBelow().DesignateMultiCell(MdFoot.Select(c => L1(c, map)));
                     List<Pawn> crew = MdCrew(map);
                     MdWork(map, crew, WorkTypeDefOf.Mining);
-                    MuRun(400, 43000, () => MdFoot.All(c => !MuRockOrOre(c, map)), "md_d5_settle");
+                    MuRun(400, "43000", () => MdFoot.All(c => !MuRockOrOre(c, map)), "md_d5_settle");
                     return true;
                 }
 
@@ -615,6 +615,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     // the stairs tool in the ground view (the x-ray of the level above shows where the exit lands)
+                    XrayOn();
                     FloorView.Set(0);
                     ShotAt(map, 0, MdStairs, 7f);
                     MuPointer(MdStairs);
@@ -637,6 +638,7 @@ namespace ProjectZ.Dev
                     {
                         Info("D7 skipped: IsoRim's MineXray not loaded");
                     }
+                    XrayOff();   // (on again for D7's own checks, md_d7)
                     muPointer = IntVec3.Invalid;
                     Find.UIRoot.screenshotMode.Active = false;
                     Find.DesignatorManager.Deselect();
@@ -651,7 +653,7 @@ namespace ProjectZ.Dev
                     MdWork(map, crew, WorkTypeDefOf.Construction, WorkTypeDefOf.Hauling);
                     mdFlag = false;    // a builder went down to the ground before the stairs stood
                     mdNote = null;
-                    MuRun(500, 43050, () => MuStairs(map, MdStairs) != null, "md_d5_built", () =>
+                    MuRun(500, "43050", () => MuStairs(map, MdStairs) != null, "md_d5_built", () =>
                     {
                         foreach (Pawn p in MdCrew(map))
                         {
@@ -683,7 +685,7 @@ namespace ProjectZ.Dev
                     Draft(muP3, true);
                     IntVec3 low = MdStairs + Rot4.North.FacingCell * -1;
                     muP3.jobs.TryTakeOrderedJob(JobMaker.MakeJob(JobDefOf.Goto, low), JobTag.Misc);
-                    MuRun(60, 43100, () => muP3.Position == low, "md_d5_down");
+                    MuRun(60, "43100", () => muP3.Position == low, "md_d5_down");
                     return true;
                 }
 
@@ -700,7 +702,7 @@ namespace ProjectZ.Dev
 
                 case "md_d5_up":
                     Find.UIRoot.screenshotMode.Active = false;
-                    MuRun(60, 43200, () => muP3.Position == L1(mdG0 + new IntVec3(0, 0, -3), map), "md_d5_walked");
+                    MuRun(60, "43200", () => muP3.Position == L1(mdG0 + new IntVec3(0, 0, -3), map), "md_d5_walked");
                     return true;
 
                 case "md_d5_walked":
@@ -727,7 +729,7 @@ namespace ProjectZ.Dev
                     }
                     MdWork(map, crew, WorkTypeDefOf.Construction);
                     mdFlag = false;
-                    MuRun(200, 43300, () => MuStairs(map, MdStairs) == null, "md_d5_gone", () =>
+                    MuRun(200, "43300", () => MuStairs(map, MdStairs) == null, "md_d5_gone", () =>
                     {
                         // (1x4 stairs: the landing over the solid end roofs part of the pit, so vanilla's auto-roof marks the
                         // rest; roofing it is no part of this check)
@@ -776,7 +778,7 @@ namespace ProjectZ.Dev
                     mdHurt0 = MdInjury(p);
                     mdFlag = false;
                     MdDrop(map, p, mdJ1, mdJ1Down);
-                    MuRun(40, 44000, () => ProjectZ.FloorOf(muP1.Position, map) == 0 && mdFlag, "md_d6_j1", () =>
+                    MuRun(40, "44000", () => ProjectZ.FloorOf(muP1.Position, map) == 0 && mdFlag, "md_d6_j1", () =>
                     {
                         if (!mdFlag && ProjectZ.FloorOf(muP1.Position, map) == 0 && muP1.stances?.stagger != null && muP1.stances.stagger.Staggered)
                         {
@@ -815,7 +817,7 @@ namespace ProjectZ.Dev
                     mdHurt0 = MdInjury(p);
                     mdHurts = JumpGrid.HurtLandings;
                     MdDrop(map, p, mdJ2, mdJ2Down);
-                    MuRun(40, 44100, () => ProjectZ.FloorOf(muP2.Position, map) == 0 && JumpGrid.HurtLandings > mdHurts, "md_d6_j2");
+                    MuRun(40, "44100", () => ProjectZ.FloorOf(muP2.Position, map) == 0 && JumpGrid.HurtLandings > mdHurts, "md_d6_j2");
                     return true;
                 }
 
@@ -837,6 +839,7 @@ namespace ProjectZ.Dev
                         Finish();
                         return true;
                     }
+                    XrayOn();   // (D7's checks read the x-ray; off again at Finish)
                     MdStart(map, MuRect(new[] { mdG0 }, map, 5), false);
                     new Designator_Mine().DesignateMultiCell(new[] { MdM1, MdM2 });
                     ShotAt(map, 0, MdM1, 7f);

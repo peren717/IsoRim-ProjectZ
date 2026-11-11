@@ -192,7 +192,7 @@ namespace ProjectZ.Dev
                     }
                 }
             }
-            Rand.PushState((SeedArg ?? 7) * 7919);
+            Rand.PushState(FixtureSeed("routerperf_towers"));
             try
             {
                 rpTowers.Clear();

@@ -24,7 +24,6 @@ namespace ProjectZ.Dev
         private static ThingDef jConduit, jHidden, jLamp;
         private static int jShot;
         private static string jPhase;
-        private static float jOldYaw;
 
         private static readonly (int floor, bool overlay, float yaw)[] JShots =
         {
@@ -66,16 +65,16 @@ namespace ProjectZ.Dev
                     {
                         Find.DesignatorManager.Deselect();
                         fakeMouse = null;
-                        IsoRimBridge.SetOption("freeYaw", jOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Wait(5, jPhase == "1built" ? "j_decon" : "j_end");
                         return true;
                     }
                     if (jShot == 0)
                     {
-                        jOldYaw = (float)(IsoRimBridge.SetOption("freeYaw", 0f) ?? 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                     }
                     var s = JShots[jShot];
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
+                    SetIsoRimOption("freeYaw", s.yaw);
                     if (s.overlay)
                     {
                         fakeMouse = new Vector2(4f, 4f);

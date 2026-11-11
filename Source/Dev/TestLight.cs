@@ -52,8 +52,8 @@ namespace ProjectZ.Dev
                     stage = "l_restore";
                     return true;
                 case "l_restore":
-                    IsoRimBridge.SetOption("lightingFix", true);
-                    IsoRimBridge.SetOption("groundShadows", true);
+                    SetIsoRimOption("lightingFix", true);
+                    SetIsoRimOption("groundShadows", true);
                     stage = "l_shot";
                     return true;
                 case "l_end":
@@ -211,8 +211,8 @@ namespace ProjectZ.Dev
                 lightShots.Add(new KeyValuePair<string, Action<Map>>($"h{h:00}_f1", m => { SetHour(m, h); ShotAt(m, 0, IntVec3.FromVector3(at), 13f); }));
                 if (h != 18)
                 {
-                    lightShots.Add(new KeyValuePair<string, Action<Map>>($"h{h:00}_f2_nolightfix", m => { SetHour(m, h); IsoRimBridge.SetOption("lightingFix", false); ShotAt(m, 1, IntVec3.FromVector3(at), 13f); }));
-                    lightShots.Add(new KeyValuePair<string, Action<Map>>($"h{h:00}_f2_noshadows", m => { SetHour(m, h); IsoRimBridge.SetOption("groundShadows", false); ShotAt(m, 1, IntVec3.FromVector3(at), 13f); }));
+                    lightShots.Add(new KeyValuePair<string, Action<Map>>($"h{h:00}_f2_nolightfix", m => { SetHour(m, h); SetIsoRimOption("lightingFix", false); ShotAt(m, 1, IntVec3.FromVector3(at), 13f); }));
+                    lightShots.Add(new KeyValuePair<string, Action<Map>>($"h{h:00}_f2_noshadows", m => { SetHour(m, h); SetIsoRimOption("groundShadows", false); ShotAt(m, 1, IntVec3.FromVector3(at), 13f); }));
                 }
             }
         }

@@ -19,6 +19,10 @@ namespace ProjectZ.Patches
     {
         private const BindingFlags Inst = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
+        // Tests only (mode shrinkgrid sets it before generation; null in play, nothing is recorded): every field Fix resizes,
+        // on every map, as "grid <Type.field> (<kind>)" or "array <Type.field> (<kind>)".
+        internal static List<string> Recorder;
+
         public static int Fix(Map map, int groundCells)
         {
             int fixedCount = 0;
@@ -79,6 +83,7 @@ namespace ProjectZ.Patches
                             fixedCount++;
                             // (a warning in every player's log: a grid that slipped past Grid_ClearAndResizeTo_Patch is a regression)
                             string field = $"{t.FullName}.{f.Name}";
+                            Recorder?.Add($"grid {field} ({v.GetType().Name})");
                             Log.WarningOnce($"[ProjectZ] GridFixer backstop: grid {field} ({v.GetType().Name}) was made at the ground size during generation, resized to the full map", Gen.HashCombineInt(field.GetHashCode(), 0x5A6F));
                         }
                         // Plain per-cell arrays indexed by cellIndices (z-major, e.g. MixedBiomeMapComponent.biomeGrid):
@@ -89,6 +94,7 @@ namespace ProjectZ.Patches
                             Array.Copy(arr, full, groundCells);
                             f.SetValue(root, full);
                             fixedCount++;
+                            Recorder?.Add($"array {t.FullName}.{f.Name} ({arr.GetType().Name}[{groundCells}])");
                             ProjectZ.DebugLog($"resized {t.Name}.{f.Name} ({arr.GetType().Name}[{groundCells}]) to the full map");
                         }
                     }

@@ -40,7 +40,7 @@ namespace ProjectZ.Dev
 
         private static bool StepSlabForce(Map map)
         {
-            Rand.PushState((int)(StableHash("slabforce_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("slabforce_" + stage));
             try
             {
                 return StepSlabForceInner(map);

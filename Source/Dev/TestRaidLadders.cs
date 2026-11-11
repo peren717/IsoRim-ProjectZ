@@ -75,7 +75,7 @@ namespace ProjectZ.Dev
 
         private static bool StepRaidLadders(Map map)
         {
-            Rand.PushState((int)(StableHash("raidladders_" + stage + "_" + rlIdx) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("raidladders_" + stage + "_" + rlIdx));
             try
             {
                 return StepRaidLaddersInner(map);
@@ -219,7 +219,6 @@ namespace ProjectZ.Dev
 
         private static readonly float[] rlShotYaws = { 0f, 90f, 270f };
         private static int rlShotView;
-        private static object rlShotOldYaw;
 
         private static void RlShotTake(Map map)
         {
@@ -228,16 +227,16 @@ namespace ProjectZ.Dev
             {
                 if (rlShotView == 0)
                 {
-                    rlShotOldYaw = IsoRimBridge.SetOption("freeYaw", 0f);
+                    SetIsoRimOption("freeYaw", 0f);
                 }
                 rlShotView++;
-                IsoRimBridge.SetOption("freeYaw", rlShotYaws[rlShotView]);
+                SetIsoRimOption("freeYaw", rlShotYaws[rlShotView]);
                 Wait(120, "rl_shot");   // (the camera turns over some frames)
                 return;
             }
             if (rlShotView > 0)
             {
-                IsoRimBridge.SetOption("freeYaw", rlShotOldYaw ?? 0f);
+                RestoreIsoRimOption("freeYaw");
                 rlShotView = 0;
             }
             rlShotsTaken.Add(rlShot);

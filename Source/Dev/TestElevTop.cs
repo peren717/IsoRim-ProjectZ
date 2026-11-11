@@ -44,7 +44,7 @@ namespace ProjectZ.Dev
 
         private static bool StepElevTop(Map map)
         {
-            Rand.PushState((int)(StableHash("elevtop_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("elevtop_" + stage));
             try
             {
                 return StepElevTopInner(map);

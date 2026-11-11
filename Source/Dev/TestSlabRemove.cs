@@ -377,22 +377,29 @@ namespace ProjectZ.Dev
                     // from the ground view (the floor above hidden)
                     if (zShot >= ZShots.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", zOldYaw);
-                        IsoRimBridge.SetOption("isoPitch", zOldPitch);
+                        RestoreIsoRimOption("freeYaw");
+                        RestoreIsoRimOption("isoPitch");
                         Find.CameraDriver.config.sizeRange.min = zOldMin;
                         Wait(5, "z_tdecon");
                         return true;
                     }
                     if (zShot == 0)
                     {
-                        zOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
-                        zOldPitch = (float)IsoRimBridge.SetOption("isoPitch", 35.3f);
+                        SetIsoRimOption("freeYaw", 0f);
+                        SetIsoRimOption("isoPitch", 35.3f);
                         zOldMin = Find.CameraDriver.config.sizeRange.min;
                         Find.CameraDriver.config.sizeRange.min = 3f;
                     }
                     var s = ZShots[zShot];
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
-                    IsoRimBridge.SetOption("isoPitch", s.pitch > 0f ? s.pitch : zOldPitch);
+                    SetIsoRimOption("freeYaw", s.yaw);
+                    if (s.pitch > 0f)
+                    {
+                        SetIsoRimOption("isoPitch", s.pitch);
+                    }
+                    else
+                    {
+                        RestoreIsoRimOption("isoPitch");   // (the player's own pitch)
+                    }
                     IntVec3 at = s.inRoom ? StairShape.High(zStairsS, Rot4.North) : StairShape.High(zStairsT, Rot4.North);
                     ShotAt(map, s.floor, at, 4.5f);
                     Wait(40, "z_tshot_take");
@@ -515,7 +522,7 @@ namespace ProjectZ.Dev
             ("landing_inroom_yaw45", true, 1, 0f, -1f), ("landing_inroom_yaw225", true, 1, 180f, -1f),
             ("landing_inroom_side_from_west", true, 1, 45f, 20f), ("landing_inroom_side_from_east", true, 1, 225f, 20f),
         };
-        private static float zOldYaw, zOldPitch, zOldMin;
+        private static float zOldMin;
 
         private static void SetupSlabRemove(Map map)
         {

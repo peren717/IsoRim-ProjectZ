@@ -38,8 +38,10 @@ namespace ProjectZ.Dev
 
         private static readonly float[] jpFracs = { 0.2f, 0.45f, 0.7f, 0.9f };
 
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> jpTicksFlying = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");
-        private static readonly AccessTools.FieldRef<PawnFlyer, int> jpTicksTotal = AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");
+        private static AccessTools.FieldRef<PawnFlyer, int> jpTicksFlyingBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> jpTicksFlying => jpTicksFlyingBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlying");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<PawnFlyer, int> jpTicksTotalBound;
+        private static AccessTools.FieldRef<PawnFlyer, int> jpTicksTotal => jpTicksTotalBound ??= AccessTools.FieldRefAccess<PawnFlyer, int>("ticksFlightTime");   // (bound on first use: nothing for players)
 
         private static IntVec3 jpO;
         private static CellRect jpP, jpQ, jpR;
@@ -48,7 +50,7 @@ namespace ProjectZ.Dev
         private static Pawn jpJumper, jpPlain, jpSang, jpMech, jpDowned;
         private static Verb jpVerb;
         private static PawnFlyer jpFlyer;
-        private static float jpOldYaw, jpOldMin;
+        private static float jpOldMin;
         private static bool jpMechFlew;
         private static string jpMechFlight;
 
@@ -97,7 +99,7 @@ namespace ProjectZ.Dev
                     }
                     if (c.view >= 0)
                     {
-                        IsoRimBridge.SetOption("freeYaw", c.yaw);
+                        SetIsoRimOption("freeYaw", c.yaw);
                     }
                     v.OrderForceTarget(c.to);
                     jpFlyer = null;
@@ -241,7 +243,7 @@ namespace ProjectZ.Dev
                 }
                 case "jp_mech3":
                     Info($"paramedic 600 ticks later: at {(jpMech.Spawned ? jpMech.Position.ToString() : "in flight")} floor {(jpMech.Spawned ? ProjectZ.FloorOf(jpMech.Position, map) + 1 : -1)}, job {jpMech.CurJob?.def?.defName}, carrying {jpMech.carryTracker?.CarriedThing}; downed colonist at {(jpDowned.Spawned ? jpDowned.Position.ToString() : jpDowned.ParentHolder?.ToString())}");
-                    IsoRimBridge.SetOption("freeYaw", jpOldYaw);
+                    RestoreIsoRimOption("freeYaw");
                     Find.CameraDriver.config.sizeRange.min = jpOldMin;
                     Finish();
                     return true;
@@ -526,7 +528,7 @@ namespace ProjectZ.Dev
                 new JumpCase { name = "up_far", from = JO(8, 3), to = JUp(28, 15, map) },
                 new JumpCase { name = "sang_up", from = JO(10, 3), to = JUp(10, 11, map), who = "sang" },
             };
-            jpOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             jpOldMin = Find.CameraDriver.config.sizeRange.min;
             Wait(10, "jp_targets");
         }

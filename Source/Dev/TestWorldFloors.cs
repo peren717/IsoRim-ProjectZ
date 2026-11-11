@@ -31,7 +31,7 @@ namespace ProjectZ.Dev
         // generates the world.
         internal static void WorldFloorsSetupPrefix()
         {
-            ProjectZMod.Settings.floors = WfSettingAtStart; // in memory only, never written
+            SetProjectZSetting("floors", WfSettingAtStart); // in memory only, never written
             Page_CreateWorldParams page = new Page_CreateWorldParams();
             page.Reset();                                   // vanilla Reset + our postfix: the page shows the default
             wfPageDefault = WorldPage.PageFloors;
@@ -89,7 +89,7 @@ namespace ProjectZ.Dev
                     Result("new world keeps the page's value", wc != null && wc.floors == WfChosen && !wc.needsMigration, $"world floors {wc?.floors}");
                     Result("start map has the world's floors", a != null && a.HasAnnex && a.floors == WfChosen && a.layoutVersion == AnnexMapComponent.CurrentLayoutVersion, WfMaps());
                     GenCheck(map, "start map");
-                    ProjectZMod.Settings.floors = WfSettingMidGame;
+                    SetProjectZSetting("floors", WfSettingMidGame);
                     Result("mod setting changed mid-game is ignored", ProjectZ.FloorsForNewMaps == WfChosen, $"setting {ProjectZMod.Settings.floors}, floors for new maps {ProjectZ.FloorsForNewMaps}");
                     StartTicks(600, "f_page");
                     break;

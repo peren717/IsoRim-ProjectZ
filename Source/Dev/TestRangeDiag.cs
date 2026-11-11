@@ -10,8 +10,6 @@ namespace ProjectZ.Dev
     // Range test diagnostics: what a raider was doing when it did (or didn't) fire.
     public static partial class TestRunner
     {
-        internal static int? SeedArg => GenCommandLine.TryGetCommandLineArg("projectzseed", out string s) && int.TryParse(s, out int n) ? n : (int?)null;
-
         private static readonly Dictionary<Pawn, List<string>> gJobs = new Dictionary<Pawn, List<string>>();
 
         private static void GTrack(Pawn r)

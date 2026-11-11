@@ -55,7 +55,7 @@ namespace ProjectZ.Dev
 
         private static bool StepFloorPlan(Map map)
         {
-            Rand.PushState((int)(StableHash("floorplan_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("floorplan_" + stage));
             try
             {
                 return StepFloorPlanInner(map);

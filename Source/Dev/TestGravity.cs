@@ -17,7 +17,7 @@ namespace ProjectZ.Dev
     // Run with -projectzfloors=3 -projectzmapsize=101 -projectzsave=pz_radial3 (the radial modes' saved map: a 1-row void
     // gap, the worst case). -projectznogravity: no hook acts; a check gravity alone decides is then named "LEAK ..." and
     // expects the old leak. -projectzgravityref=<tag>: compare this run's fingerprints (N2, G9) with that run's
-    // (renders/<tag>/gv_fingerprints.txt). Every check: its own fixed seed (Rand.PushState(7400 + check)) for its whole
+    // (renders/<tag>/gv_fingerprints.txt). Every check: its own random state (FixtureSeed of the mode and check, RdBegin) for its whole
     // synchronous part, ticks included; its own fixture in an x-strip (all rows of 11 columns), everything it spawned
     // destroyed and the strip's terrain and roofs put back at its end; gravity counters reset. Real flows: pawn jobs and
     // verbs (jump pack, turret pack, grenades, removing a slab or deck, deconstructing, uninstalling, building), comps and
@@ -56,27 +56,18 @@ namespace ProjectZ.Dev
         private static Dictionary<string, string> gvRef;
         private static readonly List<string> gvFp = new List<string>();
         private static readonly List<string> gvFpDetail = new List<string>();
-        private static readonly AccessTools.FieldRef<PawnFlyer, IntVec3> gvDest = AccessTools.FieldRefAccess<PawnFlyer, IntVec3>("destCell");
-        private static readonly AccessTools.FieldRef<CompHatcher, float> gvGestate = AccessTools.FieldRefAccess<CompHatcher, float>("gestateProgress");
-        private static readonly PropertyInfo gvRandState = AccessTools.Property(typeof(Rand), "StateCompressed");
+        private static AccessTools.FieldRef<PawnFlyer, IntVec3> gvDestBound;
+        private static AccessTools.FieldRef<PawnFlyer, IntVec3> gvDest => gvDestBound ??= AccessTools.FieldRefAccess<PawnFlyer, IntVec3>("destCell");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<CompHatcher, float> gvGestateBound;
+        private static AccessTools.FieldRef<CompHatcher, float> gvGestate => gvGestateBound ??= AccessTools.FieldRefAccess<CompHatcher, float>("gestateProgress");   // (bound on first use: nothing for players)
+        private static PropertyInfo gvRandStateBound;
+        private static PropertyInfo gvRandState => gvRandStateBound ??= AccessTools.Property(typeof(Rand), "StateCompressed");   // (bound on first use: nothing for players)
         // G15: thing id -> saved position (and the stray's id)
         private static readonly Dictionary<int, IntVec3> gvSaved = new Dictionary<int, IntVec3>();
         private static int gvStray = -1;
         private static int gvLoadFell, gvLoadRefused;
 
         private static bool GvOff => Gravity.Off;
-
-        internal static void PatchGravityProbe(Harmony h)
-        {
-            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.LoadGame)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(GvLoadedPostfix)));
-        }
-
-        // The compared runs load one save: the game's rand fixed once it is loaded (as mode radial).
-        private static void GvLoadedPostfix()
-        {
-            AccessTools.Field(typeof(Rand), "seed").SetValue(null, 7400u);
-            AccessTools.Field(typeof(Rand), "iterations").SetValue(null, 0u);
-        }
 
         // A check gravity alone decides (leakable), or one that holds without it too.
         private static void GvExpect(string name, bool ok, bool leakable, string detail)
@@ -99,7 +90,7 @@ namespace ProjectZ.Dev
             }
         }
 
-        // The check's fixture (RdBegin's strip, its own seed 7400 + check), gravity counters reset.
+        // The check's fixture (RdBegin's strip, its own random state), gravity counters reset.
         private static void GvBegin(Map map, int check, string name, int slot)
         {
             RdBegin(map, 100 + check, name, slot);

@@ -38,7 +38,7 @@ namespace ProjectZ.Dev
     // place with testmods.sh install gamerange, packageId Peren.PZGameRangeTest).
     public static partial class TestRunner
     {
-        private const int GrSeed = 9500;
+        private const int GrFix = 9500;   // the base of this mode's fixture ids (FixtureSeed of the mode and the id)
         private static Harmony grModHarmony, grHarmony;
         private static int grConnect = 6, grSapper = 50, grModSwaps;
         private static int grStep, grFrames, grRingsAt, grShellsAt;
@@ -160,7 +160,7 @@ namespace ProjectZ.Dev
             R2Feed(map);
             Find.Targeter.StopTargeting();
             Find.Selector.ClearSelection();
-            Rand.PushState(seed);
+            Rand.PushState(FixtureSeed($"{mode}_{seed}"));
         }
 
         // ---- D0
@@ -181,7 +181,7 @@ namespace ProjectZ.Dev
 
         private static void GrW1(Map map)
         {
-            GrScene(map, GrSeed + 1);
+            GrScene(map, GrFix + 1);
             try
             {
                 IntVec3 c = RG(20, 30);
@@ -238,7 +238,7 @@ namespace ProjectZ.Dev
 
         private static void GrJ1(Map map)
         {
-            GrScene(map, GrSeed + 2);
+            GrScene(map, GrFix + 2);
             float s = IsoRimBridge.StoreyHeight;
             try
             {
@@ -314,7 +314,7 @@ namespace ProjectZ.Dev
 
         private static void GrC1(Map map)
         {
-            GrScene(map, GrSeed + 3);
+            GrScene(map, GrFix + 3);
             try
             {
                 IntVec3 a = RG(30, 10), b = RG(30, 40);
@@ -368,7 +368,7 @@ namespace ProjectZ.Dev
 
         private static void GrS1(Map map)
         {
-            GrScene(map, GrSeed + 4);
+            GrScene(map, GrFix + 4);
             Pawn raider;
             try
             {
@@ -447,7 +447,7 @@ namespace ProjectZ.Dev
 
         private static void GrG1(Map map)
         {
-            GrScene(map, GrSeed + 5);
+            GrScene(map, GrFix + 5);
             List<string> bad = new List<string>(), all = new List<string>();
             try
             {
@@ -516,7 +516,7 @@ namespace ProjectZ.Dev
 
         private static void GrG2(Map map)
         {
-            GrScene(map, GrSeed + 6);
+            GrScene(map, GrFix + 6);
             List<string> parts = new List<string>();
             bool ok = true;
             try
@@ -598,7 +598,7 @@ namespace ProjectZ.Dev
 
         private static void GrG3(Map map)
         {
-            GrScene(map, GrSeed + 7);
+            GrScene(map, GrFix + 7);
             List<string> parts = new List<string>();
             bool ok = true;
             AvoidGrid grid = null;
@@ -669,7 +669,7 @@ namespace ProjectZ.Dev
 
         private static void GrG4(Map map)
         {
-            GrScene(map, GrSeed + 8);
+            GrScene(map, GrFix + 8);
             List<string> parts = new List<string>();
             bool ok = true;
             AvoidGrid grid = null;
@@ -730,7 +730,7 @@ namespace ProjectZ.Dev
 
         private static void GrT0(Map map)
         {
-            GrScene(map, GrSeed + 9);
+            GrScene(map, GrFix + 9);
             try
             {
                 IntVec3 c = RG(20, 30);

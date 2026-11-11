@@ -242,13 +242,22 @@ namespace ProjectZ.Dev
                 case "fz_case":
                     if (fzCase >= fzCases.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                         Info($"aimfloor: AimFloor scopes {AimFloor.Scopes}, sight checks {AimFloor.Checks}, sinks moved back {AimFloor.SinksMoved}; rows: " + string.Join(", ", AimFloor.Rows.Select(r => $"{r.Name} {(r.found == null ? "MISSING" : r.swaps.ToString())}")));
                         Result("aimfloor: every listed method patched with swaps", AimFloor.Rows.All(r => r.found != null && r.swaps > 0), string.Join(", ", AimFloor.Rows.Where(r => r.found == null || r.swaps == 0).Select(r => r.Name)));
                         Finish();
                         return true;
                     }
-                    FzStart(map, fzCases[fzCase]);
+                    // (this case's own random state; its ticks are seeded, SeedTicks)
+                    Rand.PushState(FixtureSeed("aimfloor_" + fzCases[fzCase].name));
+                    try
+                    {
+                        FzStart(map, fzCases[fzCase]);
+                    }
+                    finally
+                    {
+                        Rand.PopState();
+                    }
                     return true;
                 case "fz_cast":
                 {
@@ -266,7 +275,7 @@ namespace ProjectZ.Dev
                 }
                 case "fz_yaw":
                 {
-                    IsoRimBridge.SetOption("freeYaw", 0f);
+                    SetIsoRimOption("freeYaw", 0f);
                     Find.CameraDriver.config.sizeRange.min = 2f;
                     IntVec3 mid = fzShooter == null ? new IntVec3(fzCx, 0, fzEz + 3) : new IntVec3((ProjectZ.GroundCellOf(fzShooter.Position, map).x + ProjectZ.GroundCellOf(fzH.Position, map).x) / 2, 0, (ProjectZ.GroundCellOf(fzShooter.Position, map).z + ProjectZ.GroundCellOf(fzH.Position, map).z) / 2);
                     if (fzFrame == 1) { ShotAt(map, 1, new IntVec3(fzCx, 0, fzEz + 2), 16f); } else { ShotAt(map, 1, mid, 7f); }
@@ -319,10 +328,6 @@ namespace ProjectZ.Dev
             fzArc.Clear();
             fzProj = null;
             fzThrownNow = c.thrown;
-            // the game's own random stream from here on, from this case's seed (set as Rand.Seed would, without its
-            // "initial seed" error: a test fixture)
-            AccessTools.Field(typeof(Rand), "seed").SetValue(null, StableHash("aimfloor_" + c.name) ^ (uint)Math.Max(0, Seed));
-            AccessTools.Field(typeof(Rand), "iterations").SetValue(null, 0u);
             // A stands at the tower's edge only when it shoots (else parked far off, out of every blast)
             Teleport(fzA, c.shooter == 'A' ? FzEdge(map) : new IntVec3(fzCx - 8, 0, fzEz + 20));
             Teleport(fzB, c.shooter == 'B' ? new IntVec3(fzCx + c.bdx, 0, fzEz + c.bdz) : new IntVec3(fzCx - 6, 0, fzEz + 12));
@@ -803,7 +808,7 @@ namespace ProjectZ.Dev
             fzH.apparel?.DestroyAll();
             GenSpawn.Spawn(fzH, new IntVec3(fzCx + 3, 0, fzEz + 5), map);
             LordMaker.MakeNewLord(f, new LordJob_DefendPoint(fzH.Position, 0.9f, 0.9f, false, false), map, new[] { fzH });
-            Info($"aimfloor: field {found}, tower {fzTower} (slab on floor 2), edge row {fzEz}, groundZ {an.groundZ}, stride {an.stride}, floors {an.floors}; A {fzA}, B {fzB}, raider {fzH} ({f}); seed {Seed}");
+            Info($"aimfloor: field {found}, tower {fzTower} (slab on floor 2), edge row {fzEz}, groundZ {an.groundZ}, stride {an.stride}, floors {an.floors}; A {fzA}, B {fzB}, raider {fzH} ({f}); seed {FixtureSeedBase}");
             Info($"DLCs: Biotech {ModsConfig.BiotechActive}, Anomaly {ModsConfig.AnomalyActive}, Odyssey {ModsConfig.OdysseyActive}");
             fzCase = 0;
             Wait(10, "fz_case");

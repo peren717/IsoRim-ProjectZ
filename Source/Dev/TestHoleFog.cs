@@ -364,7 +364,7 @@ namespace ProjectZ.Dev
                     int[] floors = { 0, 2, 4, 5, 6 };
                     if (hfFogShot >= floors.Length * 2)
                     {
-                        IsoRimBridge.SetOption("fogLid", true);
+                        SetIsoRimOption("fogLid", true);
                         Find.UIRoot.screenshotMode.Active = false;
                         muPointer = IntVec3.Invalid;
                         stage = "hf_u_end";   // (no drafted jump: voluntary jumps are going, user 2026-10-19)
@@ -372,7 +372,7 @@ namespace ProjectZ.Dev
                     }
                     bool lid = hfFogShot < floors.Length;
                     // (the second pass with IsoRim's fog lid off: the user's own option)
-                    IsoRimBridge.SetOption("fogLid", lid);
+                    SetIsoRimOption("fogLid", lid);
                     IntVec3 mid = ProjectZ.GroundCellOf(hfHoles.FirstOrDefault(), map);
                     int f = floors[hfFogShot++ % floors.Length];
                     MuShot(map, $"hf_user_fog_L{f}{(lid ? "" : "_nolid")}", f, mid, 30f, "hf_u_fogshots");

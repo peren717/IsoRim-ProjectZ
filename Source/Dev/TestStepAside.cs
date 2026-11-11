@@ -31,7 +31,8 @@ namespace ProjectZ.Dev
         private static string saBadSpot;
         private static int saErr0;
 
-        private static readonly AccessTools.FieldRef<JobDriver_Mine, int> saTicks = AccessTools.FieldRefAccess<JobDriver_Mine, int>("ticksToPickHit");
+        private static AccessTools.FieldRef<JobDriver_Mine, int> saTicksBound;
+        private static AccessTools.FieldRef<JobDriver_Mine, int> saTicks => saTicksBound ??= AccessTools.FieldRefAccess<JobDriver_Mine, int>("ticksToPickHit");   // (bound on first use: nothing for players)
 
         private static List<Pawn> SaCrew(Map map) => saCrewIds.Select(id => map.mapPawns.AllPawnsSpawned.FirstOrDefault(p => p.thingIDNumber == id)).Where(p => p != null).ToList();
 
@@ -178,7 +179,7 @@ namespace ProjectZ.Dev
                     saErr0 = errors;
                     int settled = 0;
                     // (an untouchable last top is final: some 10 frames more to show no job loop round it)
-                    MuRun(400, 51000, () => tops.All(t => SaOpen(t, map)) || SaS1Stuck(tops, map, out _) && ++settled >= 10, "sa_s1_done", () =>
+                    MuRun(400, "51000", () => tops.All(t => SaOpen(t, map)) || SaS1Stuck(tops, map, out _) && ++settled >= 10, "sa_s1_done", () =>
                     {
                         foreach (Pawn p in SaCrew(map))
                         {
@@ -217,7 +218,7 @@ namespace ProjectZ.Dev
                     saGoal = SaTop(3, 0, map);
                     SaMark(map, new[] { saU });
                     // the miner's pick held until the walker is on U, then the hit that opens it (the timing, not the work)
-                    MuRun(200, 52000, () => saOpened && saP.Position == saGoal, "sa_s2_done", () =>
+                    MuRun(200, "52000", () => saOpened && saP.Position == saGoal, "sa_s2_done", () =>
                     {
                         if (ProjectZ.FloorOf(saP.Position, map) == 0)
                         {
@@ -280,7 +281,7 @@ namespace ProjectZ.Dev
                     SaStart(map);
                     saU = SaTop(0, 0, map);
                     SaOneMiner(map, saU, 2);
-                    Rand.PushState(53000);
+                    Rand.PushState(FixtureSeed($"{mode}_s3"));
                     try
                     {
                         saP = PawnGenerator.GeneratePawn(new PawnGenerationRequest(PawnKindDef.Named("Muffalo"), null));
@@ -291,7 +292,7 @@ namespace ProjectZ.Dev
                     }
                     GenSpawn.Spawn(saP, saU, map);
                     SaMark(map, new[] { saU });
-                    MuRun(200, 53100, () => saOpened, "sa_s3_done", () =>
+                    MuRun(200, "53100", () => saOpened, "sa_s3_done", () =>
                     {
                         if (!saP.Spawned)
                         {
@@ -335,7 +336,7 @@ namespace ProjectZ.Dev
                     wood.stackCount = 30;
                     GenSpawn.Spawn(wood, saU, map);
                     SaMark(map, new[] { saU });
-                    MuRun(200, 54000, () => SaOpen(saU, map), "sa_s4_done", () =>
+                    MuRun(200, "54000", () => SaOpen(saU, map), "sa_s4_done", () =>
                     {
                         if (ProjectZ.FloorOf(saP.Position, map) == 0)
                         {
@@ -378,7 +379,7 @@ namespace ProjectZ.Dev
                     Teleport(saP, saU);
                     Draft(saP, true);
                     SaMark(map, new[] { saU });
-                    MuRun(200, 55000, () => SaOpen(saU, map) && ProjectZ.FloorOf(saP.Position, map) == 0, "sa_s5_done", () =>
+                    MuRun(200, "55000", () => SaOpen(saU, map) && ProjectZ.FloorOf(saP.Position, map) == 0, "sa_s5_done", () =>
                     {
                         if (!saOpened && SaOpen(saU, map))
                         {
@@ -424,7 +425,7 @@ namespace ProjectZ.Dev
                     }
                     MdWork(map, crew, WorkTypeDefOf.Mining);
                     Info($"S6 phase 1: {arms.Count(t => MineSide.MarkAt(t, map, MineDir.FromAbove))}/2 arm tops marked, crew {crew.Count}");
-                    MuRun(200, 56000, () => arms.All(t => SaOpen(t, map)), "sa_s6_mid", SaSpotWatch);
+                    MuRun(200, "56000", () => arms.All(t => SaOpen(t, map)), "sa_s6_mid", SaSpotWatch);
                     return true;
                 }
 
@@ -440,7 +441,7 @@ namespace ProjectZ.Dev
                     IntVec3 diag = SaTop(-1, -1, map);
                     Info($"S6 phase 2: arms open {SaOpen(SaTop(-1, 0, map), map)}, {SaOpen(SaTop(0, -1, map), map)}; diagonal {diag} touches the middle {ReachabilityImmediate.CanReachImmediate(diag, saU, map, PathEndMode.Touch, crew.FirstOrDefault())}");
                     SaMark(map, new[] { saU });
-                    MuRun(300, 56500, () => SaOpen(saU, map), "sa_s6_done", SaSpotWatch);
+                    MuRun(300, "56500", () => SaOpen(saU, map), "sa_s6_done", SaSpotWatch);
                     return true;
                 }
 

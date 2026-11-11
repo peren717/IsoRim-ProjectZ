@@ -209,7 +209,9 @@ namespace ProjectZ.Dev
             Result($"{exCase}: {name} {(hit ? "is hit" : "is unhurt")} ({why})", ExHit(name) == hit, ExDesc(name, map));
         }
 
-        private static void ExClear(Map map, CellRect rect)
+        // A test area cleared: everything destructible but pawns, water and impassable ground made soil, no roof, no fog;
+        // strangers: also every pawn there that is not the colony's (ClearStrangers).
+        private static void ExClear(Map map, CellRect rect, bool strangers = false)
         {
             foreach (IntVec3 c in rect)
             {
@@ -231,6 +233,32 @@ namespace ProjectZ.Dev
                 }
                 map.roofGrid.SetRoof(c, null);
                 map.fogGrid.Unfog(c);
+            }
+            if (strangers)
+            {
+                ClearStrangers(map, rect);   // (after the things: a casket destroyed may let its sleeper out)
+            }
+        }
+
+        // Every pawn in a test area that is not the colony's: wild animals, and the sleeping entities of an ancient complex
+        // the map put there (a fight would wake them: fleshbeasts downed the strikes mortar crews). Counted by kind in log.
+        private static void ClearStrangers(Map map, CellRect rect, Dictionary<string, int> log = null)
+        {
+            foreach (IntVec3 c in rect)
+            {
+                if (!c.InBounds(map))
+                {
+                    continue;
+                }
+                // (the colony's own: its pawns, its prisoners and its guests, HostFaction the player's, stay)
+                foreach (Pawn p in c.GetThingList(map).OfType<Pawn>().Where(p => p.Faction != Faction.OfPlayer && !p.IsPrisonerOfColony && p.HostFaction != Faction.OfPlayer).ToList())
+                {
+                    if (log != null)
+                    {
+                        log[p.kindDef.defName] = log.TryGetValue(p.kindDef.defName, out int n) ? n + 1 : 1;
+                    }
+                    p.Destroy();
+                }
             }
         }
 

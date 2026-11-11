@@ -27,7 +27,8 @@ namespace ProjectZ.Dev
         private static CellRect hRegion, hTower, hHouse, hRef, hRoom;
         private static IntVec3 hDoor, hStairs1, hStairs2, hFloat;
         private static int hStep, hShot, hTries;
-        private static float hSize, hOldYaw, hOldMin;
+        private static float hSize, hOldMin;
+        private static readonly Dictionary<string, int> hCleared = new Dictionary<string, int>();
         private static string hPhase = "";
         private static readonly List<HStep> hSteps = new List<HStep>();
         private static List<HShot> hShots = new List<HShot>();
@@ -133,6 +134,11 @@ namespace ProjectZ.Dev
                             {
                                 Info($"{p} at {p.Position} (floor {ProjectZ.FloorOf(p.Position, map) + 1}) job {p.CurJob?.def.defName} {p.CurJob?.targetA}");
                             }
+                            // (who else is about: hurt or dead colonists, and anything hostile)
+                            foreach (Pawn p in map.mapPawns.AllPawns.Where(p => p.Faction == Faction.OfPlayer && (p.Dead || p.Downed) || p.Faction != Faction.OfPlayer && !p.RaceProps.Animal))
+                            {
+                                Info($"{p} ({p.kindDef.defName}, {p.Faction?.Name ?? "no faction"}) at {p.PositionHeld}: {(p.Dead ? "dead" : p.Downed ? "downed" : "up")}, {string.Join(", ", p.health.hediffSet.hediffs.Select(h => h.LabelCap).Distinct().Take(6))}");
+                            }
                             Wait(5, "h_end");
                             return true;
                         }
@@ -146,7 +152,7 @@ namespace ProjectZ.Dev
                 {
                     if (hShot == 0 && hShots.Count > 0)
                     {
-                        hOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                         hOldMin = Find.CameraDriver.config.sizeRange.min;
                         ParkColonists(map);
                     }
@@ -154,7 +160,7 @@ namespace ProjectZ.Dev
                     {
                         if (hShots.Count > 0)
                         {
-                            IsoRimBridge.SetOption("freeYaw", hOldYaw);
+                            RestoreIsoRimOption("freeYaw");
                             GapFill(true);
                             Find.CameraDriver.config.sizeRange.min = hOldMin;
                         }
@@ -165,7 +171,7 @@ namespace ProjectZ.Dev
                     HShot sh = hShots[hShot];
                     SetHour(map, sh.hour);
                     ClearSnow(map);
-                    IsoRimBridge.SetOption("freeYaw", sh.yaw);
+                    SetIsoRimOption("freeYaw", sh.yaw);
                     GapFill(!sh.noFill);
                     hTries = 0;
                     hSize = sh.close != null ? 1.6f : 14f;
@@ -205,10 +211,15 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "h_end":
+                {
+                    // (the spot was unfogged by the setup: nothing, ProjectZ's reach fog included, fogs it again)
+                    int fogged = hRegion.Cells.Count(c => map.fogGrid.IsFogged(c));
+                    Result("talltower: the made test spot stays unfogged", fogged == 0, $"{fogged} of {hRegion.Area} cells fogged");
                     GapFill(true);
                     WatchCheck(map, "talltower end");
                     Finish();
                     return true;
+                }
             }
             return false;
         }
@@ -222,6 +233,8 @@ namespace ProjectZ.Dev
             int groundZ = ProjectZ.GroundZ(map);
             CellRect found = CellRect.Empty;
             // T at (0..2, 0..2); its shadow reaches about 21 cells west and east at 7 and 17 h, 8 north; A, R, F to the south.
+            // The test spot is made, not found: the nearest 70 x 50 rect on the ground rows with nothing indestructible in it
+            // (a geyser, a monolith) is cleared below, whatever the map put there.
             foreach (IntVec3 c in GenRadial.RadialCellsAround(near, 79f, true))
             {
                 CellRect r = new CellRect(c.x - 32, c.z - 25, 70, 50);
@@ -229,7 +242,7 @@ namespace ProjectZ.Dev
                 {
                     continue;
                 }
-                if (r.Cells.All(x => !x.Fogged(map) && !map.roofGrid.Roofed(x) && !x.GetTerrain(map).IsWater && x.GetTerrain(map).passability != Traversability.Impassable && x.GetThingList(map).All(t => t is Pawn || t.def.destroyable)))
+                if (r.Cells.All(x => x.GetThingList(map).All(t => t is Pawn || t.def.destroyable)))
                 {
                     found = r;
                     break;
@@ -237,25 +250,47 @@ namespace ProjectZ.Dev
             }
             if (found.Area == 0)
             {
-                Result("test spot", false, "no open ground near the colonists (70 x 50, unroofed, no water, nothing indestructible)");
+                Result("test spot", false, "no 70 x 50 rect near the colonists without something indestructible in it");
                 Finish();
                 return;
             }
             hRegion = found;
             hO = new IntVec3(found.minX + 32, 0, found.minZ + 25);
+            int cleared = 0, unroofed = 0, unfogged = 0;
             TerrainDef concrete = DefDatabase<TerrainDef>.GetNamedSilentFail("Concrete") ?? TerrainDefOf.Concrete;
+            // roofs first (no roof is left unsupported over the spot when its rock goes), then the things, the fog, the floor
+            foreach (IntVec3 c in hRegion)
+            {
+                if (map.roofGrid.Roofed(c))
+                {
+                    map.roofGrid.SetRoof(c, null);
+                    unroofed++;
+                }
+            }
             foreach (IntVec3 c in hRegion)
             {
                 foreach (Thing t in c.GetThingList(map).ToList())
                 {
-                    if (!(t is Pawn) && t.def.destroyable)
+                    if (!(t is Pawn) && t.def.destroyable && !t.Destroyed)
                     {
+                        hCleared[t.def.defName] = hCleared.TryGetValue(t.def.defName, out int n) ? n + 1 : 1;
                         t.Destroy();
+                        cleared++;
                     }
+                }
+            }
+            ClearStrangers(map, hRegion, hCleared);   // (then every pawn on the spot that is not the colony's)
+            foreach (IntVec3 c in hRegion)
+            {
+                if (map.fogGrid.IsFogged(c))
+                {
+                    map.fogGrid.Unfog(c);
+                    unfogged++;
                 }
                 map.terrainGrid.SetTerrain(c, concrete);
                 map.snowGrid.SetDepth(c, 0f);
             }
+            Info($"talltower: spot {hRegion} made: {cleared} things destroyed ({string.Join(", ", hCleared.OrderByDescending(k => k.Value).ThenBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + " " + k.Value))}), {unroofed} roofs removed, {unfogged} cells unfogged; pawns not ours on the map: {string.Join(", ", map.mapPawns.AllPawnsSpawned.Where(p => p.Faction != Faction.OfPlayer && !p.RaceProps.Animal).Select(p => $"{p.kindDef.defName} {p.Faction?.Name ?? "-"} at {p.Position}"))}");
             DebugSettings.enableRandomMentalStates = false;
             Find.Storyteller.storytellerComps.Clear();   // no raids or other incidents while the colonists build (test only)
             Find.PlaySettings.autoRebuild = false;

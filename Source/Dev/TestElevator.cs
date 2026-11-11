@@ -80,7 +80,7 @@ namespace ProjectZ.Dev
 
         private static bool StepElevator(Map map)
         {
-            Rand.PushState((int)(StableHash("elevator_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("elevator_" + stage));
             try
             {
                 return StepElevatorInner(map);

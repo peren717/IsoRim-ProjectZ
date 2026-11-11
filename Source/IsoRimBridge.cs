@@ -154,6 +154,24 @@ namespace ProjectZ
 
         private static object SetOptionInner(string field, object value) => IsoRim.Api.SetOption(field, value);
 
+        // IsoRim Api 72 (tests): the N of a test harness's -isorimseed=N, the one seed of the run (IsoRim seeds the quick
+        // test's world, tile and colonists with it); null without the argument or with an older IsoRim.
+        private const int HarnessSeedApi = 72;
+
+        public static int? HarnessSeed => Present && ApiVersion >= HarnessSeedApi ? HarnessSeedInner() : null;
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static int? HarnessSeedInner() => IsoRim.Api.HarnessSeed;
+
+        // IsoRim Api 62 (tests): whether IsoRim shows this held weapon as its own model and counts it as thrown (a grenade),
+        // its own answer (Api.ReadThingModel, Held: ThingModelInfo.Thrown); false without IsoRim or with an older one.
+        private const int ThingModelApi = 62;
+
+        public static bool ThrownWithModel(Thing weapon) => weapon != null && Present && ApiVersion >= ThingModelApi && ThrownWithModelInner(weapon);
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static bool ThrownWithModelInner(Thing weapon) => IsoRim.Api.ReadThingModel(weapon, IsoRim.ThingModelUse.Held, out IsoRim.ThingModelInfo info) && info.Thrown;
+
         // ---- the fog lid (IsoRim API 3, optional): ProjectZ never locks it (the lid is the player's option in every
         // game; IsoRim draws it per storey). Read-only members for the tests.
         private const int FogLidApi = 3;

@@ -31,7 +31,7 @@ namespace ProjectZ.Dev
     //       (the 3D view turned off for those two shots, test only: ProjectZ locks it on).
     public static partial class TestRunner
     {
-        private const int BrSeed = 8100;
+        private const int BrFix = 8100;   // the base of this mode's fixture ids (FixtureSeed of the mode and the id)
         private static Thing brBench, brUp, brFar, brGround, brItem;
         private static Thing brFirst, brCarried;
         private static string brChoice;
@@ -40,7 +40,8 @@ namespace ProjectZ.Dev
         private static int brShot;
         private static int brRingAt;
         private static Dialog_BillConfig brDialog;
-        private static readonly MethodInfo BrFindM = AccessTools.Method(typeof(WorkGiver_DoBill), "TryFindBestBillIngredients");
+        private static MethodInfo BrFindMBound;
+        private static MethodInfo BrFindM => BrFindMBound ??= AccessTools.Method(typeof(WorkGiver_DoBill), "TryFindBestBillIngredients");   // (bound on first use: nothing for players)
 
         private static ThingDef BrChunkDef => DefDatabase<ThingDef>.GetNamed("ChunkGranite");
 
@@ -130,7 +131,7 @@ namespace ProjectZ.Dev
             R2Clear(map);
             R2Park(map, r2P);
             R2Feed(map);
-            Rand.PushState(seed);
+            Rand.PushState(FixtureSeed($"{mode}_{seed}"));
             try
             {
                 for (int L = 1; L <= up; L++)
@@ -281,7 +282,7 @@ namespace ProjectZ.Dev
         {
             brFirst = brCarried = null;
             R2Mark();
-            nextTickSeed = seed;
+            nextTickSeed = FixtureSeed($"{mode}_ticks_{seed}");
             TickUntil(maxTicks, () =>
             {
                 Job j = r2P.CurJob;
@@ -312,14 +313,14 @@ namespace ProjectZ.Dev
 
         private static void BrB1(Map map)
         {
-            BrScene(map, BrSeed + 1, 1, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 1, 1, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RG(12, 13), map, 10f);
             brUp = BrChunk(RL(12, 14, 1, map), map);
             brFar = BrChunk(RG(40, 4), map);
             brChoice = $"bench {BrWhere(brBench.Position, map)} r 10; UP 3D {Dist3D.Distance(brBench.Position, brUp.Position, map):0.0} (flat {(brUp.Position - brBench.Position).LengthHorizontal:0}), FAR {Dist3D.Distance(brBench.Position, brFar.Position, map):0.0}; search: control (patch off) [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B1 " + brChoice);
             Info("B1 " + BrDiag(map));
-            BrWatch(4000, "br_1_check", BrSeed + 11);
+            BrWatch(4000, "br_1_check", BrFix + 11);
         }
 
         private static void BrB1Check(Map map)
@@ -336,14 +337,14 @@ namespace ProjectZ.Dev
 
         private static void BrB2(Map map)
         {
-            BrScene(map, BrSeed + 2, 1, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 2, 1, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RG(12, 13), map, 6f);
             brUp = BrChunk(RL(14, 13, 1, map), map);
             brGround = BrChunk(RG(12, 10), map);
             brChoice = $"bench {BrWhere(brBench.Position, map)} r 6; UP 3D {Dist3D.Distance(brBench.Position, brUp.Position, map):0.0} (ground offset 2), GROUND {Dist3D.Distance(brBench.Position, brGround.Position, map):0.0}; search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B2 " + brChoice);
             Info("B2 " + BrDiag(map));
-            BrWatch(3000, "br_2_check", BrSeed + 21);
+            BrWatch(3000, "br_2_check", BrFix + 21);
         }
 
         private static void BrB2Check(Map map)
@@ -360,7 +361,7 @@ namespace ProjectZ.Dev
 
         private static void BrB3(Map map)
         {
-            BrScene(map, BrSeed + 3, 1, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 3, 1, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RL(12, 17, 1, map), map, 10f);
             brGround = BrChunk(RG(12, 15), map);
             brFar = BrChunk(RL(30, 22, 1, map), map);
@@ -368,7 +369,7 @@ namespace ProjectZ.Dev
             brChoice = $"bench {BrWhere(brBench.Position, map)} r 10; GROUND (under it) 3D {Dist3D.Distance(brBench.Position, brGround.Position, map):0.0}, FAR (same floor) {Dist3D.Distance(brBench.Position, brFar.Position, map):0.0}; search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B3 " + brChoice);
             Info("B3 " + BrDiag(map));
-            BrWatch(4000, "br_3_check", BrSeed + 31);
+            BrWatch(4000, "br_3_check", BrFix + 31);
         }
 
         private static void BrB3Check(Map map)
@@ -385,14 +386,14 @@ namespace ProjectZ.Dev
 
         private static void BrB4(Map map)
         {
-            BrScene(map, BrSeed + 4, 4, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 4, 4, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RG(12, 13), map, 999f);
             brUp = BrChunk(RL(29, 19, 4, map), map);
             bool reach = r2P.CanReach(brUp, PathEndMode.ClosestTouch, Danger.Deadly);
             brChoice = $"bench {BrWhere(brBench.Position, map)} Unlimited; UP on level 4 {BrWhere(brUp.Position, map)}: flat {(brUp.Position - brBench.Position).LengthHorizontal:0} rows, 3D {Dist3D.Distance(brBench.Position, brUp.Position, map):0.0}, reachable {reach}; search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B4 " + brChoice);
             Info("B4 " + BrDiag(map));
-            BrWatch(9000, "br_4_check", BrSeed + 41);
+            BrWatch(9000, "br_4_check", BrFix + 41);
         }
 
         private static void BrB4Check(Map map)
@@ -411,7 +412,7 @@ namespace ProjectZ.Dev
         // of the campfire across the band gap (the game's flat test: inside 12), and 245 ground rows plus a storey in 3D.
         private static void BrB5a(Map map)
         {
-            BrScene(map, BrSeed + 5, 1, WorkTypeDefOf.Hauling);
+            BrScene(map, BrFix + 5, 1, WorkTypeDefOf.Hauling);
             AnnexMapComponent an = ProjectZ.Annex(map);
             int x0 = r2Area.minX + 5;
             IntVec3 fire = new IntVec3(x0, 0, an.groundZ - 3);
@@ -428,7 +429,7 @@ namespace ProjectZ.Dev
             brChoice = $"campfire {BrWhere(fire, map)} r 12; stand {BrWhere(standAt, map)}: flat {(standAt - fire).LengthHorizontal:0.0}, 3D {Dist3D.Distance(fire, standAt, map):0.0}; search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B5a " + brChoice);
             Info("B5a " + BrDiag(map));
-            BrWatch(1500, "br_5a_check", BrSeed + 51);
+            BrWatch(1500, "br_5a_check", BrFix + 51);
         }
 
         private static void BrClearSpot(Map map, CellRect rect, int L)
@@ -482,14 +483,14 @@ namespace ProjectZ.Dev
 
         private static void BrB5b(Map map)
         {
-            BrScene(map, BrSeed + 6, 1, WorkTypeDefOf.Hauling);
+            BrScene(map, BrFix + 6, 1, WorkTypeDefOf.Hauling);
             brBench = BrCampfire(RG(12, 13), map, 10f);
             brStand = BrStand(RL(12, 15, 1, map), map, out Apparel shirt);
             brItem = shirt;
             brChoice = $"campfire {BrWhere(brBench.Position, map)} r 10; stand {BrWhere(brStand.Position, map)}: 3D {Dist3D.Distance(brBench.Position, brStand.Position, map):0.0} (flat {(brStand.Position - brBench.Position).LengthHorizontal:0}); search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B5b " + brChoice);
             Info("B5b " + BrDiag(map));
-            BrWatch(4000, "br_5b_check", BrSeed + 61);
+            BrWatch(4000, "br_5b_check", BrFix + 61);
         }
 
         private static void BrB5bCheck(Map map)
@@ -518,7 +519,7 @@ namespace ProjectZ.Dev
                     R2Floor(map, new CellRect(r2Area.minX + 1, r2Area.minZ + 1, r2Area.Width - 2, r2Area.Height - 2), 1);
                     map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
                 }
-                Rand.PushState(seed0 + 1000 + s);
+                Rand.PushState(FixtureSeed($"{mode}_{seed0 + 1000 + s}"));
                 try
                 {
                     IntVec3 Rnd() => Levels.Cell(new IntVec3(r2Area.minX + Rand.RangeInclusive(4, r2Area.Width - 5), 0, r2Area.minZ + Rand.RangeInclusive(3, r2Area.Height - 4)), L, map);
@@ -555,7 +556,7 @@ namespace ProjectZ.Dev
         {
             List<string> diff = new List<string>();
             int searches0 = BillRadius3D.Searches;
-            int same = BrLayouts(map, 0, BrSeed + 100, 20, diff) + BrLayouts(map, 1, BrSeed + 200, 20, diff);
+            int same = BrLayouts(map, 0, BrFix + 100, 20, diff) + BrLayouts(map, 1, BrFix + 200, 20, diff);
             Result("B6 one floor: on 40 seeded layouts (20 ground, 20 on level 1) the bill search picks the same with the patch on and off",
                 same == 40, $"identical {same}/40, 3D searches {BillRadius3D.Searches - searches0}; {string.Join(" | ", diff)}");
             stage = "br_7";
@@ -567,9 +568,9 @@ namespace ProjectZ.Dev
         // marble bill with no marble anywhere: the search runs out), patch off and on in alternating rounds.
         private static void BrB7(Map map)
         {
-            BrScene(map, BrSeed + 7, 4, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 7, 4, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RG(12, 13), map, 10f);
-            Rand.PushState(BrSeed + 700);
+            Rand.PushState(FixtureSeed($"{mode}_{BrFix + 700}"));
             int spawned = 0;
             try
             {
@@ -663,7 +664,7 @@ namespace ProjectZ.Dev
         {
             if (brShot == 0)
             {
-                BrScene(map, BrSeed + 8, 2, WorkTypeDefOf.Crafting);
+                BrScene(map, BrFix + 8, 2, WorkTypeDefOf.Crafting);
                 brBench = BrStonecutter(RG(14, 16), map, 15f);
                 Draft(r2P, true);
                 brDialog = new Dialog_BillConfig(brBill, brBench.Position);
@@ -737,17 +738,17 @@ namespace ProjectZ.Dev
         {
             int searches0 = BillRadius3D.Searches;
             List<string> diff = new List<string>();
-            int same = BrLayouts(map, 0, BrSeed + 300, 20, diff);
+            int same = BrLayouts(map, 0, BrFix + 300, 20, diff);
             Result("B6 map without floors: on 20 seeded layouts the bill search picks the same with the patch on and off, the patch inactive",
                 same == 20 && BillRadius3D.Searches == searches0, $"identical {same}/20, 3D searches {BillRadius3D.Searches - searches0}; {string.Join(" | ", diff)}");
             // a real job: radius 8, a chunk 5 cells off and one 12 cells off
-            BrScene(map, BrSeed + 301, 0, WorkTypeDefOf.Crafting);
+            BrScene(map, BrFix + 301, 0, WorkTypeDefOf.Crafting);
             brBench = BrStonecutter(RG(12, 13), map, 8f);
             brGround = BrChunk(RG(17, 13), map);
             brFar = BrChunk(RG(24, 13), map);
             brChoice = $"bench {brBench.Position} r 8; GROUND 5 cells, FAR 12; search: control [{BrAsk(map, true)}], patch on [{BrAsk(map, false)}]";
             Info("B6 flat " + brChoice);
-            BrWatch(3000, "br_flat_check", BrSeed + 302);
+            BrWatch(3000, "br_flat_check", BrFix + 302);
         }
 
         private static void BrFlatCheck(Map map)

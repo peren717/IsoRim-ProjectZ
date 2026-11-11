@@ -25,7 +25,6 @@ namespace ProjectZ.Dev
         private static Pawn yEdge, yUp, yGround;
         private static TerrainDef yCarpet, yWood;
         private static int yShot, yClothBefore0, yClothBefore1, yClothBefore2;
-        private static float yOldYaw;
         private static Pawn yClimbG, yClimbU;
         private static Building_Stairs yS1;
         private static readonly List<KeyValuePair<string, Action<Map>>> yShots = new List<KeyValuePair<string, Action<Map>>>();
@@ -42,11 +41,11 @@ namespace ProjectZ.Dev
                 case "y_shot":
                     if (yShot == 0)
                     {
-                        yOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+                        SetIsoRimOption("freeYaw", 0f);
                     }
                     if (yShot >= yShots.Count)
                     {
-                        IsoRimBridge.SetOption("freeYaw", yOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Wait(5, "y_place");
                         return true;
                     }
@@ -137,7 +136,7 @@ namespace ProjectZ.Dev
                 {
                     if (yShot >= YLandingShots.Length)
                     {
-                        IsoRimBridge.SetOption("freeYaw", yOldYaw);
+                        RestoreIsoRimOption("freeYaw");
                         Find.CameraDriver.config.sizeRange.min = zOldMin;
                         Wait(5, "y_decon");
                         return true;
@@ -148,7 +147,7 @@ namespace ProjectZ.Dev
                         Find.CameraDriver.config.sizeRange.min = 3f;
                     }
                     var s = YLandingShots[yShot];
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
+                    SetIsoRimOption("freeYaw", s.yaw);
                     ShotAt(map, s.floor, StairShape.High(yT1, Rot4.North), 4.5f);
                     Wait(40, "y_lshot_take");
                     return true;
@@ -383,7 +382,7 @@ namespace ProjectZ.Dev
                         yShots.Add(new KeyValuePair<string, Action<Map>>($"shadow_h{h:00}_f{f + 1}_yaw{y:0}", m =>
                         {
                             SetHour(m, h);
-                            IsoRimBridge.SetOption("freeYaw", y);
+                            SetIsoRimOption("freeYaw", y);
                             ShotAt(m, f, at, 11f);
                             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                         }));

@@ -61,7 +61,7 @@ namespace ProjectZ.Dev
 
         private static bool StepCustomLadders(Map map)
         {
-            Rand.PushState((int)(StableHash("customladders_" + stage) ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed("customladders_" + stage));
             try
             {
                 return StepCustomLaddersInner(map);
@@ -610,7 +610,6 @@ namespace ProjectZ.Dev
             new CxView2 { name = "ghost_top", floor = 2, ghost = true },
         };
 
-        private static float cxOldYaw;
 
         // Rows on the platform's west edge, level 2: 9 emergency, 11 foot-placed, 13 top-placed, 15 no worker (link by code),
         // 17 a foot-placed blueprint; the ghost at row 19.
@@ -631,7 +630,7 @@ namespace ProjectZ.Dev
             cxGhostDef = null;
             cxGhostAt = LdG(19, 19);
             cxGhostRot = Rot4.East;
-            cxOldYaw = (float)IsoRimBridge.SetOption("freeYaw", 0f);
+            SetIsoRimOption("freeYaw", 0f);
             cxView = 0;
             Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
             stage = "cx_v_view";
@@ -642,13 +641,13 @@ namespace ProjectZ.Dev
             if (cxView >= cxViews.Length)
             {
                 cxGhostDef = null;
-                IsoRimBridge.SetOption("freeYaw", cxOldYaw);
+                RestoreIsoRimOption("freeYaw");
                 FloorView.Set(0);
                 stage = "cx_s";
                 return;
             }
             CxView2 v = cxViews[cxView];
-            IsoRimBridge.SetOption("freeYaw", v.yaw);
+            SetIsoRimOption("freeYaw", v.yaw);
             cxGhostDef = v.ghost ? CxFoot : null;
             ShotAt(map, v.floor, LdG(v.ghost ? 19 : 20, v.ghost ? 18 : 13), v.size);
             Wait(120, "cx_v_take");

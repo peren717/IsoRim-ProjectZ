@@ -612,7 +612,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     var s = shots[swShot];
-                    IsoRimBridge.SetOption("freeYaw", s.yaw);
+                    SetIsoRimOption("freeYaw", s.yaw);
                     ShotAt(map, s.floor, swShow.CenterCell, s.size, roofs: false);
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     Wait(40, after ? "sw_take_after" : "sw_take");
@@ -671,7 +671,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "sw_end":
-                    IsoRimBridge.SetOption("freeYaw", 0f);
+                    SetIsoRimOption("freeYaw", 0f);
                     Info("W2 counters: SlabReplace.Replaced " + SlabReplace.Replaced + ", UnderSwaps " + SlabReplace.UnderSwaps);
                     WatchCheck(map, "slabreplace end");
                     Finish();

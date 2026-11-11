@@ -48,8 +48,10 @@ namespace ProjectZ.Dev
         private static readonly long[] oaRan = new long[2], oaRanOpen = new long[2];
         private static int oaT0;
         private static bool oaLastOpen;
-        private static readonly AccessTools.FieldRef<SteadyEnvironmentEffects, int> oaSteadyCycle = AccessTools.FieldRefAccess<SteadyEnvironmentEffects, int>("cycleIndex");
-        private static readonly AccessTools.FieldRef<TempTerrainManager, int> oaTempCycle = AccessTools.FieldRefAccess<TempTerrainManager, int>("cycleIndex");
+        private static AccessTools.FieldRef<SteadyEnvironmentEffects, int> oaSteadyCycleBound;
+        private static AccessTools.FieldRef<SteadyEnvironmentEffects, int> oaSteadyCycle => oaSteadyCycleBound ??= AccessTools.FieldRefAccess<SteadyEnvironmentEffects, int>("cycleIndex");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<TempTerrainManager, int> oaTempCycleBound;
+        private static AccessTools.FieldRef<TempTerrainManager, int> oaTempCycle => oaTempCycleBound ??= AccessTools.FieldRefAccess<TempTerrainManager, int>("cycleIndex");   // (bound on first use: nothing for players)
         private static int oaStep;   // the step of the visit being audited
         private static readonly long[,] oaDrawVisits = new long[3, 2];
         private static readonly List<string> oaDrawSamples = new List<string>();
@@ -61,9 +63,12 @@ namespace ProjectZ.Dev
         private static uint oaRand0;
         private static int oaEvTerrain, oaEvDamage, oaEvDestroy, oaEvSpawn, oaEvThin, oaEvFleck;
         private static long oaAudited, oaChangedSnow, oaChangedSand, oaChangedTerrain, oaChangedThings, oaFlecks, oaRandDraws, oaRandVisits;
-        private static readonly AccessTools.FieldRef<SnowGrid, double> oaSnowTotal = AccessTools.FieldRefAccess<SnowGrid, double>("totalDepth");
-        private static readonly AccessTools.FieldRef<SandGrid, double> oaSandTotal = AccessTools.FieldRefAccess<SandGrid, double>("totalDepth");
-        private static readonly AccessTools.FieldRef<uint> oaRandIter = AccessTools.StaticFieldRefAccess<uint>(AccessTools.Field(typeof(Rand), "iterations"));
+        private static AccessTools.FieldRef<SnowGrid, double> oaSnowTotalBound;
+        private static AccessTools.FieldRef<SnowGrid, double> oaSnowTotal => oaSnowTotalBound ??= AccessTools.FieldRefAccess<SnowGrid, double>("totalDepth");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<SandGrid, double> oaSandTotalBound;
+        private static AccessTools.FieldRef<SandGrid, double> oaSandTotal => oaSandTotalBound ??= AccessTools.FieldRefAccess<SandGrid, double>("totalDepth");   // (bound on first use: nothing for players)
+        private static AccessTools.FieldRef<uint> oaRandIterBound;
+        private static AccessTools.FieldRef<uint> oaRandIter => oaRandIterBound ??= AccessTools.StaticFieldRefAccess<uint>(AccessTools.Field(typeof(Rand), "iterations"));   // (bound on first use: nothing for players)
 
         internal static void OaInit(Harmony h)
         {
@@ -130,11 +135,11 @@ namespace ProjectZ.Dev
             int k = oaPerfBlock % 2;
             OpenAirSkip.Off = k == 1;
             TickManager tm = Find.TickManager;
-            int seed = (int)(StableHash("airskip_perf") ^ (uint)Math.Max(0, SeedArg ?? 717));
+            int seed = FixtureSeed("airskip_perf");
             for (int i = 0; i < 1000; i++)
             {
                 long a = System.Diagnostics.Stopwatch.GetTimestamp();
-                Rand.PushState(seed + (oaPerfBlock * 1000 + i) * 7919);
+                Rand.PushState(seed + (oaPerfBlock * 1000 + i) * SeedStride);
                 try
                 {
                     tm.DoSingleTick();
@@ -444,7 +449,7 @@ namespace ProjectZ.Dev
             Info($"airskip: ground cells that can freeze {water}");
             // cloth stacks and dirt outdoors: on the ground and on the slab
             ThingDef dirt = DefDatabase<ThingDef>.GetNamed("Filth_Dirt");
-            Rand.PushState(9090);
+            Rand.PushState(FixtureSeed($"{mode}_filth"));
             try
             {
                 int n = 0;

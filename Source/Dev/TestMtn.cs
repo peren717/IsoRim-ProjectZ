@@ -332,7 +332,7 @@ namespace ProjectZ.Dev
                 {
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
                     mtElev = a?.elevation == null ? null : (byte[])a.elevation.Clone();
-                    mtThings = map.listerThings.AllThings.Count;
+                    mtThings = map.listerThings.AllThings.Count(t => t.def.category != ThingCategory.Mote);
                     mtMine = map.listerThings.AllThings.Count(t => t.def.mineable);
                     mtBuildings = map.listerThings.AllThings.Count(t => t is Building);
                     Stopwatch sw = Stopwatch.StartNew();
@@ -362,7 +362,7 @@ namespace ProjectZ.Dev
                         Result("F5 save + load: the elevation bytes are the same", a.elevation != null && mtElev != null && a.elevation.SequenceEqual(mtElev), $"{a.elevation?.Length} bytes after, {mtElev?.Length} before");
                         Result("F1 save + load: layoutVersion 2, identity table", a.layoutVersion == 2 && a.bandLevel == null && a.MinLevel == 0 && a.MaxLevel == a.floors - 1, $"version {a.layoutVersion}, table {(a.bandLevel == null ? "none" : string.Join(",", a.bandLevel))}, levels {a.MinLevel}..{a.MaxLevel}");
                         int mineAfter = map.listerThings.AllThings.Count(t => t.def.mineable), bldAfter = map.listerThings.AllThings.Count(t => t is Building);
-                        Result("save + load: same mineables and buildings", mineAfter == mtMine && bldAfter == mtBuildings, $"mineables {mtMine} -> {mineAfter}, buildings {mtBuildings} -> {bldAfter} (all things {mtThings} -> {map.listerThings.AllThings.Count})");
+                        Result("save + load: same mineables and buildings", mineAfter == mtMine && bldAfter == mtBuildings, $"mineables {mtMine} -> {mineAfter}, buildings {mtBuildings} -> {bldAfter} (all things but motes {mtThings} -> {map.listerThings.AllThings.Count(t => t.def.category != ThingCategory.Mote)})");
                     }
                     Info("PERF SUMMARY | " + string.Join(" | ", mtPerf));
                     Finish();

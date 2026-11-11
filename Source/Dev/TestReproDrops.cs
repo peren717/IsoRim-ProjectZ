@@ -470,7 +470,7 @@ namespace ProjectZ.Dev
             xdFinds.Clear();
             xdRecording = true;
             bool ok = false;
-            Rand.PushState((int)(StableHash($"xd_{s.name}_{xdRun}") ^ (uint)(SeedArg ?? 717)));
+            Rand.PushState(FixtureSeed($"xd_{s.name}_{xdRun}"));
             try
             {
                 ok = s.fire(map);

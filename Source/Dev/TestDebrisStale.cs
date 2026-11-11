@@ -5,7 +5,7 @@ using Verse;
 
 namespace ProjectZ.Dev
 {
-    // Mode debrisstale (run with -projectzfloors=2; the map's seed is fixed, 717 unless -projectzseed): IsoRim's collapse
+    // Mode debrisstale (run with -projectzfloors=2; the map from the harness seed -isorimseed, each part's random state from FixtureSeed): IsoRim's collapse
     // debris when a slab falls while its floor is hidden (tester report 2026-10-19: "Taking the collapse debris failed:
     // ArgumentOutOfRangeException"). IsoRim indexes a block's meshes once per tick; the first cell's collapse dirties the
     // block, the next cell brings the hidden block up to date, and the old index pointed past the new meshes.
@@ -68,7 +68,7 @@ namespace ProjectZ.Dev
                         return true;
                     }
                     CellRect r = dsRects[dsCheck];
-                    Rand.PushState(9300 + dsCheck);
+                    Rand.PushState(FixtureSeed($"{mode}_{dsCheck}_setup"));
                     DsBuild(map, r);
                     Rand.PopState();
                     Info($"{dsNames[dsCheck]}: fixture at {r}, column {r.CenterCell}");
@@ -97,7 +97,7 @@ namespace ProjectZ.Dev
                     dsErrorsAt = dsErrors;
                     // the column goes (its own seed); frames pass before the next tick drops the roof, as in play (the
                     // drawer brings the blocks the kill touched up to date in between)
-                    Rand.PushState(9400 + dsCheck);
+                    Rand.PushState(FixtureSeed($"{mode}_{dsCheck}_column"));
                     try
                     {
                         r.CenterCell.GetEdifice(map)?.Kill();
@@ -117,7 +117,7 @@ namespace ProjectZ.Dev
                     Info($"{dsNames[dsCheck]}: column gone, floor-2 block dirty flags {sec.dirtyFlags} before the collapse tick");
                     // the game ticks (TickManager.DoSingleTick, own seed) until the roof is down
                     int ticks = 0;
-                    Rand.PushState(9500 + dsCheck);
+                    Rand.PushState(FixtureSeed($"{mode}_{dsCheck}_ticks"));
                     try
                     {
                         while (ticks < 30 && r.Cells.Any(g => map.roofGrid.Roofed(g)))
