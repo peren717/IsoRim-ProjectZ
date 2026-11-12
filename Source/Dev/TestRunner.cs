@@ -435,9 +435,9 @@ namespace ProjectZ.Dev
             {
                 GxInit(h);
             }
-            if (mode == "holefog")
+            if (mode == "holefog" || mode == "tallfog")
             {
-                ReachFog.CeilingRecorder = new HashSet<IntVec3>();   // (the ceilings the reach rule reveals from generation on: HfFogStats)
+                ReachFog.CeilingRecorder = new HashSet<IntVec3>();   // (the ceilings the reach rule reveals from generation on: HfFogStats, tallfog's G1)
             }
             if (mode == "worldfloors")
             {
@@ -2096,6 +2096,28 @@ namespace ProjectZ.Dev
         // where a shot is first drawn from, a pawn's drawn position and facing; the reach fog's batched run) falls on the same
         // ticks every run.
         private const int TicksPerFrame = 500;
+
+        // One real game tick inside a stage, outside the tick runs, seeded by its name: what a fixture just built is then
+        // seen by the game's once-a-tick caches (vanilla PathFinderMapData gathers the path data at most once a tick), as it
+        // is in play. The runs' count (their default seed names) stays as it was; everything after runs one game tick later
+        // than without it, the same every run.
+        private static void TickOnce(Map map, string name)
+        {
+            Rand.PushState(FixtureSeed(name));
+            try
+            {
+                TickManager tm = Find.TickManager;
+                tm.DoSingleTick();
+                if (SeedDebug)
+                {
+                    Out($"TICKDEBUG {tm.TicksGame} {SeedDebugState(map)} (TickOnce {name})");
+                }
+            }
+            finally
+            {
+                Rand.PopState();
+            }
+        }
 
         private static void DoTicks(Map map)
         {

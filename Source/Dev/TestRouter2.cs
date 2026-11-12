@@ -616,6 +616,9 @@ namespace ProjectZ.Dev
             R2Layout(map, seed);
             R2Feed(map);
             Draft(r2P, true);
+            // a tick between building the layout and asking for routes: the path data (vanilla PathFinderMapData, gathered
+            // at most once a tick) was gathered this tick before the layout stood (the last walk's tick)
+            TickOnce(map, $"router2_layout_tick_{seed}");
             Rand.PushState(seed + 1);
             List<(IntVec3 s, IntVec3 d)> pairs = new List<(IntVec3, IntVec3)>();
             try
@@ -1271,6 +1274,10 @@ namespace ProjectZ.Dev
             {
                 map.fogGrid.Refog(CellRect.SingleCell(Levels.Cell(g, 1, map)));
             }
+            // a tick between building the fixture and asking for routes: F ran this tick and the path data (vanilla
+            // PathFinderMapData, gathered at most once a tick) is still F's; a route asked on it fails and the router
+            // remembers the miss
+            TickOnce(map, "router2_fg_tick");
             IntVec3 s = RG(14, 2), d = RL(20, 16, 1, map);
             Teleport(r2P, s);
             Draft(r2P, false);

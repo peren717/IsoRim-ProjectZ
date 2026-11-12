@@ -54,7 +54,8 @@ namespace ProjectZ.Dev
         private static Pawn elR, elA;
         private static readonly List<Pawn> elPawns = new List<Pawn>();
         private static int elMaxRiders, elWaitsAt, elFallsAt, elFallFloorsAt, elHurtAt, elT0, elTicks, elPlacedAt, elCarAt, elRelinksAt;
-        private static bool elFlag, elFlag2, elOverrideHeld;
+        private static bool elFlag, elFlag2, elOverrideHeld, elJobSeen;
+        private static int elJobId, elJobEnd;
         private static float elHeightAt;
         private static string elPId, elQId, elNote;
         private static Building_Stairs elStairs;
@@ -545,7 +546,12 @@ namespace ProjectZ.Dev
             elPawns.Add(r2P);
             ElResetRides();
             elFlag = elOverrideHeld = false;
-            elDest = ElL(14, 13, n, map);
+            // C4: the Goto has a 100-tick expiry, so it expires mid-ride and the climb holds it off. Its target is the
+            // elevator's own stop on level 4, where the ride ends. (With a target past the stop, vanilla ends the expired
+            // job at the pawn's next hash-interval tick after the ride, and where the pawn stops would depend on the tick
+            // and the pawn's id.) The check: the ride arrives and the job (told by Job.loadID: Job objects are pooled)
+            // does not end before the ride does.
+            elDest = n == 4 ? elE.StopOn(n) : ElL(14, 13, n, map);
             Job job = JobMaker.MakeJob(JobDefOf.Goto, elDest);
             if (n == 4)
             {
@@ -554,10 +560,18 @@ namespace ProjectZ.Dev
             }
             r2P.jobs.TryTakeOrderedJob(job, JobTag.DraftedOrder);
             int held0 = PZStats.climbOverridesHeld;
+            elJobId = job.loadID;
+            elJobSeen = r2P.CurJob?.loadID == elJobId;
+            elJobEnd = -1;
             SeedTicks("el_c_up" + n);
             TickUntil(3000, () =>
             {
                 ElWatch(map);
+                elJobSeen |= r2P.CurJob?.loadID == elJobId;
+                if (elJobSeen && elJobEnd < 0 && r2P.CurJob?.loadID != elJobId)
+                {
+                    elJobEnd = Find.TickManager.TicksGame;
+                }
                 if (n == 4 && !elFlag && LinkSteps.Climbing(r2P) && r2P.pather.MovePercentage > 0.5f)
                 {
                     elFlag = true;
@@ -579,7 +593,10 @@ namespace ProjectZ.Dev
                 $"{RideStr(r)}, rides {RidesOf(r2P).Count}, at {r2P.Position} level {Levels.LevelOf(r2P.Position, map)}");
             if (up && n == 4)
             {
-                Result("C4 up: a Goto with a 100-tick expiry is not cut short mid-ride, and a job override asked mid-ride is held off", there && elFlag && elOverrideHeld, $"asked {elFlag}, held {elOverrideHeld}");
+                // (a job ended mid-ride ends the ride in the same tick, short of the stop: the ride must have arrived too)
+                bool rideFirst = elJobSeen && r != null && r.t1 >= 0 && r.arrived && (elJobEnd < 0 || elJobEnd >= r.t1);
+                Result("C4 up: a Goto with a 100-tick expiry is not cut short mid-ride, and a job override asked mid-ride is held off", there && rideFirst && elFlag && elOverrideHeld,
+                    $"asked {elFlag}, held {elOverrideHeld}; ride ended at tick {r?.t1} (arrived {r?.arrived}), the Goto {(!elJobSeen ? "never started" : elJobEnd < 0 ? "still on" : "ended at tick " + elJobEnd)}");
             }
             if (up)
             {
@@ -1782,7 +1799,8 @@ namespace ProjectZ.Dev
         private static int elClimbInvokedAt;
         private static int elClimbTick;
         private static int elRaidTick;
-        private static readonly Dictionary<Pawn, Job> elLastJob = new Dictionary<Pawn, Job>();
+        // each raider's last job by the game's own id (Job.loadID: Job objects are pooled)
+        private static readonly Dictionary<Pawn, int> elLastJob = new Dictionary<Pawn, int>();
         private static int elJobLines;
         // (the raider walks in and may trash buildings on the way first, the game's AssaultColony duty: up to ~2300 ticks
         // seen; the loop never gets there)
@@ -1866,9 +1884,9 @@ namespace ProjectZ.Dev
                 foreach (Pawn p in elRaiders)
                 {
                     Job j = p.Spawned ? p.CurJob : null;
-                    if (j != null && (!elLastJob.TryGetValue(p, out Job last) || last != j))
+                    if (j != null && (!elLastJob.TryGetValue(p, out int last) || last != j.loadID))
                     {
-                        elLastJob[p] = j;
+                        elLastJob[p] = j.loadID;
                         if (!withStairs && elJobLines++ < 60)
                         {
                             Log.Message($"[PZTest]   RD job {p} at {p.Position} L{Levels.LevelOf(p.Position, map)}: {j.def.defName} A {j.targetA} giver {j.jobGiver?.GetType().Name ?? "none"}");

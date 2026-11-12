@@ -14,7 +14,8 @@ namespace ProjectZ.Dev
     // its site the same way every run (nearest the colonists) and ends by checking that no fog changed outside the cells
     // it expects. Real flows with ticks:
     //   G1 generation: an independent recount per band (sky unfogged, rim = tops with sky among their 8 neighbours,
-    //      faces = rock next to sky or rim, holes and everything else fogged, void rows open), the fill's counters; the
+    //      faces = rock next to sky or rim, holes and everything else fogged, void rows open; the ceilings the reach rule
+    //      revealed over reached caves left out, by its own record), the fill's counters; the
     //      floor HUD offers only the ground and level 1 (no level reached); save + load keeps the fog and the reached list
     //   G2 colonists build stairs from the ground onto a lip on the rim (the blueprint first, then the rock in its solid
     //      end mined: the planned exit keeps its top under the bare-top rule): on completion (nobody walked up) the plateau
@@ -418,6 +419,9 @@ namespace ProjectZ.Dev
 
         // ---------------------------------------------------------------- G1
 
+        // The band fog as the rim rule gives it at generation, leaving out the ceilings the reach rule revealed itself
+        // (ReachCeiling, shared with holefog's HfFogStats).
+
         private static void FgGenChecks(Map map, AnnexMapComponent a)
         {
             byte[] h = Mountains.LastHeights;
@@ -427,7 +431,7 @@ namespace ProjectZ.Dev
                 Result("G1 the fill's heights", false, "none (the map was not generated in this run)");
                 return;
             }
-            int bad = 0, rimN = 0, holeN = 0, skyOpen = 0, topsFog = 0, tops = 0, rockFog = 0, rock = 0, oreFog = 0, ore = 0, faceOre = 0;
+            int bad = 0, ceilings = 0, rimN = 0, holeN = 0, skyOpen = 0, topsFog = 0, tops = 0, rockFog = 0, rock = 0, oreFog = 0, ore = 0, faceOre = 0;
             string first = null;
             for (int L = 1; L <= cap; L++)
             {
@@ -511,7 +515,11 @@ namespace ProjectZ.Dev
                             faceOre += want ? 0 : 1;
                         }
                     }
-                    if (map.fogGrid.IsFogged(c) != want)
+                    if (map.fogGrid.IsFogged(c) != want && ReachCeiling(c, map))
+                    {
+                        ceilings++;
+                    }
+                    else if (map.fogGrid.IsFogged(c) != want)
                     {
                         bad++;
                         first = first ?? $"{c} level {L} H{h[i]} fogged {map.fogGrid.IsFogged(c)}, want {want}";
@@ -532,7 +540,7 @@ namespace ProjectZ.Dev
                 }
             }
             Result("G1 band fog as the rim rule says: sky open, a one-cell rim of each top open (8-way), rock next to sky or rim open, holes and the rest fogged",
-                bad == 0 && tops > 0, $"{bad} cells differ{(first == null ? "" : ", first " + first)}; tops {tops} ({topsFog} fogged), rim {rimN}, holes {holeN}, rock {rock} ({rockFog} fogged), ore {ore} ({oreFog} fogged, {faceOre} on a cliff face)");
+                bad == 0 && tops > 0, $"{bad} cells differ{(first == null ? "" : ", first " + first)}; {ceilings} reach-rule ceilings left out (recorder {ReachFog.CeilingRecorder?.Count.ToString() ?? "off"}); tops {tops} ({topsFog} fogged), rim {rimN}, holes {holeN}, rock {rock} ({rockFog} fogged), ore {ore} ({oreFog} fogged, {faceOre} on a cliff face)");
             Result("G1 fill counters equal the recount (rim, holes)", rimN == Mountains.LastRim && holeN == Mountains.LastHoles, $"rim {rimN} (fill {Mountains.LastRim}), holes {holeN} (fill {Mountains.LastHoles})");
             Result("G1 the void rows between the bands are open", voidOpen == voidCells, $"{voidOpen} of {voidCells}");
             Result("G1 no level reached yet", a.reachedLevels != null && a.reachedLevels.Count == 0, $"reached [{string.Join(",", a.reachedLevels ?? new List<int>())}]");

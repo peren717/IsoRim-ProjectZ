@@ -34,8 +34,9 @@ namespace ProjectZ.Dev
         private static ThingDef MlRock(Map map) => Mountains.FallbackRock(map);
 
         // The nearest rect of the given size to 'near' on the ground rows (MlEdgeMargin from the edges) that is open ground:
-        // nothing indestructible in its column on any level, no natural rock, no roof, no colonist; null if none.
-        private static CellRect? MlSpot(Map map, IntVec3 near, int width, int depth)
+        // nothing indestructible in its column on any level, no natural rock, no roof, no colonist, and the caller's own
+        // test if given (extra: e.g. nothing an earlier flow built there); null if none.
+        private static CellRect? MlSpot(Map map, IntVec3 near, int width, int depth, Func<CellRect, bool> extra = null)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int cap = a?.MaxLevel ?? 0;
@@ -54,7 +55,7 @@ namespace ProjectZ.Dev
                         IntVec3 u = L == 0 ? g : Levels.Cell(g, L, map);
                         return !u.IsValid || u.GetThingList(map).All(t => t is Pawn ? !ours.Contains((Pawn)t) && L == 0 : t.def.destroyable);
                     }));
-                if (ok)
+                if (ok && (extra == null || extra(rect)))
                 {
                     return rect;
                 }

@@ -17,6 +17,7 @@ namespace ProjectZ.Dev
     //   F2 colonists build a wall and a bed on the top;
     //   F3 a colonist mines a level-1 cliff face, then the cell behind it: rock gone, the rough-hewn floor counts as a
     //      natural rock floor (R40), the natural roof above stays (none on the top level), the face behind is revealed as vanilla;
+    //      the site laid by the mountain rules (TfLayFace), the miner put on its plateau, both undone after;
     //   F4 vanilla collapse under a rock floor: a 15x15 block of band rock taken away, CollapsedRocks fall, the thick
     //      roof and the floor above stay;
     //   F5 a colonist on a level-2 top ordered down to the level-1 top below with no stairs there never jumps (no jumps since 2026-10-19);
@@ -32,7 +33,8 @@ namespace ProjectZ.Dev
     //      within reach of a band-1 building; a child hive never lands on another band (R23);
     //   F12 colonists put on a level-1 top (as by a transport pod; since rock-top floors a jump off the lip is a way down too) build stairs downward from the top
     //      (the stairs are touched from the floor above, StairTouch) and walk down them to the ground. A fresh, rested
-    //      crew with no hostiles or shells left over: F7's explosions and F8's raid can leave the old colonists hurt.
+    //      crew with no hostiles or shells left over: F7's explosions and F8's raid can leave the old colonists hurt. The
+    //      crew never botches (a botch turns the frame back into a blueprint, not what F12 checks).
     public static partial class TestRunner
     {
         private static IntVec3 tfStairs, tfExitTop, tfWalkTo, tfWallAt, tfBedAt, tfMine1, tfMine2, tfJumpFrom, tfJumpTo, tfPackTo;
@@ -205,9 +207,28 @@ namespace ProjectZ.Dev
                 }
                 case "tm_f_mine":
                 {
-                    // F3: a revealed level-1 face reachable from the top the walker stands on (or any reachable one)
                     tfMine1 = tfMine2 = IntVec3.Invalid;
-                    IntVec3 from = tfWalkTo.IsValid ? tfWalkTo : tfWalker != null && tfWalker.Spawned ? tfWalker.Position : Centroid(map);
+                    tfMineRect = CellRect.Empty;
+                    if (!TfLayFace(map, a, out string why))
+                    {
+                        Result("F3 a level-1 cliff face to mine", false, why);
+                        stage = "tm_f_collapse";
+                        return true;
+                    }
+                    tfReachWaits = 0;
+                    Wait(1, "tm_f_mine_reach");
+                    return true;
+                }
+                case "tm_f_mine_reach":
+                {
+                    // the reach fog's own batched run after the miner was put on the plateau (asked until it has run)
+                    if ((ReachFogMap.For(map)?.Asked ?? false) && tfReachWaits++ < TfReachFramesMax)
+                    {
+                        Wait(1, "tm_f_mine_reach");
+                        return true;
+                    }
+                    // F3: a revealed level-1 face reachable from the top the miner stands on
+                    IntVec3 from = tfMineStand;
                     foreach (IntVec3 c in GenRadial.RadialCellsAround(from, 20f, true))
                     {
                         if (!c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || map.fogGrid.IsFogged(c) || !(c.GetEdifice(map) is Mineable m) || m.def.building.isResourceRock)
@@ -233,7 +254,8 @@ namespace ProjectZ.Dev
                     }
                     if (!tfMine1.IsValid)
                     {
-                        Result("F3 a level-1 cliff face to mine", false, $"none reachable from {from}");
+                        Result("F3 a level-1 cliff face to mine", false, $"none reachable from {from} on the laid site (reach fog still asked {ReachFogMap.For(map)?.Asked}, after {tfReachWaits} frames)");
+                        TfF3End(map);
                         stage = "tm_f_collapse";
                         return true;
                     }
@@ -271,6 +293,7 @@ namespace ProjectZ.Dev
                 case "tm_f_mined2":
                     Result("F3 the cell behind (revealed by the first) mined too: a tunnel into the level-1 rock", tfMine2.GetEdifice(map) == null && ((map.roofGrid.RoofAt(tfMine2)?.isNatural ?? false) || a.MaxLevel == 1),
                         $"{tfMine2}: edifice {tfMine2.GetEdifice(map)?.def.defName ?? "none"}, roof {map.roofGrid.RoofAt(tfMine2)?.defName}");
+                    TfF3End(map);
                     stage = "tm_f_collapse";
                     return true;
                 case "tm_f_collapse":
@@ -340,7 +363,7 @@ namespace ProjectZ.Dev
                 {
                     bool built = tfDownStairs != null && TfDownBuilt(map);
                     Result("F12 colonists on a level-1 top build stairs downward from the top (touch from above)", built,
-                        $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName} hediffs {string.Join("/", p.health.hediffSet.hediffs.Select(h => h.def.defName))}"))}; hostiles on the map {map.mapPawns.AllPawnsSpawned.Count(h => h.HostileTo(Faction.OfPlayer) && !h.Downed)}");
+                        $"stairs at {tfDownAt} facing {tfDownRot}: {built}; blueprint/frame {TfDownThing(map)}; builders {string.Join(", ", tfDownCrew.Select(p => $"{p} at {p.Position} job {p.CurJobDef?.defName} hediffs {string.Join("/", p.health.hediffSet.hediffs.Select(h => h.def.defName))}"))}; hostiles on the map {map.mapPawns.AllPawnsSpawned.Count(h => h.HostileTo(Faction.OfPlayer) && !h.Downed)}; botches {botches - tfDownBotches}");
                     if (!built)
                     {
                         TfDownEnd(map);
@@ -487,6 +510,90 @@ namespace ProjectZ.Dev
                 }
             }
             return tfStairs.IsValid;
+        }
+
+        // ---------------------------------------------------------------- F3
+
+        // F3's site laid, not searched for (TestMtnLay, as minebody's M3/M5: the generated cliffs near the stairs differ
+        // with every map): a plateau of height 1 (TfFacePlateau rows) with a block of height TfFaceHeight north of it and a
+        // ring of open ground round both, raised by the mountain rules at the nearest open spot to F1's top (nothing of the
+        // colony's in it or next to it: no building, no item such as the starting resources). The miner is put on the
+        // plateau's top south of the block's middle (as by a transport pod: the climb is F1's); the reach fog opens the
+        // plateau and the faces round it, the block's inner rock stays fogged. Rows south to north: the ring, the plateau,
+        // the block, the ring. F3's end clears the rect to open ground again (TfF3End).
+        private const int TfFaceWidth = 9, TfFacePlateau = 3, TfFaceBlock = 4, TfFaceDepth = 1 + TfFacePlateau + TfFaceBlock + 1;
+
+        // The block's height: level-1 rock under a level-2 top (the face on level 1 keeps a natural roof).
+        private const int TfFaceHeight = 2;
+
+        // Frames to wait at most for the reach fog's batched run after the miner is put on the plateau (it runs once a
+        // frame while asked: ReachFogMap.Asked).
+        private const int TfReachFramesMax = 30;
+
+        private static IntVec3 tfMineStand, tfMinerFrom;
+        private static CellRect tfMineRect = CellRect.Empty;
+
+        private static Pawn tfMiner;
+        private static int tfReachWaits;
+
+        private static bool TfLayFace(Map map, AnnexMapComponent a, out string why)
+        {
+            why = null;
+            IntVec3 home = tfWalkTo.IsValid ? ProjectZ.GroundCellOf(tfWalkTo, map) : Centroid(map);
+            Pawn miner = Colonists(map).Where(p => !p.Downed && !p.WorkTypeIsDisabled(WorkTypeDefOf.Mining) && p.health.capacities.CapableOf(PawnCapacityDefOf.Moving))
+                .OrderBy(p => p == tfWalker ? 0 : 1).FirstOrDefault();
+            CellRect? spot = MlSpot(map, home, TfFaceWidth, TfFaceDepth, r => !TfColonyThings(map, r.ExpandedBy(1), a.MaxLevel));
+            if (a.MaxLevel < TfFaceHeight || spot == null || miner == null)
+            {
+                why = $"no laid site: levels {a.MaxLevel} (needs {TfFaceHeight}), open spot near {home} {spot?.ToString() ?? "none"}, miner {miner?.ToString() ?? "none"}";
+                return false;
+            }
+            CellRect r0 = spot.Value;
+            tfMineRect = r0;
+            int top = r0.minZ + TfFacePlateau;   // the plateau's north row (rows minZ+1 .. top), the block north of it
+            MlClear(map, r0);
+            MlRaise(map, r0, g => g.x == r0.minX || g.x == r0.maxX || g.z == r0.minZ || g.z == r0.maxZ ? 0 : g.z <= top ? 1 : TfFaceHeight, new IntVec3(r0.minX, 0, r0.minZ));
+            tfMineStand = Levels.Cell(new IntVec3(r0.CenterCell.x, 0, top), 1, map);
+            tfMiner = miner;
+            tfMinerFrom = miner.Position;
+            Teleport(miner, tfMineStand);
+            Info($"F3 laid site {r0} near {home}: {miner} put on {tfMineStand} (from {tfMinerFrom})");
+            return true;
+        }
+
+        // F3 done: the miner back where it stood before (the later flows search their sites round the colonists), and the
+        // laid rect made open ground again (MlClear: as MlSpot found it), so no later flow can pick F3's fixture.
+        private static void TfF3End(Map map)
+        {
+            if (tfMiner != null && tfMiner.Spawned && !tfMiner.Downed && tfMinerFrom.IsValid)
+            {
+                Teleport(tfMiner, tfMinerFrom);
+            }
+            tfMiner = null;
+            if (!tfMineRect.IsEmpty)
+            {
+                MlClear(map, tfMineRect);
+                Info($"F3 laid site {tfMineRect} cleared to open ground");
+            }
+            tfMineRect = CellRect.Empty;
+        }
+
+        // Anything of the colony's in the rect on any level: built, framed or planned (the colony's faction), or an item
+        // (the starting resources, F1's wood: faction-less; MlClear would destroy them). Stone chunks don't count.
+        private static bool TfColonyThings(Map map, CellRect rect, int cap)
+        {
+            foreach (IntVec3 g in rect.ClipInsideMap(map))
+            {
+                for (int L = 0; L <= cap; L++)
+                {
+                    IntVec3 u = L == 0 ? g : Levels.Cell(g, L, map);
+                    if (u.IsValid && u.InBounds(map) && u.GetThingList(map).Any(t => !(t is Pawn) && (t.Faction == Faction.OfPlayer || t.def.category == ThingCategory.Item && !t.def.IsWithinCategory(ThingCategoryDefOf.Chunks))))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         // ---------------------------------------------------------------- F4
@@ -994,7 +1101,10 @@ namespace ProjectZ.Dev
         private static Rot4 tfDownRot;
         private static Thing tfDownStairs;
         private static readonly List<Pawn> tfDownCrew = new List<Pawn>();
-        private static int tfDownJumps;
+        private static int tfDownJumps, tfDownBotches;
+
+        // Colonists generated at most for F12's crew of two (most fresh colonists can't build without botching).
+        private const int TfCrewTries = 100;
 
         private static bool TfDownBuilt(Map map) => map.listerThings.ThingsOfDef(PZDefOf.PZ_Stairs).Any(t => t.Position == tfDownAt);
 
@@ -1104,23 +1214,35 @@ namespace ProjectZ.Dev
                     p.drafter.Drafted = true;   // (the old colonists stay out of it)
                 }
             }
-            for (int i = 0; i < 20 && tfDownCrew.Count < 2; i++)
+            // The crew: generated under F12's own random state (not whatever the earlier flows left), builders who never
+            // botch (the game's ConstructSuccessChance at its full value: a botch turns the frame back into a blueprint,
+            // which F12 does not test)
+            Rand.PushState(FixtureSeed("tallmtn_f12_crew"));
+            try
             {
-                Pawn p = PawnGenerator.GeneratePawn(new PawnGenerationRequest(PawnKindDefOf.Colonist, Faction.OfPlayer, forceGenerateNewPawn: true));
-                if (p.WorkTypeIsDisabled(WorkTypeDefOf.Construction) || p.WorkTypeIsDisabled(WorkTypeDefOf.Hauling) || !p.health.capacities.CapableOf(PawnCapacityDefOf.Moving)
-                    || !p.health.capacities.CapableOf(PawnCapacityDefOf.Manipulation))
+                for (int i = 0; i < TfCrewTries && tfDownCrew.Count < 2; i++)
                 {
-                    Find.WorldPawns.PassToWorld(p, RimWorld.Planet.PawnDiscardDecideMode.Discard);
-                    continue;
+                    Pawn p = PawnGenerator.GeneratePawn(new PawnGenerationRequest(PawnKindDefOf.Colonist, Faction.OfPlayer, forceGenerateNewPawn: true));
+                    if (p.WorkTypeIsDisabled(WorkTypeDefOf.Construction) || p.WorkTypeIsDisabled(WorkTypeDefOf.Hauling) || !p.health.capacities.CapableOf(PawnCapacityDefOf.Moving)
+                        || !p.health.capacities.CapableOf(PawnCapacityDefOf.Manipulation) || p.GetStatValue(StatDefOf.ConstructSuccessChance) < StatDefOf.ConstructSuccessChance.maxValue)
+                    {
+                        Find.WorldPawns.PassToWorld(p, RimWorld.Planet.PawnDiscardDecideMode.Discard);
+                        continue;
+                    }
+                    GenSpawn.Spawn(p, room[tfDownCrew.Count], map);
+                    foreach (Need n in p.needs.AllNeeds)
+                    {
+                        n.CurLevel = n.MaxLevel;
+                    }
+                    tfDownCrew.Add(p);
+                    tfHurtSeen.UnionWith(p.health.hediffSet.hediffs);   // (old wounds from generation: not news)
                 }
-                GenSpawn.Spawn(p, room[tfDownCrew.Count], map);
-                foreach (Need n in p.needs.AllNeeds)
-                {
-                    n.CurLevel = n.MaxLevel;
-                }
-                tfDownCrew.Add(p);
-                tfHurtSeen.UnionWith(p.health.hediffSet.hediffs);   // (old wounds from generation: not news)
             }
+            finally
+            {
+                Rand.PopState();
+            }
+            tfDownBotches = botches;
             Info($"F12 isolated: {shells} projectiles and {foes} hostiles removed, a fresh crew of {tfDownCrew.Count}");
             for (int i = 0; i < 4; i++)
             {
@@ -1137,7 +1259,7 @@ namespace ProjectZ.Dev
                 StairTouch.UpperCells(tfDownStairs, rim);
             }
             Info($"F12 stairs down at {tfDownAt} facing {tfDownRot}, exit {tfDownExit} ({(fromTop ? "on the top" : "over the lip")}), crew {string.Join(", ", tfDownCrew)} on the top at {stand}, foot {tfDownFoot}; rim cells from the top {rim.Count} ({string.Join(" ", rim)}); top reaches the foot {map.reachability.CanReach(stand, tfDownFoot, PathEndMode.OnCell, tp)}");
-            if (tfDownCrew.Count == 0 || tfDownStairs == null)
+            if (tfDownCrew.Count < 2 || tfDownStairs == null)
             {
                 Result("F12 a crew and a blueprint", false, $"crew {tfDownCrew.Count}, blueprint {tfDownStairs}");
                 TfDownEnd(map);

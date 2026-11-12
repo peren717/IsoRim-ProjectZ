@@ -45,8 +45,9 @@ namespace ProjectZ.Dev
         private static FloorFlyersDef fjLists;
         private static Faction fjHostile;
 
-        // what the animal did in the current check
-        private static Job fjLastJob;
+        // what the animal did in the current check; jobs told apart by the game's own id (Job.loadID: Job objects are
+        // pooled, a new job can be the object of the one before)
+        private static int fjLastJobId = -1;
         private static int fjJobs, fjFlyJobs, fjFlee, fjTakeoffs, fjLandings, fjMeleeTick, fjStartTick, fjMaxLevel, fjLadder;
         private static bool fjInFlight;
         private static IntVec3 fjLandCell;
@@ -557,7 +558,7 @@ namespace ProjectZ.Dev
 
         private static void FjResetWatch(Map map)
         {
-            fjLastJob = null;
+            fjLastJobId = -1;
             fjJobs = fjFlyJobs = fjFlee = fjTakeoffs = fjLandings = fjLadder = 0;
             fjMeleeTick = fjIngestTick = -1;
             fjInFlight = fjA.ParentHolder is PawnFlyer;
@@ -617,9 +618,9 @@ namespace ProjectZ.Dev
             }
             fjMaxLevel = Math.Max(fjMaxLevel, Levels.LevelOf(p.Position, map));
             Job j = p.CurJob;
-            if (j != null && j != fjLastJob)
+            if (j != null && j.loadID != fjLastJobId)
             {
-                fjLastJob = j;
+                fjLastJobId = j.loadID;
                 fjJobs++;
                 string k = j.def.defName;
                 fjJobDefs[k] = fjJobDefs.TryGetValue(k, out int n) ? n + 1 : 1;

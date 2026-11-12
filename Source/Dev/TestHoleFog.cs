@@ -181,6 +181,12 @@ namespace ProjectZ.Dev
             return lines;
         }
 
+        // A cell the reach rule revealed itself as the ceiling of a reached or seen cell (a cave the colonists reach: the
+        // rock above it shows), by ReachFog's own record (ReachFog.CeilingRecorder, set before generation for the modes
+        // that ask: holefog, tallfog); unfogged now. With the rule off (or no record) never. Shared by holefog's
+        // HfFogStats and tallfog's G1.
+        private static bool ReachCeiling(IntVec3 c, Map map) => !ReachFog.Off && ReachFog.CeilingRecorder != null && !map.fogGrid.IsFogged(c) && ReachFog.CeilingRecorder.Contains(c);
+
         // Per upper level: natural rock (and inner rock: all 8 neighbours rock too), bare tops and open air, with how many
         // of each are fogged. Returns the fogged fraction of inner rock over all upper levels.
         // The share of inner upper-level rock (natural rock with rock on all 8 sides on its level) that stays fogged, leaving
@@ -215,7 +221,7 @@ namespace ProjectZ.Dev
                                 IntVec3 n = c + GenAdj.AdjacentCells[i];
                                 all = n.InBounds(map) && ProjectZ.SameBand(n, c, map) && n.GetEdifice(map) is Mineable;
                             }
-                            if (all && !fog && !ReachFog.Off && ReachFog.CeilingRecorder != null && ReachFog.CeilingRecorder.Contains(c))
+                            if (all && ReachCeiling(c, map))
                             {
                                 overSeen++;   // (revealed by the reach rule as a ceiling: not counted)
                             }

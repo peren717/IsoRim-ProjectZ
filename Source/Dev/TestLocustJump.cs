@@ -46,8 +46,10 @@ namespace ProjectZ.Dev
         private static float ljOldMin = 1f;
         private static AbilityDef ljAbility;
 
-        // what the locust did in the current check (LjWatch, every tick)
-        private static Job ljLastJob;
+        // what the locust did in the current check (LjWatch, every tick); jobs told apart by the game's own id
+        // (Job.loadID, new per JobMaker.MakeJob): the Job objects are pooled (SimplePool<Job>), so a new job can be the
+        // object of the one before
+        private static int ljLastJobId = -1;
         private static int ljJobs, ljCasts, ljTakeoffs, ljLandings, ljMeleeTick, ljStartTick;
         private static bool ljInFlight;
         private static IntVec3 ljLandCell;
@@ -543,7 +545,7 @@ namespace ProjectZ.Dev
 
         private static void LjResetWatch(Map map)
         {
-            ljLastJob = null;
+            ljLastJobId = -1;
             ljJobs = ljCasts = ljTakeoffs = ljLandings = 0;
             ljMeleeTick = -1;
             ljInFlight = false;
@@ -595,9 +597,9 @@ namespace ProjectZ.Dev
             }
             ljMaxLevel = Math.Max(ljMaxLevel, Levels.LevelOf(p.Position, map));
             Job j = p.CurJob;
-            if (j != null && j != ljLastJob)
+            if (j != null && j.loadID != ljLastJobId)
             {
-                ljLastJob = j;
+                ljLastJobId = j.loadID;
                 ljJobs++;
                 string k = j.def.defName;
                 ljJobDefs[k] = ljJobDefs.TryGetValue(k, out int n) ? n + 1 : 1;
