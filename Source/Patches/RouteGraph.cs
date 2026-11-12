@@ -985,6 +985,7 @@ namespace ProjectZ.Patches
             public float cost;
             public int tick;
             public int version;           // the floor's version when found
+            public int tc, td;            // the move ticks it was priced at (the request's StairRouter.MoveTicks)
         }
 
         // per pawn (key -1: no pawn), so one pawn's changes clear its own legs only (ClearReach2For)
@@ -992,24 +993,28 @@ namespace ProjectZ.Patches
 
         public static int Who(TraverseParms tp) => HashCode.Combine(tp.pawn?.thingIDNumber ?? -1, (int)tp.mode, (int)tp.maxDanger, tp.canBashDoors, tp.canBashFences, tp.avoidFog, tp.fenceBlocked, tp.avoidPersistentDanger);
 
-        public LegResult KnownLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode)
+        // tc, td: the asking request's move ticks (StairRouter.MoveTicks). A leg priced at other move ticks is no answer: the
+        // same pawn's speed changes between requests (light, weather), and the game's search itself depends on it.
+        public LegResult KnownLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode, int tc, int td)
         {
             if (!legsByPawn.TryGetValue(pid, out var legs) || !legs.TryGetValue((who, from, to.Cell, to.HasThing ? to.Thing.thingIDNumber : -1, mode), out LegResult r))
             {
                 return null;
             }
             int L = Levels.LevelOf(from, map);
-            if (Find.TickManager.TicksGame - r.tick > LegTicks || r.version != LevelVersion(L))
+            if (Find.TickManager.TicksGame - r.tick > LegTicks || r.version != LevelVersion(L) || r.tc != tc || r.td != td)
             {
                 return null;
             }
             return r;
         }
 
-        public void KeepLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode, LegResult r)
+        public void KeepLeg(int pid, int who, IntVec3 from, LocalTargetInfo to, PathEndMode mode, int tc, int td, LegResult r)
         {
             r.tick = Find.TickManager.TicksGame;
             r.version = LevelVersion(Levels.LevelOf(from, map));
+            r.tc = tc;
+            r.td = td;
             if (!legsByPawn.TryGetValue(pid, out var legs))
             {
                 legsByPawn[pid] = legs = new Dictionary<(int, IntVec3, IntVec3, int, PathEndMode), LegResult>();

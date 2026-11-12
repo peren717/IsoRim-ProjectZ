@@ -466,7 +466,7 @@ namespace ProjectZ.Patches
             // stays the least the router itself could pay, but near trap corridors and doors it is no longer octile alone)
             if (kind == KindLeg && (!c.estimatesOnly || !OldBound && !TestBoundNoCache))
             {
-                RouteGraph.LegResult known = c.g.KnownLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, from, target, mode);
+                RouteGraph.LegResult known = KnownLeg(c, from, target, mode);
                 if (known != null)
                 {
                     if (known.nodes == null)
@@ -727,6 +727,11 @@ namespace ProjectZ.Patches
         public static string LastLegFail;
         public static string LastViolation;
 
+        // The leg cache, asked and filled for this request's traveller at its move ticks (c.tc, c.td: MoveTicks).
+        private static RouteGraph.LegResult KnownLeg(Ctx c, IntVec3 from, LocalTargetInfo target, PathEndMode mode) => c.g.KnownLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, from, target, mode, c.tc, c.td);
+
+        private static void KeepLeg(Ctx c, Edge e, RouteGraph.LegResult r) => c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, c.tc, c.td, r);
+
         // The real leg of an edge: true when found (cost and nodes set), false when there is none (banned).
         private static bool Refine(Ctx c, Edge e)
         {
@@ -752,7 +757,7 @@ namespace ProjectZ.Patches
             if (!c.dig && !rim && !c.g.FloorReach(e.from, e.target, e.mode, c.reachTp))
             {
                 e.banned = true;
-                c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
+                KeepLeg(c, e, new RouteGraph.LegResult());
                 Dev.PZStats.routerLegsRefused++;
                 return false;
             }
@@ -794,7 +799,7 @@ namespace ProjectZ.Patches
                 p?.Dispose();
                 e.banned = true;
                 c.failures++;
-                c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult());
+                KeepLeg(c, e, new RouteGraph.LegResult());
                 Dev.PZStats.routerLegFails++;
                 if (Dev.TestRunner.Active)
                 {
@@ -820,7 +825,7 @@ namespace ProjectZ.Patches
                 LastViolation = $"leg {e.from} -> {e.target} ({e.mode}): real {e.cost} < estimate {e.est}";
             }
             Dev.PZStats.routerLegsChecked++;
-            c.g.KeepLeg(c.tp.pawn?.thingIDNumber ?? -1, c.who, e.from, e.target, e.mode, new RouteGraph.LegResult { nodes = new List<IntVec3>(p.NodesReversed), cost = p.TotalCost });
+            KeepLeg(c, e, new RouteGraph.LegResult { nodes = new List<IntVec3>(p.NodesReversed), cost = p.TotalCost });
             p.Dispose();
             return true;
         }
