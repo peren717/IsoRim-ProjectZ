@@ -35,6 +35,8 @@ namespace ProjectZ.Dev
     //                                   between floors (AimFloor), -projectzfloors=3 -projectzseed=7 (TestFlame)
     //                                   aimedge: burner streams cast at the map's edges, on one floor and between floors
     //                                   (AimFloor), -projectzfloors=2 -projectzseed=7 (TestAimEdge)
+    //                                   stairsreentry: stairs killed by a real IED's blast with something on their landing
+    //                                   (issue 7), alone or with CE and its pack, -projectzfloors=3 -projectzseed=7 (TestStairsReentry)
     //                                   routerfix: the router's failure handling (a forced failure: answered, memo,
     //                                   one message a minute with the pawn, job and mods; Dev/TestRouterFix.cs)
     //                                   deckkin: gravship decks without Substructure's tag but with its affordance (slab, stairs
@@ -545,6 +547,7 @@ namespace ProjectZ.Dev
             {
                 errors++;
                 DsSawError(text);
+                SeSawError(text);
                 if (errors == 300 && stage != "done")
                 {
                     Append("[PZTest] 300 errors: giving up");
@@ -1370,6 +1373,11 @@ namespace ProjectZ.Dev
                 StepAimEdge(map);
                 return;
             }
+            if (stage.StartsWith("se_"))
+            {
+                StepStairsReentry(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -1913,6 +1921,10 @@ namespace ProjectZ.Dev
                     else if (mode == "aimedge")
                     {
                         stage = "ae_setup";
+                    }
+                    else if (mode == "stairsreentry")
+                    {
+                        stage = "se_setup";
                     }
                     else if (mode == "range")
                     {

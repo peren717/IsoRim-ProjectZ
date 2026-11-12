@@ -519,22 +519,29 @@ namespace ProjectZ
 
         public override void DeSpawn(DestroyMode mode = DestroyMode.Vanish)
         {
-            Map map = Map;
-            map?.GetComponent<StairGrid>()?.Deregister(this);
-            if (map != null && mode != DestroyMode.WillReplace)
-            {
-                TakeLanding(map);
-            }
+            Map?.GetComponent<StairGrid>()?.Deregister(this);
             base.DeSpawn(mode);
+        }
+
+        // The stairs have just left the map's grids (the end of Thing.DeSpawn, StairThing_DeSpawn_Patch), before the rest of
+        // their despawn (the game's roof-holder check among it, which then sees the landing's roof as TakeLandingRoof left
+        // it). Their landing goes now, not before: taking it lets what stood on it fall, and a fall breaks the roof over
+        // their solid end (Gravity); while they were still on the map, that roof's crush hit them in the middle of their
+        // own despawn and could kill them a second time (issue 7: "already destroyed", then Building.DeSpawn with no map).
+        internal void LeftMap(Map map, DestroyMode mode)
+        {
+            if (mode != DestroyMode.WillReplace)
+            {
+                TakeLanding(map, StairShape.Exit(Position, Rotation, map));
+            }
         }
 
         // The stairs go: so does the landing they laid (nothing comes back for it, it came with them), unless something
         // has been built on it since (then it stays a floor like any other, held up or not by what is left). A floor laid
         // on it goes with it, returning nothing (user 2026-10-18). The roof they brought under it goes too unless something
         // else holds it now.
-        private void TakeLanding(Map map)
+        private void TakeLanding(Map map, IntVec3 top)
         {
-            IntVec3 top = TopCell;
             if (landingLaid && top.IsValid && ShipStairs.Is(def))
             {
                 if (ShipStairs.TakeLanding(this, top, map))
@@ -742,6 +749,8 @@ namespace ProjectZ
         {
             if (__state != null)
             {
+                // (first, as before the column rules below: the landing taken now that the stairs are off the map's grids)
+                (__instance as Building_Stairs)?.LeftMap(__state, mode);
                 if (StairDefs.Is(__instance.def))
                 {
                     // (built stairs only: a site cancelled over an atrium leaves it open)
@@ -978,6 +987,9 @@ namespace ProjectZ
 
     // The solid end of built stairs is not walkable (StairShape): the stairs are a standable building on their ramp only.
     // Every path grid asks its cell cost here (also the fence-blocked one); flying pawns too: it is a solid block.
+    // Asked of the thing grid, not the edifice grid: the game stores the costs under a thing when it spawns and despawns
+    // (Thing.SpawnSetup / Thing.DeSpawn) with the thing grid already up to date but, on despawn, the edifice grid not yet
+    // (Building.DeSpawn clears it afterwards): an edifice test left the solid end of gone stairs unwalkable.
     [HarmonyPatch(typeof(Verse.AI.PathGrid), nameof(Verse.AI.PathGrid.CalculatedCostAt))]
     public static class StairSolid_PathCost_Patch
     {
@@ -988,13 +1000,18 @@ namespace ProjectZ
                 return;
             }
             Map map = __instance.map;
-            if (map == null || !c.InBounds(map) || !(c.GetEdifice(map) is Building_Stairs s))
+            if (map == null || !c.InBounds(map))
             {
                 return;
             }
-            if (StairShape.Solid(s.Position, s.Rotation) == c)
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
             {
-                __result = 10000;
+                if (list[i] is Building_Stairs s && StairShape.Solid(s.Position, s.Rotation) == c)
+                {
+                    __result = 10000;
+                    return;
+                }
             }
         }
     }
