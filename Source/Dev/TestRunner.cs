@@ -33,6 +33,8 @@ namespace ProjectZ.Dev
     //                                   tick it (-projectzsaveticks=N) until everything planned upstairs is built (TestSave)
     //                                   aimfloor (alias flamediag): flame spews, sprays, burners, beams and the foam turret
     //                                   between floors (AimFloor), -projectzfloors=3 -projectzseed=7 (TestFlame)
+    //                                   aimedge: burner streams cast at the map's edges, on one floor and between floors
+    //                                   (AimFloor), -projectzfloors=2 -projectzseed=7 (TestAimEdge)
     //                                   routerfix: the router's failure handling (a forced failure: answered, memo,
     //                                   one message a minute with the pawn, job and mods; Dev/TestRouterFix.cs)
     //                                   deckkin: gravship decks without Substructure's tag but with its affordance (slab, stairs
@@ -1363,6 +1365,11 @@ namespace ProjectZ.Dev
                 StepFlame(map);
                 return;
             }
+            if (stage.StartsWith("ae_"))
+            {
+                StepAimEdge(map);
+                return;
+            }
             if (stage.StartsWith("g_"))
             {
                 StepRange(map);
@@ -1902,6 +1909,10 @@ namespace ProjectZ.Dev
                     else if (mode == "flamediag" || mode == "aimfloor")
                     {
                         stage = "fz_setup";
+                    }
+                    else if (mode == "aimedge")
+                    {
+                        stage = "ae_setup";
                     }
                     else if (mode == "range")
                     {
