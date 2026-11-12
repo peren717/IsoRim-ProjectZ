@@ -122,7 +122,7 @@ namespace ProjectZ.Dev
                     return true;
                 }
                 case "bm_fixture":
-                    // (this phase's own random state; the game's ticks after it are seeded by the runner, GameTicksPrefix)
+                    // (this phase's own random state; the game's ticks after it are seeded by IsoRim, -isorimseed: a state per tick)
                     Rand.PushState(FixtureSeed("beamaim_" + BmNow.name));
                     try
                     {

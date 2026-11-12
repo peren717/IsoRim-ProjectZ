@@ -147,27 +147,14 @@ namespace ProjectZ.Dev
             }
         }
 
-        // Waits in real time (the HUD refreshes every ShownLevels.RefreshTime and slides for 150 ms, frames vary).
-        private static float lvUntil;
-        private static string lvNext;
-
-        private static void LvWait(float seconds, string next)
-        {
-            lvUntil = Time.realtimeSinceStartup + seconds;
-            lvNext = next;
-            stage = "lv_wait";
-        }
+        // Waits in real time (the HUD refreshes every ShownLevels.RefreshTime and slides for 150 ms, frames vary), no game
+        // ticks meanwhile (WaitRealTime).
+        private static void LvWait(float seconds, string next) => WaitRealTime(seconds, next);
 
         private static bool StepShownLv(Map map)
         {
             switch (stage)
             {
-                case "lv_wait":
-                    if (Time.realtimeSinceStartup >= lvUntil)
-                    {
-                        stage = lvNext;
-                    }
-                    return true;
                 case "lv_setup":
                     if (Levels.Count(map) < 6)
                     {

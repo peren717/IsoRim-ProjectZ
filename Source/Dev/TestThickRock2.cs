@@ -31,6 +31,10 @@ namespace ProjectZ.Dev
         private static readonly List<IntVec3> tkInner = new List<IntVec3>();
         private static readonly List<string> tkFalls = new List<string>();
 
+        // The fewest inner ground rock cells no blast or roof reached that the strike checks need to tell anything (S1-S3 see
+        // about 380-460 on the seed-7 map).
+        private const int TkInnerMin = 100;
+
         // The rock around tkG.
         private static void TkCount(Map map, out int rock, out int thick, out int ground)
         {
@@ -92,6 +96,8 @@ namespace ProjectZ.Dev
             MuStart(map, CellRect.CenteredOn(tkG, 30), false);
             TkCount(map, out tkRock0, out tkThick0, out tkGround0);
             sxBlasts.Clear();
+            sxAffected.Clear();
+            sxCollapsed.Clear();
             tkSeen = false;
             // the ground rock inside the mountain: under level-1 rock, rock all round it
             tkInner.Clear();
@@ -110,10 +116,17 @@ namespace ProjectZ.Dev
             int inRock = sxBlasts.Count(b => TkRock(b.centre, map)), roofed = sxBlasts.Count(b => TkThick(b.centre, map));
             Info($"{name}: blasts {sxBlasts.Count} ({where}); centred under a thick roof {roofed}, in rock now {inRock}; within 25 cells: level-1 rock {tkRock0} -> {rock}, ground thick roofs {tkThick0} -> {thick}, ground rock {tkGround0} -> {ground}; fires {map.listerThings.ThingsOfDef(ThingDefOf.Fire).Count}");
             TkRule(map, "after " + name.Substring(0, 2));
-            int innerLost = tkInner.Count(g => !TkRock(g, map));
+            // The rule: what explodes over the mountain (level 1) never takes the ground rock under it. A ground cell an
+            // explosion itself affected (the game's own cells of each blast, Explosion.AffectCell: a blast at the mountain's foot
+            // takes the rock it hits, as in vanilla) or a roof fell into (the game's collapse, RoofCollapserImmediate) is the
+            // game's; every other inner ground rock cell must stay, and there must be enough of them to tell.
+            bool Game(IntVec3 g) => sxAffected.Contains(g) || sxCollapsed.Contains(g);
+            int innerLost = tkInner.Count(g => !TkRock(g, map) && !Game(g));
+            int gameLost = tkInner.Count(g => !TkRock(g, map) && Game(g));
+            int covered = tkInner.Count(g => !Game(g));
             List<Thing> fires = map.listerThings.ThingsOfDef(ThingDefOf.Fire).ToList();
             Info($"{name}: fires by level {string.Join(", ", fires.GroupBy(f => ProjectZ.FloorOf(f.Position, map)).OrderBy(x => x.Key).Select(x => $"{x.Key}: {x.Count()}"))}, in rock {fires.Count(f => TkRock(f.Position, map))}");
-            Result(name, left.Count == 0 && (!groundToo || innerLost == 0) && ok(), $"{detail}; still in the air {left.Count} {string.Join(",", left.Select(t => $"{t.def.defName}@{t.Position}"))}; ground rock inside the mountain lost {innerLost} of {tkInner.Count}");
+            Result(name, left.Count == 0 && (!groundToo || innerLost == 0 && covered >= TkInnerMin) && ok(), $"{detail}; still in the air {left.Count} {string.Join(",", left.Select(t => $"{t.def.defName}@{t.Position}"))}; ground rock inside the mountain no blast or roof reached lost {innerLost} of {covered} (at least {TkInnerMin}); reached by the game's blasts or collapses: lost {gameLost} of {tkInner.Count - covered}");
         }
 
         private static void TkNext(string next)

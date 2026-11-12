@@ -23,6 +23,10 @@ namespace ProjectZ.Dev
         private static Thing rxItem, rxBench;
         private static int rxHandledAt, rxLoggedAt;
         private static float rxFirstLogTime;
+
+        // Seconds past RouterErrors' log interval the wait goes on, so the interval has surely passed when RX4 runs (frames are
+        // not exact in time).
+        private const float RxIntervalMargin = 2f;
         private static bool rxSawJob;
         private static int rxLongestWait;
         private static int rxWaitStart = -1;
@@ -47,12 +51,6 @@ namespace ProjectZ.Dev
                     return true;
                 case "rx_bill":
                     RxBill(map);
-                    return true;
-                case "rx_wait":
-                    if (Time.realtimeSinceStartup - rxFirstLogTime > RouterErrors.LogIntervalSeconds + 2f)
-                    {
-                        stage = "rx_bill2";
-                    }
                     return true;
                 case "rx_bill2":
                     RxBill2(map);
@@ -198,7 +196,8 @@ namespace ProjectZ.Dev
             // RX4: wait out the real-time minute (the wood gone, the pawn drafted), then a bill job up the stairs
             rxItem.Destroy();
             Draft(r2P, true);
-            stage = "rx_wait";   // a real-time wait without game ticks (a minute of ticks would be days of game time)
+            // a real-time wait without game ticks (a minute of ticks would be days of game time), no game ticks meanwhile
+            WaitRealTime(Mathf.Max(0f, rxFirstLogTime + RouterErrors.LogIntervalSeconds + RxIntervalMargin - Time.realtimeSinceStartup), "rx_bill2");
         }
 
         private static void RxBill2(Map map)

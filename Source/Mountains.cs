@@ -418,7 +418,7 @@ namespace ProjectZ
 
         // ---------------------------------------------------------------- fill (map generation)
 
-        private static bool IsPlainRock(ThingDef d) => d?.building != null && d.building.isNaturalRock && !d.building.isResourceRock && d.building.naturalTerrain != null;
+        internal static bool IsPlainRock(ThingDef d) => d?.building != null && d.building.isNaturalRock && !d.building.isResourceRock && d.building.naturalTerrain != null;
 
         // Walkable before the path grid is built (generation): passable terrain, no impassable building.
         internal static bool WalkableRaw(IntVec3 c, Map map)
@@ -472,7 +472,7 @@ namespace ProjectZ
                     q.Enqueue(i);
                 }
             }
-            ThingDef fallback = Find.World?.NaturalRockTypesIn(map.Tile)?.FirstOrDefault(IsPlainRock) ?? DefDatabase<ThingDef>.AllDefsListForReading.First(IsPlainRock);
+            ThingDef fallback = FallbackRock(map);
             if (q.Count == 0)
             {
                 for (int i = 0; i < n; i++)
@@ -517,12 +517,8 @@ namespace ProjectZ
                 }
                 IntVec3 g = Levels.Ground(c, m);
                 int i = g.z * sx + g.x;
-                if (h[i] < L)
-                {
-                    // (a hole, a small enclosed shaft, starts fogged)
-                    return new Patches.AnnexGen.AnnexCell { terrain = PZDefOf.PZ_OpenAir, fogged = fog[L][i] };
-                }
-                return new Patches.AnnexGen.AnnexCell { terrain = rock[i].building.naturalTerrain, fogged = fog[L][i] };
+                // (open air over the top: a hole, a small enclosed shaft, starts fogged)
+                return new Patches.AnnexGen.AnnexCell { terrain = LevelTerrain(L, h[i], rock[i]), fogged = fog[L][i] };
             };
             double tPrep = sw.Elapsed.TotalSeconds;
             Patches.AnnexGen.FillAnnex(map, gz, withPathCosts: false, rule);
@@ -577,13 +573,12 @@ namespace ProjectZ
             part.Restart();
             for (int L = 1; L <= cap; L++)
             {
-                RoofDef without = RockRoof.Off ? RoofDefOf.RoofRockThick : L < cap ? RoofDefOf.RoofRockThin : null;
                 for (int i = 0; i < n; i++)
                 {
                     if (h[i] > L)
                     {
                         IntVec3 c = Levels.Cell(new IntVec3(i % sx, 0, i / sx), L, map);
-                        map.roofGrid.SetRoof(c, RockRoof.For(c, map, without));
+                        map.roofGrid.SetRoof(c, LevelRoof(c, L, cap, map));
                     }
                 }
             }
@@ -593,19 +588,83 @@ namespace ProjectZ
             for (int i = 0; i < n; i++)
             {
                 IntVec3 g = new IntVec3(i % sx, 0, i / sx);
-                if (h[i] >= 1 && !(map.roofGrid.RoofAt(g)?.isNatural ?? false))
+                if (h[i] >= 1 && GroundRoof(g, map))
                 {
-                    map.roofGrid.SetRoof(g, PZDefOf.PZ_FloorRoof);
                     LastLipRoofs++;
-                }
-                if (h[i] >= 1)
-                {
-                    RockRoof.Apply(g, map);
                 }
             }
             LastSeconds = sw.Elapsed.TotalSeconds;
             LastTimes = $"heights+fog {tPrep:0.00}, terrain {tFill - tPrep:0.00}, ore plan {tOre:0.00}, rock (spawn {tSpawn:0.00}, roof {tRoof:0.00})";
             ProjectZ.DebugLog($"map {map}: tall mountains up to level {maxH} (cap {cap}, step {Step}): {LastRock} rock, {LastTops} tops, {LastOre} ore cells, {LastFogged} fogged band cells (rim {LastRim}, holes {LastHoles}), lips {LastLips} ({LastLipRoofs} given the floor roof), {LastTallRaised} cells raised over tall things, {LastSeconds:0.00} s");
+        }
+
+        // ---------------------------------------------------------------- one column's rules (Generate and RaiseColumn)
+
+        // The rock of a column with no plain natural rock on the ground to take it from: the world's first plain rock type
+        // here, else the first plain rock def.
+        internal static ThingDef FallbackRock(Map map) => Find.World?.NaturalRockTypesIn(map.Tile)?.FirstOrDefault(IsPlainRock) ?? DefDatabase<ThingDef>.AllDefsListForReading.First(IsPlainRock);
+
+        // Level L's terrain over a column of height h: the rock's own natural floor up to the top, open air above it.
+        internal static TerrainDef LevelTerrain(int L, int h, ThingDef rock) => h < L ? PZDefOf.PZ_OpenAir : rock.building.naturalTerrain;
+
+        // The roof of level L's cell c in a column taller than L, once every rock is in place: RockRoof's rule, given thin rock
+        // under a level below the cap (none under the cap), or thick with the rule off.
+        internal static RoofDef LevelRoof(IntVec3 c, int L, int cap, Map map) => RockRoof.For(c, map, RockRoof.Off ? RoofDefOf.RoofRockThick : L < cap ? RoofDefOf.RoofRockThin : null);
+
+        // The ground cell under a column of height 1 or more: the floor roof (the support roof, as under a slab) unless the
+        // map gave it a natural rock roof, then RockRoof's rule. True when it got the floor roof.
+        internal static bool GroundRoof(IntVec3 g, Map map)
+        {
+            bool lip = !(map.roofGrid.RoofAt(g)?.isNatural ?? false);
+            if (lip)
+            {
+                map.roofGrid.SetRoof(g, PZDefOf.PZ_FloorRoof);
+            }
+            RockRoof.Apply(g, map);
+            return lip;
+        }
+
+        // One column laid after generation by the same rules (tests: a fixture's mountain built, not searched for): the
+        // ground cell g holds natural rock already (the mountain under it) and nothing stands on its levels. Level by level
+        // the terrain, the rock under the top (the spawn patch stays out: the roofs follow here), then the level roofs; then
+        // groundRoof, the roof the map gave the ground cell (vanilla's thick rock roof over a mountain; null: as it is),
+        // written once the levels stand, as Generate finds it, and the ground roof by the rule. The fog is the caller's
+        // (Generate's rim rule needs the whole band: BandFog).
+        internal static void RaiseColumn(Map map, IntVec3 g, int h, ThingDef rock, RoofDef groundRoof = null)
+        {
+            AnnexMapComponent a = ProjectZ.Annex(map);
+            int cap = a.MaxLevel;
+            bool was = Filling;
+            Filling = true;
+            try
+            {
+                for (int L = 1; L <= cap; L++)
+                {
+                    IntVec3 c = Levels.Cell(g, L, map);
+                    map.terrainGrid.SetTerrain(c, LevelTerrain(L, h, rock));
+                    if (L < h)
+                    {
+                        GenSpawn.Spawn(ThingMaker.MakeThing(rock), c, map, WipeMode.Vanish);
+                    }
+                }
+            }
+            finally
+            {
+                Filling = was;
+            }
+            for (int L = 1; L <= cap; L++)
+            {
+                IntVec3 c = Levels.Cell(g, L, map);
+                map.roofGrid.SetRoof(c, h > L ? LevelRoof(c, L, cap, map) : null);
+            }
+            if (h >= 1)
+            {
+                if (groundRoof != null)
+                {
+                    map.roofGrid.SetRoof(g, groundRoof);
+                }
+                GroundRoof(g, map);
+            }
         }
 
         // Fog of level L's band at generation (index over ground cells), the rim rule (isorim-pz-mountains-fog-plan.md

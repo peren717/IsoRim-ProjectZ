@@ -28,6 +28,50 @@ namespace ProjectZ.Dev
         private static IntVec3 hzO;
         private static CellRect hzSite, hzHouse, hzHut, hzUp2;
         private static int hzBase, hzShot, hzBuiltWalls, hzPlanned;
+
+        // The walls built on E's slab while it is hidden cast their shadow on the ground: the 9 h ground view after the build
+        // (b_g09) against the same view before it (a_g09), the same camera, colonists and hour: at least HzShadowShare of the
+        // shot HzShadowStep darker (Color.grayscale, 0..1), and at most HzLighterShare lighter (the rest of the two shots is
+        // the same: plants, items and dirt in view are taken out, the colonists parked in the same places). The seed-7 site:
+        // about 0.6 % darker (the shadow of 31 walls), next to nothing lighter.
+        private const float HzShadowStep = 0.08f;
+        private const float HzShadowShare = 0.002f, HzLighterShare = 0.0005f;
+
+        private static void HzShadowCheck()
+        {
+            Color[] Load(string name)
+            {
+                string p = System.IO.Path.Combine(outDir, name + ".png");
+                if (!System.IO.File.Exists(p))
+                {
+                    return null;
+                }
+                Texture2D tex = new Texture2D(2, 2);
+                try
+                {
+                    return ImageConversion.LoadImage(tex, System.IO.File.ReadAllBytes(p), false) ? tex.GetPixels() : null;
+                }
+                finally
+                {
+                    UnityEngine.Object.Destroy(tex);
+                }
+            }
+            Color[] a = Load("a_g09"), b = Load("b_g09");
+            int darker = 0, lighter = 0;
+            bool same = a != null && b != null && a.Length == b.Length;
+            if (same)
+            {
+                for (int i = 0; i < a.Length; i++)
+                {
+                    float la = a[i].grayscale, lb = b[i].grayscale;
+                    darker += la - lb >= HzShadowStep ? 1 : 0;
+                    lighter += lb - la >= HzShadowStep ? 1 : 0;
+                }
+            }
+            int n = same ? a.Length : 0;
+            Result("hiddenshadow: E's walls built on the hidden floor cast their shadow on the ground (b_g09 against a_g09)", same && darker >= HzShadowShare * n && lighter <= HzLighterShare * n,
+                !same ? "a shot is missing or of another size" : $"{darker} pixels darker ({(float)darker / n:P2}, at least {HzShadowShare:P2}), {lighter} lighter ({(float)lighter / n:P3}, at most {HzLighterShare:P3}) of {n}");
+        }
         private static string hzPhase;
         private static FieldInfo hzSwitch;
         private static readonly List<(string name, int hour, int floor)> hzShots = new List<(string, int, int)>
@@ -81,6 +125,10 @@ namespace ProjectZ.Dev
                 {
                     if (hzShot >= hzShots.Count)
                     {
+                        if (hzPhase == "b")
+                        {
+                            HzShadowCheck();
+                        }
                         Wait(2, hzPhase == "a" ? "hz_build" : "hz_perf");
                         return true;
                     }
@@ -176,7 +224,9 @@ namespace ProjectZ.Dev
                             finished++;
                         }
                     }
-                    Result("hiddenshadow: E's floor-1 blocks have a sun shadow now", finished > 0, $"{finished} of {total} blocks with a finished sun shadow mesh");
+                    // (how the shadow is made is IsoRim's: with the 3D view the walls cast it as models, not by the game's
+                    // sun-shadow mesh of their block; the check below reads the shot)
+                    Info($"hiddenshadow: E's floor-1 blocks with a finished sun shadow mesh: {finished} of {total}");
                     hzPhase = "b";
                     hzShot = 0;
                     HzPark(map);

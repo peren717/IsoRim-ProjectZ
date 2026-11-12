@@ -423,14 +423,17 @@ namespace ProjectZ.Dev
                 }
             }
             h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(SetupPostfix)));
-            // (the world, tile and colonists: IsoRim's central seed, -isorimseed; FixtureSeed below)
-            h.Patch(AccessTools.Method(typeof(TickManager), nameof(TickManager.TickManagerUpdate)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(GameTicksPrefix)));
+            // (the world, tile and colonists, and every frame, tick and load: IsoRim's central seed, -isorimseed, Api 72 part 51;
+            // FixtureSeed below)
             RandProbeInit(h);
-            h.Patch(AccessTools.Method(typeof(FishShadowComponent), nameof(FishShadowComponent.MapComponentTick)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(VisualTickPrefix)),
-                finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
+            h.Patch(AccessTools.Method(typeof(TickManager), nameof(TickManager.TickManagerUpdate)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(TickGatePrefix)));
             if (mode == "shrinkgrid")
             {
                 GxInit(h);
+            }
+            if (mode == "holefog")
+            {
+                ReachFog.CeilingRecorder = new HashSet<IntVec3>();   // (the ceilings the reach rule reveals from generation on: HfFogStats)
             }
             if (mode == "worldfloors")
             {
@@ -438,10 +441,7 @@ namespace ProjectZ.Dev
                 h.Patch(AccessTools.Method(typeof(Root_Play), nameof(Root_Play.SetupForQuickTestPlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(WorldFloorsSetupPrefix)));
             }
             // Driven from the game loop without a GameComponent (nothing test-only goes into saves).
-            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(FramePrefix)),
-                postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)), finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
-            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.LoadGame)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(LoadPrefix)),
-                finalizer: new HarmonyMethod(typeof(TestRunner), nameof(FrameFinalizer)));
+            h.Patch(AccessTools.Method(typeof(Game), nameof(Game.UpdatePlay)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(Update)));
             h.Patch(AccessTools.Method(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI)), postfix: new HarmonyMethod(typeof(TestRunner), nameof(OnGUI)));
             h.Patch(AccessTools.Method(typeof(GenExplosion), nameof(GenExplosion.DoExplosion)), prefix: new HarmonyMethod(typeof(TestExplosionWatch), nameof(TestExplosionWatch.Prefix)));
             DrawLog.Patch(h);
@@ -632,6 +632,9 @@ namespace ProjectZ.Dev
             }
         }
 
+        // (-projectzseeddebug, per tick and frame) the pawns' places, the things and the next thing id, and the random state.
+        private static string SeedDebugState(Map map) => $"pawns {StableHash(string.Join(";", map.mapPawns.AllPawnsSpawned.Select(p => p.ThingID + p.Position).OrderBy(s => s, StringComparer.Ordinal))):x8} things {map.listerThings.AllThings.Count} nextId {Traverse.Create(Find.UniqueIDsManager).Field("nextThingID").GetValue()} rand {RandPeek():x8}";
+
         // Test only (-projectzseeddebug): a line per stage in log.txt with a hash of the pawns' places, to find where two runs part.
         private static readonly bool SeedDebug = GenCommandLine.CommandLineArgPassed("projectzseeddebug");
 
@@ -659,103 +662,47 @@ namespace ProjectZ.Dev
 
         // Every stage's code runs under its own random state (Step): this mode and stage's fixture seed, and how often the
         // stage has run (a stage that waits on a condition runs once a frame). The ticks a stage starts are seeded tick by
-        // tick (StartTicks, DoTicks), and the game's own ticks too (GameTicksPrefix): after the first tick vanilla's frame
-        // drawing still draws from the shared random state, so nothing a test decides may come from it.
+        // tick (StartTicks, DoTicks). The rest is IsoRim's with -isorimseed (Api 72, part 51: QuickTestSeed): each frame
+        // under a state for the tick it starts at, each game tick under a state for its tick unless the runner pushed its
+        // own, each load under a state for its number, the fish shadows kept out, and a fixed number of game ticks per frame
+        // (the speed's multiplier) while the game runs. What the runner keeps: no game ticks while it waits on real time
+        // or steps its own ticks (TickGatePrefix).
         private static string seededStage;
-        private static int seededStageRuns, tickRuns, gameTicks;
+        private static int seededStageRuns, tickRuns;
 
-        // The game's own ticks while a test runs (a test unpauses it, TimeSpeed.Normal, for per-frame updates such as the
-        // facing): vanilla ticks as often as real time says, which differs from run to run. Here a frame gets them only when
-        // the runner steps a stage or a Wait this frame (not while its own ticks, a screenshot or a load are pending), the
-        // speed's multiplier of them, each under its own random state. Test only (-projectztest).
+        // The game's own ticks while the runner waits on real time (a screenshot file, a load and its long event, seconds
+        // passing: WaitRealTime) or steps its own ticks (StartTicks): none. A test unpauses the game (TimeSpeed.Normal) for
+        // per-frame updates such as the facing; IsoRim gives each running frame the speed's ticks, so the number of running
+        // frames must not depend on real time, and the runner's own ticks stay its own. The game's tick loop
+        // (TickManager.TickManagerUpdate) is skipped in such a frame, decided at the frame's start from what the last step
+        // left. (Pausing the game instead, part 51's advice, leaked: a load's finishing sets the speed again while the
+        // runner still waits, and TickManager.Paused is also true while a window or a long event forces a pause, which ends
+        // at a moment of real time: pz_stairs F2/F4 differed between runs.) A stop-gap until IsoRim has a generic hold of the
+        // harness ticks for a runner (asked of the user 2026-11-12; nothing claimed): then this goes. Test only (-projectztest).
+        private static bool HoldsGameTicks => ticksLeft > 0 || pendingShot != null || pendingLoad != null || loadFrom != null || realTimeNext != null || LongEventHandler.ShouldWaitForEvent;
+
         private static AccessTools.FieldRef<TickManager, int> ticksThisFrameRefBound;
         private static AccessTools.FieldRef<TickManager, int> ticksThisFrameRef => ticksThisFrameRefBound ??= AccessTools.FieldRefAccess<TickManager, int>("ticksThisFrame");   // (bound on first use: nothing for players)
 
-        private static bool GameTicksPrefix(TickManager __instance)
+        private static bool TickGatePrefix(TickManager __instance)
         {
-            if (!Active || stage == "done" || Current.ProgramState != ProgramState.Playing)
+            if (!Active || stage == "done" || Current.ProgramState != ProgramState.Playing || !HoldsGameTicks)
             {
                 return true;
             }
-            ticksThisFrameRef(__instance) = 0;
-            if (__instance.Paused || ticksLeft > 0 || WaitsOnRealTime)
-            {
-                return false;
-            }
-            int n = Mathf.Max(1, Mathf.RoundToInt(__instance.TickRateMultiplier));
-            for (int i = 0; i < n && !__instance.Paused; i++)
-            {
-                Rand.PushState(FixtureSeed(mode + "_gameticks") + gameTicks++ * SeedStride);
-                try
-                {
-                    __instance.DoSingleTick();
-                }
-                finally
-                {
-                    Rand.PopState();
-                }
-                ticksThisFrameRef(__instance)++;
-            }
+            ticksThisFrameRef(__instance) = 0;   // (as the loop itself does first: no ticks this frame)
             return false;
         }
 
-        // The game's frame (Game.UpdatePlay: the game's own ticks, every map's and component's once-a-frame update and drawing,
-        // then the runner's step) under its own random state while a test runs, from this mode's fixture seed and the frame's
-        // index: the game's per-frame work (a component's update, the map's drawing) draws from it instead of whatever the
-        // shared random state holds, which the frame drawing outside it moves on by a different amount every run. Only the
-        // frames the runner steps count (WaitsOnRealTime: a frame that waits for a screenshot file or a load keeps the last
-        // index), so the index of a frame is the same every run. Popped in the finalizer.
-        private static int gameFrames;
+        // A wait on real time (seconds passing, e.g. a log interval or a UI delay), no game ticks meanwhile (TickGatePrefix).
+        private static float realTimeUntil;
+        private static string realTimeNext;
 
-        private static void FramePrefix(out bool __state)
+        internal static void WaitRealTime(float seconds, string next)
         {
-            __state = Active && stage != "done";
-            if (__state)
-            {
-                if (!WaitsOnRealTime)
-                {
-                    gameFrames++;
-                }
-                Rand.PushState(FixtureSeed(mode + "_frame") + gameFrames * SeedStride);
-            }
-        }
-
-        // A frame that only waits on real time: a screenshot being written, a saved game loading, a long event.
-        private static bool WaitsOnRealTime => pendingShot != null || pendingLoad != null || loadFrom != null || LongEventHandler.ShouldWaitForEvent;
-
-        // Vanilla tick work that only makes flecks and is timed by a per-process hash: FishShadowComponent spawns a water
-        // body's fish fleck on GenTicks.IsTickInterval(body.GetHashCode(), ..), and WaterBody's hash includes the object's
-        // own (runtime) hash, different every launch. While a test runs it leaves the random state as it found it (the
-        // flecks still come, at whatever ticks), so the rest of the tick draws the same numbers every run.
-        private static void VisualTickPrefix(out bool __state)
-        {
-            __state = Active && stage != "done";
-            if (__state)
-            {
-                Rand.PushState();
-            }
-        }
-
-        // A saved game loaded while a test runs (Game.LoadGame, in the load's long event) under its own random state: what
-        // the load sets up afresh (post-load inits that draw from the random state) is the same every run.
-        private static int loads;
-
-        private static void LoadPrefix(out bool __state)
-        {
-            __state = Active && stage != "done";
-            if (__state)
-            {
-                Rand.PushState(FixtureSeed(mode + "_load_" + loads++));
-            }
-        }
-
-        private static Exception FrameFinalizer(bool __state, Exception __exception)
-        {
-            if (__state)
-            {
-                Rand.PopState();
-            }
-            return __exception;
+            realTimeUntil = Time.realtimeSinceStartup + seconds;
+            realTimeNext = next;
+            stage = "realtime_wait";
         }
 
         // ------------------------------------------------------------------ test options
@@ -878,6 +825,10 @@ namespace ProjectZ.Dev
 
         public static void Update()
         {
+            if (SeedDebug && Active && stage != "done" && Current.ProgramState == ProgramState.Playing && Find.CurrentMap != null)
+            {
+                Out($"FRAMEDEBUG {Find.TickManager.TicksGame} {(Find.TickManager.Paused ? "paused" : "running")} {stage} {SeedDebugState(Find.CurrentMap)}");
+            }
             if (!Active || stage == "done" || pendingLoad != null || Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null || LongEventHandler.ShouldWaitForEvent)
             {
                 return;
@@ -965,6 +916,15 @@ namespace ProjectZ.Dev
             {
                 waitFrames--;
                 return;
+            }
+            if (realTimeNext != null)
+            {
+                if (Time.realtimeSinceStartup < realTimeUntil)
+                {
+                    return;
+                }
+                stage = realTimeNext;
+                realTimeNext = null;
             }
             if (ticksLeft > 0)
             {
@@ -1573,6 +1533,10 @@ namespace ProjectZ.Dev
             {
                 case "start":
                     Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
+                    if (!IsoRimBridge.HarnessSeed.HasValue)
+                    {
+                        Log.Warning("[ProjectZ test] no harness seed (-isorimseed=N, IsoRim Api 72): the world, its frames and ticks are not fixed, two runs may differ");
+                    }
                     Info($"seeds: harness seed {(IsoRimBridge.HarnessSeed.HasValue ? IsoRimBridge.HarnessSeed + " (-isorimseed: world, tile and colonists fixed)" : "none, world random")}; "
                         + $"fixture seed {FixtureSeedBase} ({(SeedArg.HasValue ? "-projectzseed" : IsoRimBridge.HarnessSeed.HasValue ? "the harness seed" : "DefaultSeed")})");
                     // (the game has not ticked yet: IsoRim pauses a harness quick test before its first tick; a seeded tick
@@ -2122,6 +2086,10 @@ namespace ProjectZ.Dev
                 {
                     tm.DoSingleTick();
                     ticksLeft--;
+                    if (SeedDebug)
+                    {
+                        Out($"TICKDEBUG {tm.TicksGame} {SeedDebugState(map)}");
+                    }
                     if (tickWatch != null && (ticksTotal - ticksLeft) % watchEvery == 0)
                     {
                         TickHook(map);

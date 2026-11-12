@@ -183,13 +183,17 @@ namespace ProjectZ.Dev
 
         // Per upper level: natural rock (and inner rock: all 8 neighbours rock too), bare tops and open air, with how many
         // of each are fogged. Returns the fogged fraction of inner rock over all upper levels.
+        // The share of inner upper-level rock (natural rock with rock on all 8 sides on its level) that stays fogged, leaving
+        // out the rock the reach rule revealed itself as the ceiling of a reached or seen cell (ReachFog's own record,
+        // ReachFog.CeilingRecorder, set for this mode before generation; the seed-7 map: about a thousand level-1 cells over
+        // revealed caves and structures). Rock unfogged by anything else counts. With the rule off nothing is left out.
         private static float HfFogStats(Map map, string when, List<string> into = null)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
             int allInner = 0, allInnerFog = 0;
             for (int L = 1; L <= a.MaxLevel; L++)
             {
-                int rock = 0, rockFog = 0, inner = 0, innerFog = 0, tops = 0, topsFog = 0, air = 0, airFog = 0;
+                int rock = 0, rockFog = 0, inner = 0, innerFog = 0, tops = 0, topsFog = 0, air = 0, airFog = 0, overSeen = 0;
                 for (int z = 0; z < a.groundZ; z++)
                 {
                     for (int x = 0; x < map.Size.x; x++)
@@ -211,7 +215,11 @@ namespace ProjectZ.Dev
                                 IntVec3 n = c + GenAdj.AdjacentCells[i];
                                 all = n.InBounds(map) && ProjectZ.SameBand(n, c, map) && n.GetEdifice(map) is Mineable;
                             }
-                            if (all)
+                            if (all && !fog && !ReachFog.Off && ReachFog.CeilingRecorder != null && ReachFog.CeilingRecorder.Contains(c))
+                            {
+                                overSeen++;   // (revealed by the reach rule as a ceiling: not counted)
+                            }
+                            else if (all)
                             {
                                 inner++;
                                 innerFog += fog ? 1 : 0;
@@ -233,7 +241,7 @@ namespace ProjectZ.Dev
                 allInnerFog += innerFog;
                 if (rock + tops > 0)
                 {
-                    string line = $"fog {when} L{L}: rock {rockFog}/{rock} fogged, inner rock {innerFog}/{inner}, bare tops {topsFog}/{tops}, open air {airFog}/{air}";
+                    string line = $"fog {when} L{L}: rock {rockFog}/{rock} fogged, inner rock {innerFog}/{inner} (and {overSeen} revealed by the reach rule as a ceiling), bare tops {topsFog}/{tops}, open air {airFog}/{air}";
                     Info(line);
                     into?.Add(line);
                 }

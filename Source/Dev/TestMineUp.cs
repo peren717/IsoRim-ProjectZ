@@ -281,54 +281,42 @@ namespace ProjectZ.Dev
             }
         }
 
-        // Tunnel A: open ground s, then 6 rock cells (thick roof, rock on level 1 above, natural top at 2 or more; t3's top at
-        // exactly 2), a rock front wall t7 and rock side walls; three open cells behind s for stairs onto level 1 (M13).
+        // Tunnel A: open ground s, then 6 rock cells (thick roof, rock on level 1 above, top at level 2), a rock front wall t7
+        // and rock side walls; four open cells behind s (three for stairs onto level 1, M13). Laid, not searched for (the
+        // seed-7 map has no such face; TestMtnLay): the nearest open spot to the map's middle cleared, a block of height 2
+        // raised north of s (MuABlockWidth wide, MuABlockDepth deep: t1-t7 and one more row behind the front wall), with a
+        // one-cell ring of open ground round the block (as minebody's) and the fog as generated. Rows south to north:
+        // MuABehind rows before s (four open cells behind s and the ring's row), s, the block, the ring's row.
+        private const int MuABlockWidth = 5, MuABlockDepth = 8, MuABehind = 5, MuAHeight = 2;
+        private const int MuAWidth = MuABlockWidth + 2, MuADepth = MuABehind + 1 + MuABlockDepth + 1;
+
         private static bool MuSiteA(Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
-            Pawn any = Colonists(map).FirstOrDefault();
-            foreach (IntVec3 s in Near(new IntVec3(map.Size.x / 2, 0, a.groundZ / 2), 110, map))   // (a fixed point: the same sites every run)
+            CellRect? spot = MlSpot(map, new IntVec3(map.Size.x / 2, 0, a.groundZ / 2), MuAWidth, MuADepth);   // (a fixed point: the same site every run)
+            if (spot == null)
             {
-                if (s.x < 6 || s.z < 6 || s.x >= map.Size.x - 6 || s.z >= a.groundZ - 6 || !MuOpen(s, map) || any == null
-                    || !map.reachability.CanReachMapEdge(s, TraverseParms.For(TraverseMode.PassDoors)))   // (static: not where the colonists happen to be)
-                {
-                    continue;
-                }
-                foreach (IntVec3 d in GenAdj.CardinalDirections)
-                {
-                    IntVec3 side = d.RotatedBy(RotationDirection.Clockwise);
-                    bool ok = true;
-                    for (int i = 1; i <= 7 && ok; i++)
-                    {
-                        IntVec3 t = s + d * i;
-                        ok = MuRock(t, map) && MuThick(t, map) && (i == 7 || Column.NaturalTop(t, map) >= 2 && MuRock(t + side, map) && MuRock(t - side, map) && MuRock(MuUp(t, map), map));
-                    }
-                    ok = ok && Column.NaturalTop(s + d * 3, map) == 2 && !map.fogGrid.IsFogged(s + d);
-                    for (int i = 1; i <= 4 && ok; i++)
-                    {
-                        IntVec3 b = s - d * i;
-                        IntVec3 up = MuUp(b, map);
-                        ok = MuOpen(b, map) && up.IsValid && up.GetTerrain(map) == PZDefOf.PZ_OpenAir && up.GetEdifice(map) == null;
-                    }
-                    IntVec3 e0 = MuUp(s, map);
-                    ok = ok && e0.IsValid && e0.GetTerrain(map) == PZDefOf.PZ_OpenAir;
-                    if (!ok)
-                    {
-                        continue;
-                    }
-                    muSA = s;
-                    muDA = d;
-                    muSideA = side;
-                    muRotA = Rot4.FromIntVec3(d);
-                    muA.Clear();
-                    for (int i = 1; i <= 7; i++)
-                    {
-                        muA.Add(s + d * i);
-                    }
-                    return true;
-                }
+                return false;
             }
-            return false;
+            CellRect r = spot.Value;
+            IntVec3 s = new IntVec3(r.minX + MuAWidth / 2, 0, r.minZ + MuABehind);
+            IntVec3 d = IntVec3.North;
+            MlClear(map, r);
+            MlRaise(map, r, g => g.z > s.z && g.z <= s.z + MuABlockDepth && Math.Abs(g.x - s.x) <= MuABlockWidth / 2 ? MuAHeight : 0, s);
+            if (!map.reachability.CanReachMapEdge(s, TraverseParms.For(TraverseMode.PassDoors)))
+            {
+                return false;
+            }
+            muSA = s;
+            muDA = d;
+            muSideA = d.RotatedBy(RotationDirection.Clockwise);
+            muRotA = Rot4.FromIntVec3(d);
+            muA.Clear();
+            for (int i = 1; i <= 7; i++)
+            {
+                muA.Add(s + d * i);
+            }
+            return true;
         }
 
         // Tunnel B: open ground s, then 4 rock cells (thick roof, a bare level-1 top above), a rock front wall and side walls,

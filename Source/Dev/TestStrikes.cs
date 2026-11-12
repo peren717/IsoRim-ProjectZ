@@ -37,6 +37,10 @@ namespace ProjectZ.Dev
             public int amount;
         }
 
+        // Every cell an explosion affected (Explosion.AffectCell: its damage, the game's own list of its cells) and every cell a
+        // roof fell into (RoofCollapserImmediate's per-cell step), since the last clear (thickrock's strike checks).
+        private static readonly HashSet<IntVec3> sxAffected = new HashSet<IntVec3>(), sxCollapsed = new HashSet<IntVec3>();
+
         private static readonly List<SxBlast> sxBlasts = new List<SxBlast>();
         private static readonly List<KeyValuePair<IntVec3, IntVec3>> sxShells = new List<KeyValuePair<IntVec3, IntVec3>>();   // destination, its column top at launch
         private static CellRect sxHouse, sxWood, sxBomb, sxBeam, sxLight, sxEdge;
@@ -53,6 +57,8 @@ namespace ProjectZ.Dev
         internal static void PatchStrikesProbe(Harmony h)
         {
             h.Patch(AccessTools.Method(typeof(Explosion), nameof(Explosion.StartExplosion)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(SxStartPrefix)));
+            h.Patch(AccessTools.Method(typeof(Explosion), "AffectCell"), prefix: new HarmonyMethod(typeof(TestRunner), nameof(SxAffectPrefix)));
+            h.Patch(AccessTools.Method(typeof(RoofCollapserImmediate), "DropRoofInCellPhaseOne"), prefix: new HarmonyMethod(typeof(TestRunner), nameof(SxCollapsePrefix)));
             h.Patch(AccessTools.Method(typeof(Projectile), nameof(Projectile.Launch), new[] { typeof(Thing), typeof(Vector3), typeof(LocalTargetInfo), typeof(LocalTargetInfo), typeof(ProjectileHitFlags), typeof(bool), typeof(Thing), typeof(ThingDef) }),
                 postfix: new HarmonyMethod(typeof(TestRunner), nameof(SxLaunchPostfix)));
         }
@@ -67,6 +73,10 @@ namespace ProjectZ.Dev
             sxBlasts.Add(new SxBlast { centre = __instance.Position, onTop = ProjectZ.ColumnTop(__instance.Position, map) == __instance.Position, tick = Find.TickManager.TicksGame, dam = __instance.damType?.defName,
                 amount = __instance.damAmount >= 0 ? __instance.damAmount : __instance.damType?.defaultDamage ?? -1 });
         }
+
+        private static void SxAffectPrefix(IntVec3 c) => sxAffected.Add(c);
+
+        private static void SxCollapsePrefix(IntVec3 c) => sxCollapsed.Add(c);
 
         private static void SxLaunchPostfix(Projectile __instance, LocalTargetInfo usedTarget, LocalTargetInfo intendedTarget)
         {

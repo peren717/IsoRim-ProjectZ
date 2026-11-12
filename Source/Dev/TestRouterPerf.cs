@@ -28,6 +28,9 @@ namespace ProjectZ.Dev
         private static readonly List<double> rpTimes = new List<double>();
         private static readonly List<string> rpRounds = new List<string>();
         private static int rpRound, rpStairs, rpDeadEnds, rpTicksLeft, rpFindsAt;
+
+        // The fight's ticks per frame: a fixed count, not a time budget (the frames between them draw the same ticks every run).
+        private const int RpTicksPerFrame = 250;
         private static double rpTickMs, rpPathMs, rpFindMaxAt;
         private static bool rpPatched;
         private static int rpDepth;
@@ -477,8 +480,7 @@ namespace ProjectZ.Dev
         private static void RpFighting(Map map)
         {
             TickManager tm = Find.TickManager;
-            Stopwatch frame = Stopwatch.StartNew();
-            while (rpTicksLeft > 0 && frame.ElapsedMilliseconds < 400)
+            for (int n = 0; rpTicksLeft > 0 && n < RpTicksPerFrame; n++)
             {
                 long t0 = Stopwatch.GetTimestamp();
                 tm.DoSingleTick();

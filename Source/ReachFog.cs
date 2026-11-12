@@ -47,6 +47,10 @@ namespace ProjectZ
         // test only (-projectznoreachfog): the rule never runs, to show the old fog
         public static bool Off;
 
+        // Tests only (mode holefog sets it before generation; null in play, nothing is recorded): every cell this rule
+        // unfogged as the ceiling of a reached or seen cell (RevealCell), on every map.
+        internal static HashSet<IntVec3> CeilingRecorder;
+
         public static bool PlayerPawn(Pawn p) => p != null && (p.Faction == Faction.OfPlayer || p.IsPlayerControlled);
 
         private static bool Blocker(IntVec3 c, Map map)
@@ -395,6 +399,7 @@ namespace ProjectZ
                 if (fog.IsFogged(up))
                 {
                     fog.Unfog(up);
+                    CeilingRecorder?.Add(up);
                 }
                 if (up.GetTerrain(map) != PZDefOf.PZ_OpenAir || up.GetEdifice(map) != null)
                 {

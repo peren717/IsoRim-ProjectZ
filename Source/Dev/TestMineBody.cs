@@ -90,6 +90,31 @@ namespace ProjectZ.Dev
                         pendingLoad = "pz_minebody";
                         return true;
                     }
+                    if (mbCheck == 4)
+                    {
+                        Wait(MbReachFrames, "mb_m5_reach");   // (the frames the reach fog's batched run takes after the step onto the rim)
+                        return true;
+                    }
+                    goto case "mb_place2";
+                }
+                case "mb_m5_reach":
+                {
+                    // M5's site: the plateau opened from its rim, the ground under the miner's top still fogged rock, the rock
+                    // face north of it seen
+                    IntVec3 g5 = ProjectZ.GroundCellOf(mbStand, map), face = mbStand + IntVec3.North;
+                    bool open = !map.fogGrid.IsFogged(mbStand) && map.fogGrid.IsFogged(g5) && !map.fogGrid.IsFogged(face);
+                    if (!open)
+                    {
+                        Result($"minebody {mbNames[mbCheck]}: a site", false, $"after the rim: top {mbStand} fogged {map.fogGrid.IsFogged(mbStand)}, ground {g5} fogged {map.fogGrid.IsFogged(g5)}, face {face} fogged {map.fogGrid.IsFogged(face)}");
+                        mbCheck++;
+                        stage = "mb_place";
+                        pendingLoad = "pz_minebody";
+                        return true;
+                    }
+                    goto case "mb_place2";
+                }
+                case "mb_place2":
+                {
                     // the others drafted far off; the miner in magenta clothes (counted in the frames)
                     IntVec3 park = IntVec3.Invalid;
                     foreach (IntVec3 g in Near(mbStand.z < a.groundZ ? mbStand : ProjectZ.GroundCellOf(mbStand, map), 60, map))
@@ -255,6 +280,59 @@ namespace ProjectZ.Dev
             return false;
         }
 
+        // M3-M5 laid, not searched for (the seed-7 map has no M5 plateau, and a face south of the miner hid the body behind
+        // the rock it mines: the camera looks north). TestMtnLay: the nearest open spot to home cleared and raised; the
+        // miner always south of the rock it mines.
+        //   M3, M5: a plateau of height 1 (MbPlateauDepth rows) with a block of height 2 north of it, a ring of open ground
+        //   round both. M3 on the plateau's west rim top under the block (the ground under it a revealed face), M5 on its
+        //   middle top under the block (the ground under it fogged rock) after stepping onto the west rim (MountainFog).
+        //   M4: one column of height 1 (a rock one storey high, no thick roof), the miner south of it on open ground.
+        private const int MbLaidWidth = 17, MbPlateauDepth = 10, MbBlockDepth = 5, MbRockSpot = 7;
+
+        // Frames after M5's step onto the rim before its site is read: the reach fog runs batched, once a frame when asked
+        // (a teleport asks); a few frames of margin.
+        private const int MbReachFrames = 5;
+
+        private static bool MbLay(Map map, int check, IntVec3 home)
+        {
+            if (check == 3)
+            {
+                CellRect? spot4 = MlSpot(map, home, MbRockSpot, MbRockSpot);
+                if (spot4 == null)
+                {
+                    return false;
+                }
+                IntVec3 o = spot4.Value.CenterCell;
+                MlClear(map, spot4.Value);
+                MlRaise(map, spot4.Value, g => g == o ? 1 : 0, o + IntVec3.South);
+                mbStand = o + IntVec3.South;
+                mbLevel = 0;
+                mbCells.Add(o);
+                return true;
+            }
+            int depth = MbPlateauDepth + MbBlockDepth + 2;
+            CellRect? spot = MlSpot(map, home, MbLaidWidth, depth);
+            if (spot == null)
+            {
+                return false;
+            }
+            CellRect r = spot.Value;
+            int top = r.minZ + MbPlateauDepth;   // the plateau's top row (rows minZ+1 .. top), the block above it
+            MlClear(map, r);
+            MlRaise(map, r, g => g.x == r.minX || g.x == r.maxX || g.z == r.minZ || g.z == r.maxZ ? 0 : g.z <= top ? 1 : 2, new IntVec3(r.minX, 0, r.minZ));
+            IntVec3 g3 = new IntVec3(check == 2 ? r.minX + 1 : r.CenterCell.x, 0, top);
+            IntVec3 t = Levels.Cell(g3, 1, map);
+            if (check == 4)
+            {
+                // onto the west rim: the reach fog's own batched run opens the plateau the miner can walk on (mb_m5_reach)
+                Teleport(mbPawn, Levels.Cell(new IntVec3(r.minX + 1, 0, r.minZ + MbPlateauDepth / 2), 1, map));
+            }
+            mbStand = t;
+            mbLevel = 1;
+            mbCells.Add(t + IntVec3.North);
+            return true;
+        }
+
         // -projectzmbview=top: the highest level in use shown (else the miner's own level).
         private static int MbView(Map map)
         {
@@ -344,122 +422,38 @@ namespace ProjectZ.Dev
             mbStand = IntVec3.Invalid;
             Pawn any = Colonists(map).FirstOrDefault();
             System.Func<IntVec3, bool> rock = c => c.InBounds(map) && c.GetEdifice(map) is Mineable m && m.def.building.isNaturalRock && !m.def.building.isResourceRock;
+            if (check >= 2)
+            {
+                return MbLay(map, check, home);
+            }
             foreach (IntVec3 g in Near(home, 110, map))
             {
                 if (g.x < 3 || g.z < 3 || g.x >= map.Size.x - 3 || g.z >= a.groundZ - 3)
                 {
                     continue;
                 }
-                if (check <= 1)
+                // ground: open, unroofed, reachable; ahead 4 cells of tall-mountain rock (thick roof, a top at level 2 or more)
+                if (!g.Standable(map) || g.Roofed(map) || map.fogGrid.IsFogged(g) || any == null || !map.reachability.CanReach(any.Position, g, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
                 {
-                    // ground: open, unroofed, reachable; ahead 4 cells of tall-mountain rock (thick roof, a top at level 2 or more)
-                    if (!g.Standable(map) || g.Roofed(map) || map.fogGrid.IsFogged(g) || any == null || !map.reachability.CanReach(any.Position, g, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
-                    {
-                        continue;
-                    }
-                    foreach (IntVec3 d in GenAdj.CardinalDirections)
-                    {
-                        bool ok = true;
-                        for (int i = 1; i <= 6 && ok; i++)
-                        {
-                            IntVec3 c = g + d * i;
-                            ok = rock(c) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false) && Column.NaturalTop(c, map) >= 2
-                                && rock(c + d.RotatedBy(RotationDirection.Clockwise)) && rock(c + d.RotatedBy(RotationDirection.Counterclockwise));
-                        }
-                        if (ok)
-                        {
-                            mbStand = g;
-                            mbLevel = 0;
-                            for (int i = 1; i <= 6; i++)
-                            {
-                                mbCells.Add(g + d * i);
-                            }
-                            return true;
-                        }
-                    }
+                    continue;
                 }
-                else if (check == 4)
+                foreach (IntVec3 d in GenAdj.CardinalDirections)
                 {
-                    // level 1 deep on a plateau: the miner steps onto its rim (MountainFog opens the plateau, as on arrival by
-                    // stairs), then a top whose ground cell below is fogged rock, with a level-1 rock face beside it
-                    if (Column.NaturalTop(g, map) != 1)
+                    bool ok = true;
+                    for (int i = 1; i <= 6 && ok; i++)
                     {
-                        continue;
+                        IntVec3 c = g + d * i;
+                        ok = rock(c) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false) && Column.NaturalTop(c, map) >= 2
+                            && rock(c + d.RotatedBy(RotationDirection.Clockwise)) && rock(c + d.RotatedBy(RotationDirection.Counterclockwise));
                     }
-                    IntVec3 r = Levels.Cell(g, 1, map);
-                    if (!r.IsValid || !TmTop(r, map) || map.fogGrid.IsFogged(r) || !r.Standable(map))
+                    if (ok)
                     {
-                        continue;
-                    }
-                    Teleport(mbPawn, r);
-                    foreach (IntVec3 g2 in Near(g, 40, map))
-                    {
-                        IntVec3 t = Levels.Cell(g2, 1, map);
-                        if (Column.NaturalTop(g2, map) != 1 || !t.IsValid || !TmTop(t, map) || map.fogGrid.IsFogged(t) || !t.Standable(map) || !map.fogGrid.IsFogged(g2))
-                        {
-                            continue;
-                        }
-                        foreach (IntVec3 d in GenAdj.CardinalDirections)
-                        {
-                            IntVec3 m = t + d;
-                            if (Levels.BandOfCell(m, map) != Levels.BandOfCell(t, map) || !rock(m) || map.fogGrid.IsFogged(m) || Column.NaturalTop(g2 + d, map) < 2)
-                            {
-                                continue;
-                            }
-                            mbStand = t;
-                            mbLevel = 1;
-                            mbCells.Add(m);
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-                else if (check == 2)
-                {
-                    // level 1: an unfogged standable top over g (its top is level 1) with a level-1 rock face beside it
-                    if (Column.NaturalTop(g, map) != 1)
-                    {
-                        continue;
-                    }
-                    IntVec3 t = Levels.Cell(g, 1, map);
-                    if (!t.IsValid || !TmTop(t, map) || map.fogGrid.IsFogged(t) || !t.Standable(map))
-                    {
-                        continue;
-                    }
-                    foreach (IntVec3 d in GenAdj.CardinalDirections)
-                    {
-                        IntVec3 m = t + d;
-                        if (Levels.BandOfCell(m, map) != Levels.BandOfCell(t, map) || !rock(m) || map.fogGrid.IsFogged(m) || Column.NaturalTop(g + d, map) < 2)
-                        {
-                            continue;
-                        }
-                        mbStand = t;
-                        mbLevel = 1;
-                        mbCells.Add(m);
-                        return true;
-                    }
-                }
-                else
-                {
-                    // flat ground: open unroofed ground, a rock beside it whose top is level 1, no thick roof, open ground round it
-                    if (!g.Standable(map) || g.Roofed(map) || map.fogGrid.IsFogged(g) || any == null || !map.reachability.CanReach(any.Position, g, PathEndMode.OnCell, TraverseParms.For(TraverseMode.PassDoors)))
-                    {
-                        continue;
-                    }
-                    foreach (IntVec3 d in GenAdj.CardinalDirections)
-                    {
-                        IntVec3 m = g + d;
-                        if (!rock(m) || (map.roofGrid.RoofAt(m)?.isThickRoof ?? false) || map.fogGrid.IsFogged(m) || Column.NaturalTop(m, map) != 1)
-                        {
-                            continue;
-                        }
-                        if (GenAdj.CellsAdjacent8Way(new TargetInfo(m, map)).Count(c => rock(c)) > 4)
-                        {
-                            continue;
-                        }
                         mbStand = g;
                         mbLevel = 0;
-                        mbCells.Add(m);
+                        for (int i = 1; i <= 6; i++)
+                        {
+                            mbCells.Add(g + d * i);
+                        }
                         return true;
                     }
                 }

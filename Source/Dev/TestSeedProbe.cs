@@ -10,7 +10,7 @@ namespace ProjectZ.Dev
 {
     // Test only (-projectzrandtick=N): the call stack of every random draw during game tick N, to renders/<tag>/randtick.txt.
     // With -projectzseeddebug (a hash of the pawns' places per stage) it finds where two runs of a mode part and what drew
-    // from the random state differently (pztests 2026-11-11: the fish shadows, VisualTickPrefix).
+    // from the random state differently (pztests 2026-11-11: the fish shadows, now kept out of the stream by IsoRim's QuickTestSeed).
     public static partial class TestRunner
     {
         private static int randTick = -1;

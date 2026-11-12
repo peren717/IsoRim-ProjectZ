@@ -1505,6 +1505,10 @@ namespace ProjectZ.Dev
         private static bool lPerfPatched;
         private static bool lPerfCross;
         private static int lPerfTicks, lPerfCalls0;
+
+        // The perf fight's ticks per frame: a fixed count, not a time budget (the frames between them draw the same ticks
+        // every run).
+        private const int LPerfTicksPerFrame = 60;
         private static readonly Stopwatch lPerfTick = new Stopwatch();
         private static double lPerfCrossMs = -1;
         private static int lBestDepth, lHitDepth;
@@ -1604,8 +1608,7 @@ namespace ProjectZ.Dev
         private static void LPerfFightFrame(Map map)
         {
             TickManager tm = Find.TickManager;
-            Stopwatch frame = Stopwatch.StartNew();
-            while (lPerfTicks < 1200 && frame.ElapsedMilliseconds < 150)
+            for (int n = 0; lPerfTicks < 1200 && n < LPerfTicksPerFrame; n++)
             {
                 lPerfTick.Start();
                 tm.DoSingleTick();
