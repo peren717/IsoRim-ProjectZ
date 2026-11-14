@@ -272,6 +272,9 @@ gets the map's parent. Return null to leave the map to the game.
 - A plan replaces the game's floor count for that map, both more and fewer, also in a game with one floor. It has no
   effect on `WorldFloors` or on other maps.
 - Tall mountains are off on a planned map.
+- One exception to the floor count: a map generated for an arriving gravship (Odyssey) gets at least the floors the ship
+  needs (its top deck or carried roof, plus the ground), also when the plan says fewer. The plan's size and
+  `keepUpperContent` stay as they are; the floors added over the plan's are open air.
 - Pocket maps are never planned: no planner is asked.
 - The first planner with an answer decides. One that throws, or gives a floor count out of range, is logged and passed
   over. No planner, or null from all: exactly the game's rules.

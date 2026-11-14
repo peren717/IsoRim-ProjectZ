@@ -27,12 +27,35 @@ namespace ProjectZ.Patches
             public bool shrunk;
             public bool mountains;     // tall mountains (Mountains.cs), filled in the FinalizeInit prefix
             public bool keepUpper;     // a plan's keepUpperContent: what generation put on the annex stays (no second fill)
+            public int keptFloors;     // with keepUpper: the floors the plan had (floors added over them for a ship are filled)
             public int fullDepth;      // how many full-size windows are open while shrunk (BeginFull, EndFull)
             public int thread;         // the generating thread (GenerateMap prefix): the only one that opens or ends windows
             public IntVec3 FullSize => new IntVec3(groundSize.x, groundSize.y, floors * stride);
         }
 
         internal static Pending pending;
+
+        // (tests) maps given more floors than the game or a plan said, for an arriving gravship
+        internal static int ShipRaises;
+
+        // The gravship a map is generated for, or null: the ship the generation call itself hands to the landing marker's
+        // genStep (GravshipUtility.ArriveNewMap, GetGenSteps). The game's own generation finds its gravship the same way
+        // (MapGenerator.GenerateContentsIntoMap), so this is the ship whose marker will stand on this map and no other.
+        internal static Gravship ArrivingShip(IEnumerable<GenStepWithParams> extraGenStepDefs)
+        {
+            if (extraGenStepDefs == null || !ModsConfig.OdysseyActive)
+            {
+                return null;
+            }
+            foreach (GenStepWithParams step in extraGenStepDefs)
+            {
+                if (step.def == RimWorld.GenStepDefOf.GravshipMarker)
+                {
+                    return step.parms.gravship;
+                }
+            }
+            return null;
+        }
 
         // A moment at the full size on a map shrunk for generation. Every caller goes through these two, so that the windows
         // nest (a pathfinder call inside an addon's window must not shrink the map under it). False: the map isn't being
@@ -122,7 +145,7 @@ namespace ProjectZ.Patches
     public static class MapGenerator_GenerateMap_Patch
     {
         [HarmonyPriority(Priority.Last)]
-        public static void Prefix(ref IntVec3 mapSize, MapParent parent, MapGeneratorDef mapGenerator, bool isPocketMap, bool stepDebugger, out object __state)
+        public static void Prefix(ref IntVec3 mapSize, MapParent parent, MapGeneratorDef mapGenerator, IEnumerable<GenStepWithParams> extraGenStepDefs, bool isPocketMap, bool stepDebugger, out object __state)
         {
             // (a map generated during another's generation, an addon's pocket map: the finalizer gives the outer one back)
             __state = AnnexGen.pending;
@@ -138,6 +161,17 @@ namespace ProjectZ.Patches
                     mapSize = new IntVec3(plan.Value.groundSize.x, mapSize.y, plan.Value.groundSize.z);
                 }
             }
+            // A map generated for an arriving gravship has the floors the ship needs, whatever the game's count or a plan
+            // says: the game itself sizes a new map to the ship (GravshipUtility.ArriveNewMap, canResizeToGravship), and on
+            // a map with too few floors the ship could land nowhere. The rest of a plan stays; the added floors are open air.
+            int planned = floors;
+            Gravship ship = isPocketMap || stepDebugger ? null : AnnexGen.ArrivingShip(extraGenStepDefs);
+            if (ship != null && ShipLanding.FloorsNeeded(ship) > floors)
+            {
+                floors = ShipLanding.FloorsNeeded(ship);
+                AnnexGen.ShipRaises++;
+                ProjectZ.DebugLog($"map for the arriving gravship {ship.Label}: {floors} floors for the ship ({(plan != null ? "the plan" : "the game")} said {planned})");
+            }
             if (floors <= 1 || isPocketMap || stepDebugger || mapSize.z <= 0)
             {
                 return;
@@ -150,6 +184,7 @@ namespace ProjectZ.Patches
                 floors = floors,
                 mountains = plan == null && ProjectZ.TallMountainsForNewMaps,   // (a plan's map: its own layout, no rock rising through it)
                 keepUpper = plan != null && plan.Value.keepUpperContent,
+                keptFloors = planned,
                 thread = Thread.CurrentThread.ManagedThreadId,
             };
             ProjectZ.DebugLog($"generating {mapGenerator?.defName} map: ground {mapSize.x}x{mapSize.z}, stride {stride}, floors {floors} -> {mapSize.x}x{floors * stride}");
@@ -327,7 +362,9 @@ namespace ProjectZ.Patches
             RemapRiverFlow(map, groundZ);
             // Again after generation (nothing should have touched it): path costs, regions and section meshes are
             // all rebuilt right after this in FinalizeInit.
-            int changed = p.keepUpper ? 0 : AnnexGen.FillAnnex(map, groundZ, withPathCosts: false);
+            // (a plan's kept content: only the floors added over the plan's for an arriving ship are filled again)
+            int changed = !p.keepUpper ? AnnexGen.FillAnnex(map, groundZ, withPathCosts: false)
+                : p.floors > p.keptFloors ? AnnexGen.FillAnnex(map, Math.Max(groundZ, p.keptFloors * p.stride), withPathCosts: false) : 0;
             ProjectZ.DebugLog($"annex {(p.keepUpper ? "kept (plan)" : "checked")}: {changed} cell(s) changed during generation, {fixedGrids} ground-sized grid(s) resized, map size now {map.Size}");
             if (p.mountains && comp != null && comp.elevation != null)
             {

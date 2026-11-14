@@ -195,6 +195,10 @@ namespace ProjectZ.Dev
     //                                   to shipdump.txt; -projectzfloors=3 (-projectzshipdumpengineup: the engine on a floor-2
     //                                   deck). The switch -projectzshipdump writes the same for the flights of shipfly and
     //                                   shipstairs -projectzshipstack (TestShipHullDump)
+    //                                   shipfloors: a gravship taller than its destination's floors, one case per run,
+    //                                   -projectzsq=t1 (the destination on the world map), n2, n1, k2 (a new map planned
+    //                                   with fewer floors), x2 (an existing map: Abort landing), g (no plan, tall mountains)
+    //                                   (TestShipFloors); -projectzfloors=3
     //                                   shiphull: the 3D connected hull (issue 5): one check per run, -projectzhull=h1 ... h11
     //                                   (placement and building of an overhang, overhang flight, hollow hull, bridge and the
     //                                   limit cut, hole under a roof, disconnection by removal, tall hall and engine on an
@@ -1309,6 +1313,11 @@ namespace ProjectZ.Dev
                 StepShipHull(map);
                 return;
             }
+            if (stage.StartsWith("sq_"))
+            {
+                StepShipFloors(map);
+                return;
+            }
             if (stage.StartsWith("xd_"))
             {
                 // (reprodrops: each stage under a fixed random state; fires and ticks seeded per run inside)
@@ -1899,6 +1908,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shiphull")
                     {
                         stage = "hu_setup";
+                    }
+                    else if (mode == "shipfloors")
+                    {
+                        stage = "sq_setup";
                     }
                     else if (mode == "reprodrops")
                     {

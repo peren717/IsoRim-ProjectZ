@@ -62,5 +62,16 @@ namespace ProjectZ.Dev
         // The stacked-column product's load-time deck check (ShipDeck.CheckAll): how many decks it would drop. The 3D hull
         // has no such check (a cut-off part simply is not ship): 0.
         public static int DeckCheckAll(Map map) => checkAll == null ? 0 : (int)checkAll.Invoke(null, new object[] { map });
+
+        // ---- a ship taller than its destination's floors (mode shipfloors): the product members that round added, so the
+        // same tests also run against the product before it (where they must fail).
+        private static readonly MethodInfo heightBefore = AccessTools.Method(typeof(ShipLanding), "Height", new[] { typeof(Building_GravEngine) });
+        private static readonly FieldInfo shipRaises = AccessTools.Field(typeof(Patches.AnnexGen), "ShipRaises");
+
+        // The ship's height asked from the engine before the launch (-1: the product has no such function).
+        public static int HeightBefore(Building_GravEngine e) => heightBefore == null ? -1 : (int)heightBefore.Invoke(null, new object[] { e });
+
+        // Maps given more floors for an arriving gravship so far (-1: the product has no such rule).
+        public static int ShipRaises => shipRaises == null ? -1 : (int)shipRaises.GetValue(null);
     }
 }

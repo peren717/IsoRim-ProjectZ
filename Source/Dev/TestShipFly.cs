@@ -45,7 +45,7 @@ namespace ProjectZ.Dev
         }
 
         private static IntVec3 sfO;
-        private static int sfLeg, sfFrames, sfMarkerSeen, sfShotsTaken, sfUpperRec, sfHoles;
+        private static int sfLeg, sfFrames, sfMarkerSeen, sfShotsTaken, sfUpperRec, sfHoles, sfHeightBefore;
         private static IntVec3 sfHoleOff;
         private static bool sfLandedSeen, sfLandQueued, sfSaved;
         private static string sfLastStage = "", sfSleeper, sfCarrier, sfUp3, sfGroundP, sfLeft, sfCarried, sfLamp, sfBattery, sfStock, sfLampX, sfConduitX;
@@ -631,6 +631,8 @@ namespace ProjectZ.Dev
             // (leg 1 flies with the ground in view, leg 2 with the top floor in view: what the player sees in each)
             FloorView.Set(sfLeg == 2 ? 2 : 0);
             engine.launchInfo = new LaunchInfo { quality = 1f, doNegativeOutcome = false };
+            // (the ship's height as the destination check on the world map asks it, before the launch: SfHeight)
+            sfHeightBefore = HullCompat.HeightBefore(engine);
             console.StartChoosingDestination_NewTemp();
             TilePicker picker = Find.TilePicker;
             Func<PlanetTile, bool> validator = Traverse.Create(picker).Field("validator").GetValue<Func<PlanetTile, bool>>();
@@ -681,6 +683,10 @@ namespace ProjectZ.Dev
                 sfLastStage = st;
                 sfStageAt = Time.realtimeSinceStartup;
                 sfShotsTaken = 0;
+                if (st == "travelling")
+                {
+                    SfHeight();
+                }
                 if (st == "travelling" && HdOn)
                 {
                     HdCapture($"leg {sfLeg}");
@@ -728,7 +734,7 @@ namespace ProjectZ.Dev
             }
             GravshipLandingMarker marker = glMarker(ctl);
             bool atMarker = sfLandQueued && !cut && ctl.LandingAreaConfirmationInProgress && WorldRendererUtility.DrawingMap
-                && (sfLeg == 1 ? marker != null && marker.Spawned && Find.CurrentMap == marker.Map : ctl.landingMap != null && Find.CurrentMap == ctl.landingMap);
+                && (sfLeg == 1 && !sqExisting ? marker != null && marker.Spawned && Find.CurrentMap == marker.Map : ctl.landingMap != null && Find.CurrentMap == ctl.landingMap);   // (sqExisting: mode shipfloors' first flight goes to an existing map)
             if (atMarker)
             {
                 if (sfMarkerSeen < 0)
@@ -767,6 +773,16 @@ namespace ProjectZ.Dev
                 Result($"leg {sfLeg} flight", false, "no landing after 30000 frames, stage " + st);
                 Finish();
             }
+        }
+
+        // Every real launch: the ship's height asked from the engine before the launch (ShipLanding.Height(engine): the
+        // destination check on the world map) is the height of the captured ship in flight (ShipLanding.Height(Gravship):
+        // the landing check and the floors of a map generated for it): decks, carried roofs, a deck left behind.
+        private static void SfHeight()
+        {
+            Gravship g = Current.Game.Gravship ?? Find.WorldObjects.AllWorldObjects.OfType<Gravship>().FirstOrDefault();
+            Result($"leg {sfLeg}: the ship's height asked before the launch is its height in flight", g != null && sfHeightBefore == ShipLanding.Height(g),
+                $"before the launch {sfHeightBefore} (-1: the product has no such function), in flight {(g == null ? "no ship" : ShipLanding.Height(g).ToString())}");
         }
 
         // F2 in flight: the old site, then a save and a reload.

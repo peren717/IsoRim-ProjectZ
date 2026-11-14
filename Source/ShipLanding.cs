@@ -49,6 +49,55 @@ namespace ProjectZ
             return h;
         }
 
+        private static readonly List<IntVec3> tmpCarried = new List<IntVec3>();
+
+        // The same number before the launch, from the engine on its map: the top floor of its ship cells (the capture
+        // records each with its floor, ShipLocal.From) and of the roofs that will fly with it (ShipRoofs.CarriedCells,
+        // the choice the take-off itself makes; a ship cell's own roof is on that cell's floor).
+        public static int Height(Building_GravEngine engine)
+        {
+            Map map = engine?.Map;
+            if (map == null || ProjectZ.Annex(map) == null)
+            {
+                return 0;
+            }
+            int h = 0;
+            foreach (IntVec3 c in engine.ValidSubstructure)
+            {
+                h = Math.Max(h, ProjectZ.FloorOf(c, map));
+            }
+            ShipRoofs.CarriedCells(engine, map, tmpCarried);
+            for (int i = 0; i < tmpCarried.Count; i++)
+            {
+                h = Math.Max(h, ProjectZ.FloorOf(tmpCarried[i], map));
+            }
+            tmpCarried.Clear();
+            return h;
+        }
+
+        // THE floors rule: a ship h high needs a map whose top floor is at least h. Asked by the landing check, by the
+        // destination on the world map (DestinationAllowed) and, as a floor count, by the generation of a map for an
+        // arriving ship (FloorsNeeded).
+        public static bool TooHighFor(int h, Map map) => h > Levels.Max(map);
+
+        // The floors, the ground counted, a new map needs for ship g (a new map's top floor is its count less one).
+        public static int FloorsNeeded(Gravship g) => Height(g) + 1;
+
+        // The pilot console's destination on the world map, after the game's own reasons: a tile whose map exists and
+        // has too few floors for the engine's ship is refused there, in the game's way (a rejection message), with the
+        // landing's own reason: on that map the landing marker could be placed nowhere. A tile with no map yet is never
+        // refused here: the map generated for an arriving ship has the floors it needs (MapGenPatches, GenerateMap).
+        public static bool DestinationAllowed(Building_GravEngine engine, PlanetTile tile)
+        {
+            Map map = Find.WorldObjects.MapParentAt(tile)?.Map;
+            if (map == null || engine == null || !TooHighFor(Height(engine), map))
+            {
+                return true;
+            }
+            Messages.Message("PZ_ShipNotEnoughFloors".Translate(), MessageTypeDefOf.RejectInput, historical: false);
+            return false;
+        }
+
         // Can the ship (in its current rotation) land with its root at root? Failing ground cells go into bad.
         public static AcceptanceReport Check(Gravship g, IntVec3 root, Map map, ICollection<IntVec3> bad)
         {
@@ -67,7 +116,7 @@ namespace ProjectZ
                 {
                     return true;   // (vanilla refuses it)
                 }
-                string why = an == null || h > an.MaxLevel ? "PZ_ShipNotEnoughFloors".Translate().ToString() : Column(c, h, map, an) ?? Under(c, lo, map);
+                string why = TooHighFor(h, map) ? "PZ_ShipNotEnoughFloors".Translate().ToString() : Column(c, h, map, an) ?? Under(c, lo, map);
                 if (why == null)
                 {
                     return true;
@@ -229,6 +278,41 @@ namespace ProjectZ
                 shadow.Add(landingPos + flat);
             }
             WorldComponent_GravshipController.DestroyTreesAroundSubstructure(map, ground, 0, shadow);
+        }
+    }
+
+    // The destination check on the world map (ShipLanding.DestinationAllowed). The picker's validator is a closure of the
+    // console's own method, and the picker is shared with other features: so the console's call is marked while it runs,
+    // and the validator the picker is handed during it is wrapped, the game's own rule first. Both of the console's uses
+    // (the launch and "View range") hand over the same validator and get the same rule.
+    [HarmonyPatch(typeof(CompPilotConsole), nameof(CompPilotConsole.StartChoosingDestination_NewTemp))]
+    public static class StartChoosingDestination_ShipLanding_Patch
+    {
+        internal static CompPilotConsole choosing;
+
+        public static void Prefix(CompPilotConsole __instance)
+        {
+            choosing = __instance;
+        }
+
+        public static void Finalizer()
+        {
+            choosing = null;
+        }
+    }
+
+    [HarmonyPatch(typeof(TilePicker), nameof(TilePicker.StartTargeting_NewTemp))]
+    public static class StartTargeting_ShipLanding_Patch
+    {
+        public static void Prefix(ref Func<PlanetTile, bool> validator)
+        {
+            CompPilotConsole console = StartChoosingDestination_ShipLanding_Patch.choosing;
+            if (console == null || validator == null)
+            {
+                return;
+            }
+            Func<PlanetTile, bool> game = validator;
+            validator = tile => game(tile) && ShipLanding.DestinationAllowed(console.engine, tile);
         }
     }
 

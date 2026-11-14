@@ -62,18 +62,19 @@ namespace ProjectZ
             return top;
         }
 
-        public static void Take(Gravship ship, Building_GravEngine engine, Map map)
+        // The roofed open cells over the engine's ship that fly with it (rule Take, above), into 'into' (cleared first), in
+        // the order of the ship's cells. THE choice of the carried roofs: Take records and removes exactly these, and the
+        // ship's height before the launch counts them (ShipLanding.Height). None on a map with no floors.
+        public static void CarriedCells(Building_GravEngine engine, Map map, List<IntVec3> into)
         {
-            Taken = 0;
-            Dictionary<IntVec3, RoofDef> roofs = shipRoofs(ship);
+            into.Clear();
             // (not without the floor-tagged offsets, ShipLocal.Ready: a ship with no deck upstairs still launches then,
             // and a roof recorded upstairs could not be placed)
-            if (roofs == null || ProjectZ.Annex(map) == null || !ShipLocal.Ready)
+            if (engine == null || ProjectZ.Annex(map) == null || !ShipLocal.Ready)
             {
                 return;
             }
             HashSet<IntVec3> valid = engine.ValidSubstructure;
-            tmpCells.Clear();
             foreach (IntVec3 c in valid)
             {
                 IntVec3 end = ShipLink.OpenRunUp(c, map, tmpRun);
@@ -86,15 +87,27 @@ namespace ProjectZ
                 {
                     if (map.roofGrid.RoofAt(tmpRun[i]) != null)
                     {
-                        tmpCells.Add(tmpRun[i]);
+                        into.Add(tmpRun[i]);
                     }
                 }
             }
             tmpRun.Clear();
+        }
+
+        public static void Take(Gravship ship, Building_GravEngine engine, Map map)
+        {
+            Taken = 0;
+            Dictionary<IntVec3, RoofDef> roofs = shipRoofs(ship);
+            if (roofs == null)
+            {
+                return;
+            }
+            CarriedCells(engine, map, tmpCells);
             if (tmpCells.Count == 0)
             {
                 return;
             }
+            HashSet<IntVec3> valid = engine.ValidSubstructure;
             // Rooms made only of these open cells (before the roofs go: a room's counts are kept from its roofs).
             // Copied from RimWorld.Planet.Gravship.CopyCellContents (the room record: once per room that is not at outdoor
             // temperature, its cell, temperature and vacuum); that method can't be asked for these cells alone, it records
