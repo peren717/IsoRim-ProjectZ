@@ -1,5 +1,6 @@
 using HarmonyLib;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 using Verse.AI;
@@ -18,11 +19,16 @@ namespace ProjectZ
     // By default it takes its own slot in the game's bottom-right controls column, right above the play settings
     // (GlobalControlsUtility.DoPlaySettings moves the column's base up), so the time controls, readouts and alerts move
     // up with it. Only on maps with floors. Sizes are UI px, so it scales with the UI scale like the rest of the column.
+    // When nothing runs the play settings in the map's controls column (a UI mod that draws the column its own way), the
+    // HUD has no slot: it then draws itself on top of that column, where the column's drawer starts the letters, and
+    // lifts the letters and alerts over it (DoFallback, BeforeLetters).
     public static class FloorHud
     {
         public const float BarW = 60f, BarH = 12f, Gap = 3f, GroundExtra = 10f, Shift = 6f, EdgeGap = 3f;
         private const float DotSize = 8f;   // 6 px dot in a 1 px dark ring
         private const float SlideTime = 0.15f, CacheTime = 0.25f;
+        // the gap the HUD keeps to what is under it in the controls column; without a slot, also the letters' gap to it
+        private const float ColumnGap = 4f;
 
         private static readonly Color Outline = new Color32(14, 11, 7, 255);
         private static readonly Color HiddenOutline = new Color32(14, 11, 7, 204);
@@ -63,8 +69,17 @@ namespace ProjectZ
         private static bool dragging;
         private static Vector2 grab;
 
+        // One play UI pass (BeginPass): the slot drew the HUD; the fallback drew it, and how far the letters have to
+        // move up for it (0 where the player put it); the letters were started on the map view, at lettersBase (as their
+        // caller gave it). letterLift: the lift of the pass before.
+        private static bool slotServed, fallbackDrew, lettersSeen;
+        private static float fallbackLift, letterLift, lettersBase;
+
         // Test hook: the last rect the HUD was drawn in (UI px).
         public static Rect LastRect;
+
+        // Test hook: the fallback drew the HUD in this pass.
+        public static bool FallbackDrew => fallbackDrew;
 
         public static float Width => BarW + GroundExtra + Shift;
 
@@ -102,15 +117,87 @@ namespace ProjectZ
             return s;
         }
 
-        // From GlobalControls: draw in our own slot (moving the column base up), or where the player put it.
-        public static void DoSlot(ref float curBaseY)
+        // Where the HUD shows at all: playing, on a map, not in the world view (floors and the hide setting: Place).
+        private static bool OnMapView(bool worldView) => !worldView && Current.ProgramState == ProgramState.Playing && Find.CurrentMap != null;
+
+        // The start of a play UI pass (FloorKeys_Patch, on UIRoot_Play.UIRootOnGUI). Layout passes don't count: the
+        // game draws the controls column in none of them, so the state of the last drawing pass stays.
+        public static void BeginPass()
+        {
+            if (Event.current.type == EventType.Layout)
+            {
+                return;
+            }
+            letterLift = fallbackLift;
+            fallbackLift = 0f;
+            slotServed = fallbackDrew = lettersSeen = false;
+        }
+
+        // From the play settings (GlobalControlsUtility.DoPlaySettings): the HUD's own slot in the controls column.
+        public static void DoSlot(bool worldView, ref float curBaseY)
+        {
+            // (fallbackDrew: something ran the play settings after the column in this pass; the HUD is drawn already)
+            if (!fallbackDrew && OnMapView(worldView) && Place(ref curBaseY))
+            {
+                slotServed = true;
+            }
+        }
+
+        // After the map's controls column (GlobalControls.GlobalControlsOnGUI): nothing ran the play settings in this
+        // pass (a UI mod draws the column its own way), so the HUD has no slot. It goes on top of whatever column was
+        // drawn: its bottom where that column's drawer started the letters in this pass (BeforeLetters), so it covers
+        // nothing of the column, whatever is in it. Never lower than its slot's place in an empty column, right above
+        // the main buttons; that place too when nobody started the letters before this (something else draws them).
+        // Not in Layout, as the game's column.
+        public static void DoFallback()
+        {
+            if (slotServed || Event.current.type == EventType.Layout || !OnMapView(WorldRendererUtility.WorldSelected))
+            {
+                return;
+            }
+            float bottom = UI.screenHeight - MainButtonDef.ButtonHeight - ColumnGap;
+            if (lettersSeen)
+            {
+                bottom = Mathf.Min(bottom, lettersBase);
+            }
+            float y = bottom + ColumnGap;   // (Place keeps the gap under the HUD)
+            if (Place(ref y))
+            {
+                fallbackDrew = true;
+                // the HUD's height plus the gap; 0 where the player put it (Place then leaves y alone)
+                fallbackLift = bottom + ColumnGap - y;
+            }
+        }
+
+        // Before the letter stack is drawn (LetterStack.LettersOnGUI; the alerts sit on the stack's top, and the stack
+        // counts how many letters fit from the same base): on the map view, the base its caller gives is kept for this
+        // pass's fallback HUD, and the letters start above the fallback HUD of the last pass. That pass, because a
+        // column draws its letters before the fallback runs: in the first pass of a fallback HUD the letters are not
+        // lifted yet. No lift with the HUD in its slot, moved by the player, or not shown.
+        public static void BeforeLetters(ref float baseY)
+        {
+            if (!OnMapView(WorldRendererUtility.WorldSelected))
+            {
+                return;
+            }
+            lettersSeen = true;
+            lettersBase = baseY;
+            if (letterLift > 0f)
+            {
+                baseY -= letterLift;
+            }
+        }
+
+        // Draws the HUD on top of a controls column (moving the column's base up), or where the player put it.
+        // False: no HUD here (a map without floors, or hidden).
+        private static bool Place(ref float curBaseY)
         {
             Map map = Find.CurrentMap;
             AnnexMapComponent a = ProjectZ.Annex(map);
             if (a == null || S == null || S.hideFloorHud)
             {
                 dragging = false;
-                return;
+                return false;
             }
             float now = Time.realtimeSinceStartup;
             UpdateSlots(map, now);
@@ -127,11 +214,12 @@ namespace ProjectZ
             }
             else
             {
-                curBaseY -= 4f;
+                curBaseY -= ColumnGap;
                 r = new Rect(UI.screenWidth - EdgeGap - Width, curBaseY - h, Width, h);
                 curBaseY -= h;
             }
             OnGUI(r, map, now);
+            return true;
         }
 
         // The slots follow the shown levels (ShownLevels.Range); a new map (or a new level layout) starts settled.
@@ -483,11 +571,29 @@ namespace ProjectZ
     {
         public static void Postfix(bool worldView, ref float curBaseY)
         {
-            if (worldView || Current.ProgramState != ProgramState.Playing || Find.CurrentMap == null)
-            {
-                return;
-            }
-            FloorHud.DoSlot(ref curBaseY);
+            FloorHud.DoSlot(worldView, ref curBaseY);
+        }
+    }
+
+    // The HUD without its slot: when the play settings didn't run in the map's controls column (a postfix also runs
+    // when another mod's prefix draws the column itself and skips the game's).
+    [HarmonyPatch(typeof(GlobalControls), nameof(GlobalControls.GlobalControlsOnGUI))]
+    public static class GlobalControls_FloorHudFallback_Patch
+    {
+        public static void Postfix()
+        {
+            FloorHud.DoFallback();
+        }
+    }
+
+    // Letters (and the alerts on top of them) start above the fallback HUD, whoever draws them; where they would have
+    // started is the fallback HUD's place.
+    [HarmonyPatch(typeof(LetterStack), nameof(LetterStack.LettersOnGUI))]
+    public static class LetterStack_FloorHudFallback_Patch
+    {
+        public static void Prefix(ref float baseY)
+        {
+            FloorHud.BeforeLetters(ref baseY);
         }
     }
 }

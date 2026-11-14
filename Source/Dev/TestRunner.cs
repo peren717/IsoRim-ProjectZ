@@ -263,6 +263,10 @@ namespace ProjectZ.Dev
     //                                   shownlv: the floor HUD and floor keys offer only the levels in use plus one
     //                                   (fresh world, colonists building level 1, a floor on level 2, the viewed level
     //                                   kept); -projectzfloors=13 (TestShownLevels)
+    //                                   hudslot: the floor HUD in its slot of the controls column, or right above the main
+    //                                   buttons when nothing runs the play settings there (a UI mod's own column), with
+    //                                   letters and alerts over it; -projectzfloors=3 -projectzhudexpect=slot|fallback|none
+    //                                   [-projectzhudclicks=x,y;x,y] (TestHudSlot)
     //                                   finders: the game's whole-map finders on a 3-floor map (expanding search round a
     //                                   centre, exits, edges, caravans, large structures) and real flows (visitors and
     //                                   thrumbos leaving, an edge raid, a pit gate); -projectzfloors=3 -projectzmapsize=120
@@ -510,9 +514,13 @@ namespace ProjectZ.Dev
             {
                 PatchDragTimer(h);
             }
-            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "m228" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4")
+            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "m228" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4" || mode == "hudslot")
             {
                 PatchMouse(h);
+            }
+            if (mode == "hudslot")
+            {
+                PatchHudSlot(h);
             }
             h.Patch(AccessTools.Method(typeof(Frame), nameof(Frame.FailConstruction)), prefix: new HarmonyMethod(typeof(TestRunner), nameof(BotchPrefix)));
             if (GenCommandLine.CommandLineArgPassed("cap17hide"))
@@ -868,6 +876,7 @@ namespace ProjectZ.Dev
             if (Active)
             {
                 LosGui();
+                HsGui();
             }
             if (Active && guiAction != null && Event.current.type == EventType.Repaint)
             {
@@ -1194,6 +1203,11 @@ namespace ProjectZ.Dev
             if (stage.StartsWith("o_"))
             {
                 StepQoL1(map);
+                return;
+            }
+            if (stage.StartsWith("hs_"))
+            {
+                StepHudSlot(map);
                 return;
             }
             if (stage.StartsWith("y_"))
@@ -1777,6 +1791,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shownlv")
                     {
                         stage = "lv_setup";
+                    }
+                    else if (mode == "hudslot")
+                    {
+                        stage = "hs_setup";
                     }
                     else if (mode == "bugs4")
                     {

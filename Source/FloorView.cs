@@ -101,12 +101,18 @@ namespace ProjectZ
     // Floor keys (= and - by default) and the floor scroll: the mouse wheel while the hold key (Shift by default) is down
     // changes the floor, wheel up = floor up. Runs after the windows had the event (a scrolled list keeps it) and before
     // the camera (Root.OnGUI calls CameraDriverOnGUI after UIRootOnGUI): the used event no longer zooms.
+    // Before the pass: the floor HUD's state for the new pass (FloorHud.BeginPass).
     [HarmonyPatch(typeof(UIRoot_Play), nameof(UIRoot_Play.UIRootOnGUI))]
     public static class FloorKeys_Patch
     {
         // Wheel notches give whole steps; touchpads send small deltas, added up to a step.
         private static float scrollSum;
         private static float scrollAt;
+
+        public static void Prefix()
+        {
+            FloorHud.BeginPass();
+        }
 
         public static void Postfix()
         {
