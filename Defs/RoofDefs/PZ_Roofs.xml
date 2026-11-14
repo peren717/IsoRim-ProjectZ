@@ -3,7 +3,8 @@
 
   <!-- The roof of a cell with an upper floor over it (M1c, decision D6): the floor itself. Thin; it can't be removed while
        the floor is there, and it collapses like a built roof when its support goes, taking the floor with it (FloorRoof.cs,
-       Slabs.cs SlabCollapse). Removing the floor turns it back into a constructed roof. -->
+       Slabs.cs SlabCollapse). Removing the floor leaves the stairwell roof below (an atrium) when the column above is
+       covered, else a constructed roof (FloorRoof.Freed). -->
   <RoofDef>
     <defName>PZ_FloorRoof</defName>
     <label>upper floor</label>

@@ -13,9 +13,12 @@ namespace ProjectZ
     //
     // While the floor is there its roof can't be taken away: the no-roof area, drop pods, mortar shells and tornadoes
     // leave it alone, and any other roof written to that cell becomes the floor's roof again. It does collapse like a
-    // built roof when its support goes, and the floor falls with it (SlabCollapse). Removing the floor turns it back into
-    // an ordinary constructed roof. Saves from before M1c (and anything that slipped through) are put right when the
-    // map loads: every cell under a floor gets the floor's roof, also where it had none.
+    // built roof when its support goes, and the floor falls with it (SlabCollapse). Removing the floor (a slab, a ship
+    // deck) leaves the roof the column rule gives (Freed, user 2026-11-14): under a covered column the invisible atrium
+    // roof (Atrium.cs), so the storeys above look down into it; else an ordinary constructed roof. (A landing that goes
+    // with its stairs leaves an ordinary roof, as their ramp does: Stairwell.Closed.) Saves from before M1c (and anything
+    // that slipped through) are put right when the map loads: every cell under a floor gets the floor's roof, also where
+    // it had none; a floor's roof with no floor over it follows the same rule (Freed).
     public static class FloorRoof
     {
         // The cell right above c on the next level (Invalid: none).
@@ -92,11 +95,37 @@ namespace ProjectZ
             }
             else if (cur == PZDefOf.PZ_FloorRoof)
             {
-                map.roofGrid.SetRoof(below, RoofDefOf.RoofConstructed);
+                Free(below, map);
             }
         }
 
-        // Every cell under a floor gets the floor's roof; floor roofs without a floor above become ordinary roofs.
+        // The roof for c when the floor over it has gone and left its floor's roof there (Changed, Normalize, via Free): one
+        // rule for houses and ships. Under a covered column (Atrium.Covered) "no roof", which the SetRoof prefix makes the
+        // atrium's (Stairwell.RoofFor); else an ordinary built roof. While the game resolves a collapse it is the ordinary
+        // roof, as before: the collapse drops it with its floor (crushing what is below), and that drop's "no roof" goes
+        // through the same column rule.
+        public static RoofDef Freed(IntVec3 c, Map map)
+        {
+            return !SlabCollapse.Resolving && Atrium.Covered(c, map) ? null : RoofDefOf.RoofConstructed;
+        }
+
+        // Writes Freed's roof to c. Where that makes c an atrium, the Build-roof area there goes too, as when the player
+        // marks no roof (the game's no-roof designator): the game never takes a cell out of that area once its roof is
+        // built, so in a room the game roofed before the floor was laid a constructor would roof the fresh atrium over
+        // again (BuildRoof_Atrium_Patch). A Build-roof area marked afterwards closes it with a real roof as before; an
+        // ordinary roof left here keeps its area.
+        private static void Free(IntVec3 c, Map map)
+        {
+            RoofDef roof = Freed(c, map);
+            map.roofGrid.SetRoof(c, roof);
+            if (roof == null && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof)
+            {
+                map.areaManager.BuildRoof[c] = false;
+            }
+        }
+
+        // Every cell under a floor gets the floor's roof; a floor's roof without a floor above follows Freed. Top floor
+        // first (as Atrium.Normalize): each cell's cover is settled before the cell under it asks for it.
         public static int Normalize(Map map)
         {
             AnnexMapComponent a = ProjectZ.Annex(map);
@@ -105,7 +134,7 @@ namespace ProjectZ
                 return 0;
             }
             int fixedCells = 0;
-            for (int k = a.MinLevel; k <= a.MaxLevel; k++)
+            for (int k = a.MaxLevel; k >= a.MinLevel; k--)
             {
                 for (int z = 0; z < a.groundZ; z++)
                 {
@@ -122,7 +151,7 @@ namespace ProjectZ
                         }
                         else if (!above && cur == PZDefOf.PZ_FloorRoof)
                         {
-                            map.roofGrid.SetRoof(c, RoofDefOf.RoofConstructed);
+                            Free(c, map);
                             fixedCells++;
                         }
                     }

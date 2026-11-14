@@ -572,6 +572,12 @@ namespace ProjectZ
         private void TakeLandingRoof(IntVec3 top, Map map)
         {
             IntVec3 below = FloorRoof.Below(top, map);
+            if (below.IsValid)
+            {
+                // (the cell under the landing is part of the old stairwell: one ceiling with the ramp's cells, an ordinary
+                // roof also under a covered column; the landing going with its stairs is no floor the player took up)
+                Stairwell.Closed(map, CellRect.SingleCell(below));
+            }
             if (landingRoofLaid && below.IsValid && map.roofGrid.Roofed(below) && !SlabSupport.Supported(below, map, ignore: this))
             {
                 map.roofGrid.SetRoof(below, null);
@@ -675,14 +681,16 @@ namespace ProjectZ
         }
 
         // Built stairs gone: the roof their ramp turned into the stairwell roof is an ordinary built roof again, also under
-        // a covered column (it was a roof before the stairs came; the atrium rule is for roofs taken away).
-        public static void Closed(Map map, CellRect ramp)
+        // a covered column, and so is the roof under the landing they take with them (Building_Stairs.TakeLandingRoof):
+        // the old stairwell gets one ceiling. (It had a roof before the stairs came; the atrium rule is for roofs and
+        // floors the player takes away: Atrium.cs, FloorRoof.Freed.)
+        public static void Closed(Map map, CellRect cells)
         {
             if (map == null || ProjectZ.Annex(map) == null)
             {
                 return;
             }
-            foreach (IntVec3 c in ramp)
+            foreach (IntVec3 c in cells)
             {
                 if (c.InBounds(map) && map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof && !FloorRoof.FloorAbove(c, map) && !Well(c, map))
                 {

@@ -27,7 +27,7 @@ namespace ProjectZ.Dev
     //      3 x 3 deck pad deconstructed by a colonist: the pad falls with its roof, as does an ordinary roof held only by
     //      that wall; a second pad with its wall stays, and the ship's decks (held by its hull) stay; then 20000 ticks;
     //   D6 removal top-down: a floor-3 deck, then the floor-2 deck under it with a drafted colonist and steel on it (moved
-    //      off), the roof below an ordinary roof again;
+    //      off), the roof below the atrium's (the roof the floor-3 deck left on floor 2 covers it, FloorRoof.Freed);
     //   D7 launch: since P2 the decks are ship cells (the colonist on one is aboard) and since P4 the console allows
     //      the launch (shipfly flies decks); with the ship's decks taken away a real launch: the pad's decks stay (their
     //      substructure stays); the ship lands on the ground elsewhere.
@@ -357,7 +357,8 @@ namespace ProjectZ.Dev
                     Result(Gravity.Off ? "D6 the colonist standing on it moved off onto a floor" : "D6 the colonist standing on it fell to the floor below", stander != null && stander.Position != sdRm && stander.Position.Standable(map) && ProjectZ.FloorOf(stander.Position, map) == (Gravity.Off ? 1 : 0), $"{stander?.Position} f{(stander == null ? 0 : ProjectZ.FloorOf(stander.Position, map) + 1)}");
                     List<Thing> steelNear = map.listerThings.ThingsOfDef(ThingDefOf.Steel).Where(t => t.Spawned && t.Position.InHorDistOf(sdRm, 6f) && ProjectZ.FloorOf(t.Position, map) >= 1).ToList();
                     Result("D6 the steel on it put down on a floor", sdRm.GetThingList(map).All(t => t.def != ThingDefOf.Steel) && steelNear.All(t => map.terrainGrid.TerrainAt(t.Position) != PZDefOf.PZ_OpenAir), string.Join(", ", steelNear.Select(t => t.Position + " x" + t.stackCount)));
-                    Result(Gravity.Off ? "D6 the roof below an ordinary roof again" : "D6 the roof below (an ordinary roof again) broken by what fell (open: none, or the atrium roof under the floor-2 roof still above, Atrium.cs)", Gravity.Off ? map.roofGrid.RoofAt(FloorRoof.Below(sdRm, map)) == RoofDefOf.RoofConstructed : Column.OpenAbove(FloorRoof.Below(sdRm, map), map), $"{map.roofGrid.RoofAt(FloorRoof.Below(sdRm, map))?.defName ?? "none"}");
+                    // (the roof the floor-3 deck left on floor 2 covers the column: the deck taken up leaves the atrium roof below, FloorRoof.Freed)
+                    Result(Gravity.Off ? "D6 the roof below the atrium's (the roof left on floor 2 covers it)" : "D6 the roof below open (the atrium roof under the roof left on floor 2, Atrium.cs; or broken by what fell)", Gravity.Off ? map.roofGrid.RoofAt(FloorRoof.Below(sdRm, map)) == PZDefOf.PZ_StairwellRoof : Column.OpenAbove(FloorRoof.Below(sdRm, map), map), $"{map.roofGrid.RoofAt(FloorRoof.Below(sdRm, map))?.defName ?? "none"}; on floor 2 {map.roofGrid.RoofAt(sdRm)?.defName ?? "none"}");
                     if (stander != null)
                     {
                         Draft(stander, false);

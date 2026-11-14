@@ -1285,6 +1285,11 @@ namespace ProjectZ.Dev
                 StepShipStairs(map);
                 return;
             }
+            if (stage.StartsWith("ya_"))
+            {
+                StepShipRoofAtrium(map);
+                return;
+            }
             if (stage.StartsWith("xd_"))
             {
                 // (reprodrops: each stage under a fixed random state; fires and ticks seeded per run inside)
@@ -1863,6 +1868,10 @@ namespace ProjectZ.Dev
                     else if (mode == "shipstairs")
                     {
                         stage = "sp_setup";
+                    }
+                    else if (mode == "shiproofatrium")
+                    {
+                        stage = "ya_setup";
                     }
                     else if (mode == "reprodrops")
                     {

@@ -11,14 +11,19 @@ namespace ProjectZ
     // floor's, a built or rock roof, or itself an atrium's) does not open to the sky: it gets the invisible stairwell
     // roof (PZ_StairwellRoof) as stairwells do. Indoors, no rain or snow, indoor temperature, no sun for plants; drawn
     // invisible (IsoRim Api.HiddenRoof), so the floors above look down into it; shots, sight and falls pass
-    // (Column.OpenAbove). The two storeys stay separate rooms (each its own temperature).
+    // (Column.OpenAbove). The two storeys stay separate rooms (each its own temperature). A floor taken up (a slab or a
+    // ship deck) under a covered column leaves the same roof under it at once (FloorRoof.Freed, user 2026-11-14): take
+    // out the middle floor of a three-storey hall and the ground looks up into it; under an open column the floor
+    // leaves an ordinary roof (D6).
     //
     // One rule (Stairwell.RoofFor, applied by FloorRoof's SetRoof prefix to every roof written outside a floor's): no roof
     // under a covered column is the stairwell roof; the stairwell roof outside an opening stays while the column is
     // covered. The column changing is a roof changing in it (a floor's roof included), so the SetRoof postfix asks the
-    // cell below again (Recheck), down the column: cover gone -> open sky, cover come -> atrium. Saves are put right at
-    // load (Normalize). A roof built over an atrium cell (Build roof area) closes it with a real roof (patches below);
-    // Remove roof refuses the stairwell roof (RemoveRoof_FloorRoof_Patch), so a no-roof area left there doesn't loop.
+    // cell below again (Recheck), down the column: cover gone -> open sky, cover come -> atrium. A slab whose roof the
+    // game took away silently (an unsupported roof removed, the slab falling after it) is asked the same once it has
+    // fallen (SlabCollapse.FinderExit). Saves are put right at load (Normalize). A roof built over an atrium cell (Build
+    // roof area) closes it with a real roof (patches below); Remove roof refuses the stairwell roof
+    // (RemoveRoof_FloorRoof_Patch), so a no-roof area left there doesn't loop.
     public static class Atrium
     {
         // (tests) cells that turned into an atrium / back to the sky by Recheck

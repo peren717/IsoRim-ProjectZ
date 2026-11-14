@@ -62,40 +62,71 @@ namespace ProjectZ.Dev
 
         private static bool EColumnBuilt(Map map) => eColumn.GetEdifice(map)?.def == ThingDefOf.Column;
 
+        // The orbital relay map of "The Gravship" start on a free orbit tile, with its annex, made the current map (null: no
+        // free orbit tile). (modes space and shiproofatrium)
+        private static Map OrbitMap()
+        {
+            PlanetLayer orbit = Find.WorldGrid.Orbit;
+            PlanetTile tile = PlanetTile.Invalid;
+            for (int i = 0; orbit != null && i < orbit.TilesCount; i++)
+            {
+                PlanetTile pt = new PlanetTile(i, orbit);
+                if (!Find.WorldObjects.AnyWorldObjectAt(pt))
+                {
+                    tile = pt;
+                    break;
+                }
+            }
+            if (!tile.Valid)
+            {
+                return null;
+            }
+            // (as ScenPart_ForcedMap + the game's start: a player settlement on the orbit tile, the relay's generator)
+            Settlement s = (Settlement)WorldObjectMaker.MakeWorldObject(WorldObjectDefOf.Settlement);
+            s.SetFaction(Faction.OfPlayer);
+            s.Tile = tile;
+            s.Name = "PZ orbit";
+            Find.WorldObjects.Add(s);
+            MapGeneratorDef gen = DefDatabase<MapGeneratorDef>.GetNamed("OrbitalRelay");
+            int n = GenCommandLine.TryGetCommandLineArg("projectzmapsize", out string ms) && int.TryParse(ms, out int nn) ? nn : 150;
+            Map m = MapGenerator.GenerateMap(new IntVec3(n, 1, n), s, gen, s.ExtraGenStepDefs);
+            Info($"orbit map {m} generator {m.generatorDef.defName} biome {m.Biome.defName} (vacuum {m.Biome.inVacuum}) size {m.Size}");
+            Current.Game.CurrentMap = m;
+            return m;
+        }
+
+        // Colonists moved onto the orbit map in vacsuits (from every other map).
+        private static void OrbitColonists(Map map, System.Func<int, IntVec3> at)
+        {
+            List<Pawn> cols = Find.Maps.Where(m => m != map).SelectMany(m => m.mapPawns.FreeColonistsSpawned).ToList();
+            ThingDef suit = DefDatabase<ThingDef>.GetNamed("Apparel_Vacsuit"), helmet = DefDatabase<ThingDef>.GetNamed("Apparel_VacsuitHelmet");
+            for (int i = 0; i < cols.Count; i++)
+            {
+                Pawn p = cols[i];
+                p.jobs?.StopAll();
+                p.DeSpawn();
+                GenSpawn.Spawn(p, at(i), map);
+                foreach (ThingDef def in new[] { suit, helmet })
+                {
+                    Apparel ap = (Apparel)ThingMaker.MakeThing(def, def.MadeFromStuff ? GenStuff.DefaultStuffFor(def) : null);
+                    p.apparel.Wear(ap, dropReplacedApparel: false);
+                }
+            }
+        }
+
         private static bool StepSpace(Map map)
         {
             switch (stage)
             {
                 case "e_setup":
                 {
-                    PlanetLayer orbit = Find.WorldGrid.Orbit;
-                    PlanetTile tile = PlanetTile.Invalid;
-                    for (int i = 0; orbit != null && i < orbit.TilesCount; i++)
-                    {
-                        PlanetTile pt = new PlanetTile(i, orbit);
-                        if (!Find.WorldObjects.AnyWorldObjectAt(pt))
-                        {
-                            tile = pt;
-                            break;
-                        }
-                    }
-                    if (!tile.Valid)
+                    eMap = OrbitMap();
+                    if (eMap == null)
                     {
                         Result("orbit tile", false, "no free orbit tile");
                         Finish();
                         return true;
                     }
-                    // (as ScenPart_ForcedMap + the game's start: a player settlement on the orbit tile, the relay's generator)
-                    Settlement s = (Settlement)WorldObjectMaker.MakeWorldObject(WorldObjectDefOf.Settlement);
-                    s.SetFaction(Faction.OfPlayer);
-                    s.Tile = tile;
-                    s.Name = "PZ orbit";
-                    Find.WorldObjects.Add(s);
-                    MapGeneratorDef gen = DefDatabase<MapGeneratorDef>.GetNamed("OrbitalRelay");
-                    int n = GenCommandLine.TryGetCommandLineArg("projectzmapsize", out string ms) && int.TryParse(ms, out int nn) ? nn : 150;
-                    eMap = MapGenerator.GenerateMap(new IntVec3(n, 1, n), s, gen, s.ExtraGenStepDefs);
-                    Info($"orbit map {eMap} generator {eMap.generatorDef.defName} biome {eMap.Biome.defName} (vacuum {eMap.Biome.inVacuum}) size {eMap.Size}");
-                    Current.Game.CurrentMap = eMap;
                     Wait(30, "e_census");
                     return true;
                 }
@@ -364,20 +395,7 @@ namespace ProjectZ.Dev
                 eRing.Add(c);
             }
             Info($"platform {ePlat} over space ({Census(map, ePlat.Cells)}); stairs {eStairs} north, landing {StairShape.Exit(eStairs, Rot4.North, map)}; column {eColumn}");
-            List<Pawn> cols = Find.Maps.Where(m => m != map).SelectMany(m => m.mapPawns.FreeColonistsSpawned).ToList();
-            ThingDef suit = DefDatabase<ThingDef>.GetNamed("Apparel_Vacsuit"), helmet = DefDatabase<ThingDef>.GetNamed("Apparel_VacsuitHelmet");
-            for (int i = 0; i < cols.Count; i++)
-            {
-                Pawn p = cols[i];
-                p.jobs?.StopAll();
-                p.DeSpawn();
-                GenSpawn.Spawn(p, E(15 + i % 4, 1 + i / 4), map);
-                foreach (ThingDef def in new[] { suit, helmet })
-                {
-                    Apparel ap = (Apparel)ThingMaker.MakeThing(def, def.MadeFromStuff ? GenStuff.DefaultStuffFor(def) : null);
-                    p.apparel.Wear(ap, dropReplacedApparel: false);
-                }
-            }
+            OrbitColonists(map, i => E(15 + i % 4, 1 + i / 4));
             foreach (ThingDef def in new[] { ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.WoodLog, ThingDefOf.Steel })
             {
                 Thing t = ThingMaker.MakeThing(def);

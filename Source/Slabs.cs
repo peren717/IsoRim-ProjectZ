@@ -52,9 +52,9 @@ namespace ProjectZ
             return null;
         }
 
-        // Takes the slab (and any floor still laid on it) down to open air: the roof below becomes a plain roof again
-        // (FloorRoof), no materials come back (user 2026-10-18), pawns and items on it fall to the floor below (gravity,
-        // MoveOff), the zone cell and the removal designation go.
+        // Takes the slab (and any floor still laid on it) down to open air: the roof below becomes a plain roof again, or
+        // the atrium's under a covered column (FloorRoof.Freed), no materials come back (user 2026-10-18), pawns and items
+        // on it fall to the floor below (gravity, MoveOff), the zone cell and the removal designation go.
         public static void Remove(IntVec3 c, Map map, bool doLeavings, Thing cause = null)
         {
             TerrainGrid tg = map.terrainGrid;
@@ -862,6 +862,21 @@ namespace ProjectZ
                 if (q.Key != null && Find.Maps.Contains(q.Key))
                 {
                     Collapse(q.Value, q.Key, null);
+                }
+            }
+            // The roof under each of these slabs went while the slab was still over it ("no roof" written under a floor
+            // passes no column rule, LetRoofGo). With the slabs fallen their cells follow it like any other cell, top
+            // floor first: under a covered column the atrium's roof, else open as the game left them (Atrium.Recheck).
+            now.SortByDescending(q => q.Key == null ? 0 : ProjectZ.FloorOf(q.Value, q.Key));
+            foreach (KeyValuePair<Map, IntVec3> q in now)
+            {
+                if (q.Key != null && Find.Maps.Contains(q.Key))
+                {
+                    IntVec3 u = StairShape.Above(q.Value, q.Key);
+                    if (u.IsValid)
+                    {
+                        Atrium.Recheck(u, q.Key);
+                    }
                 }
             }
         }
