@@ -417,7 +417,7 @@ namespace ProjectZ.Dev
                 stage = "ld_pw";   // the drawn figure in real time (TestLadderDrawn), then the strips
                 return;
             }
-            Finish();
+            stage = "ld_er";   // mode ladders: the emergency ladder's refusal texts last (TestLadders2)
         }
 
         // ------------------------------------------------------------------------------------------------ PS: strips

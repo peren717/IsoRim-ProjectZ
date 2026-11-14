@@ -125,6 +125,47 @@ namespace ProjectZ
     {
         private static readonly List<IntVec3> broken = new List<IntVec3>();
 
+        // Why a site is refused: the 'why' of Find, FindFromFoot and Check, named once here (read by Refusal, the debug
+        // log and the dev tools).
+        public const string WhyNoFloors = "no floors";
+        public const string WhyLowest = "top on the lowest level";
+        public const string WhyTopBlocked = "top not walkable";
+        public const string WhyOffMap = "column off the map";
+        public const string WhyNoAir = "no open air beside the top";
+        public const string WhyRoof = "a roof in the column";
+        public const string WhyNoGround = "nothing to stand on under the column";
+        public const string WhyFootTaken = "foot not free";
+        public const string WhyColumnBusy = "column not clear";
+        public const string WhyLinkThere = "another link there";
+        public const string WhyNoLedge = "no ledge";
+        public const string WhyLandsElsewhere = "the column lands elsewhere";
+        public const string WhyNoSide = "no side";
+
+        // The player's text for a refused site, the one table of both place workers. fromFoot: a ladder placed from its
+        // foot (PlaceWorker_LadderFromFoot), else from its top (PlaceWorker_EmergencyLadder).
+        public static TaggedString Refusal(string why, bool fromFoot)
+        {
+            switch (why)
+            {
+                case WhyRoof:
+                    return "PZ_LadderRoofInWay".Translate();
+                case WhyLinkThere:
+                    return "PZ_LadderLinkTaken".Translate();
+                case WhyFootTaken:
+                    return (fromFoot ? "PZ_LadderLinkTaken" : "PZ_LadderColumnBlocked").Translate();
+                case WhyColumnBusy:
+                    return (fromFoot ? "PZ_LadderUpBlocked" : "PZ_LadderColumnBlocked").Translate();
+                case WhyNoAir:
+                case WhyLandsElsewhere:
+                    if (fromFoot)
+                    {
+                        return "PZ_LadderUpBlocked".Translate();
+                    }
+                    break;
+            }
+            return (fromFoot ? "PZ_LadderNoLedge" : "PZ_LadderNoDrop").Translate();
+        }
+
         public static bool Find(IntVec3 top, Rot4 side, Map map, out IntVec3 foot, out int span, out string why, bool allowBlocker = false)
         {
             return Find(top, side, map, out foot, out span, out why, allowBlocker, null);
@@ -138,43 +179,43 @@ namespace ProjectZ
             why = null;
             if (ProjectZ.Annex(map) == null || !top.IsValid || !top.InBounds(map))
             {
-                why = "no floors";
+                why = WhyNoFloors;
                 return false;
             }
             int L = Levels.LevelOf(top, map);
             if (L == Levels.None || L <= Levels.Min(map))
             {
-                why = "top on the lowest level";
+                why = WhyLowest;
                 return false;
             }
             if (!allowBlocker && !top.Walkable(map))
             {
-                why = "top not walkable";
+                why = WhyTopBlocked;
                 return false;
             }
             IntVec3 g = Levels.Ground(top, map) + side.FacingCell;
             if (g.x < 0 || g.z < 0 || g.x >= map.Size.x || g.z >= ProjectZ.Annex(map).groundZ)
             {
-                why = "column off the map";
+                why = WhyOffMap;
                 return false;
             }
             IntVec3 col = Levels.Cell(g, L, map);
             if (!col.IsValid || !col.InBounds(map) || ProjectZ.HasFloor(col, map) || col.GetEdifice(map) != null)
             {
-                why = "no open air beside the top";
+                why = WhyNoAir;
                 return false;
             }
             IntVec3 land = Column.Landing(col, map, false, true, out int fallen, out _, broken);
             if (!land.IsValid || fallen < 1 || broken.Count > 0)
             {
-                why = broken.Count > 0 ? "a roof in the column" : "nothing to stand on under the column";
+                why = broken.Count > 0 ? WhyRoof : WhyNoGround;
                 broken.Clear();
                 return false;
             }
             Building onFoot = land.GetEdifice(map);
             if (!land.Standable(map) || onFoot != null && onFoot != ignore || Stairwell.StairCellAt(land, map))
             {
-                why = "foot not free";
+                why = WhyFootTaken;
                 return false;
             }
             // the column itself: nothing planned, being built or standing in it (it is kept open from then on: LadderColumn)
@@ -182,7 +223,7 @@ namespace ProjectZ
             {
                 if (LadderColumn.Busy(Levels.Cell(g, lv, map), map))
                 {
-                    why = "column not clear";
+                    why = WhyColumnBusy;
                     return false;
                 }
             }
@@ -193,7 +234,7 @@ namespace ProjectZ
                 {
                     if (sg.links[i].thing != ignore && (sg.links[i].bottom == land || sg.links[i].top == land || sg.links[i].top == top && sg.links[i].IsLadder))
                     {
-                        why = "another link there";
+                        why = WhyLinkThere;
                         return false;
                     }
                 }
@@ -220,19 +261,19 @@ namespace ProjectZ
             why = null;
             if (ProjectZ.Annex(map) == null || !foot.IsValid || !foot.InBounds(map) || !rot.IsValid)
             {
-                why = "no floors";
+                why = WhyNoFloors;
                 return false;
             }
             int F = Levels.LevelOf(foot, map);
             if (F == Levels.None)
             {
-                why = "no floors";
+                why = WhyNoFloors;
                 return false;
             }
             IntVec3 g = Levels.Ground(foot, map) + rot.FacingCell;
             if (g.x < 0 || g.z < 0 || g.x >= map.Size.x || g.z >= ProjectZ.Annex(map).groundZ)
             {
-                why = "no ledge";
+                why = WhyNoLedge;
                 return false;
             }
             for (int L = F + 1; L <= Levels.Max(map); L++)
@@ -258,9 +299,9 @@ namespace ProjectZ
                     why = null;
                     return true;
                 }
-                why ??= "the column lands elsewhere";
+                why ??= WhyLandsElsewhere;
             }
-            why ??= "no ledge";
+            why ??= WhyNoLedge;
             return false;
         }
 
@@ -268,7 +309,7 @@ namespace ProjectZ
         public static bool Check(IntVec3 foot, IntVec3 top, Map map, out int span, out string why, bool allowBlocker = false)
         {
             span = 0;
-            why = "no side";
+            why = WhyNoSide;
             IntVec3 d = Levels.Ground(foot, map) - Levels.Ground(top, map);
             for (int i = 0; i < 4; i++)
             {
@@ -283,7 +324,7 @@ namespace ProjectZ
                 }
                 if (f != foot)
                 {
-                    why = "the column lands elsewhere";
+                    why = WhyLandsElsewhere;
                     return false;
                 }
                 return true;
@@ -658,13 +699,9 @@ namespace ProjectZ
     {
         public override AcceptanceReport AllowsPlacing(BuildableDef checkingDef, IntVec3 loc, Rot4 rot, Map map, Thing thingToIgnore = null, Thing thing = null)
         {
-            if (ProjectZ.Annex(map) == null || Levels.LevelOf(loc, map) <= Levels.Min(map))
-            {
-                return "PZ_LadderNoDrop".Translate();
-            }
             if (!LadderSite.Find(loc, rot, map, out _, out _, out string why, true, thingToIgnore ?? thing))
             {
-                return why == "another link there" ? "PZ_LandingBlocked".Translate() : why == "column not clear" ? "PZ_LadderColumnBlocked".Translate() : "PZ_LadderNoDrop".Translate();
+                return LadderSite.Refusal(why, false);
             }
             return AcceptanceReport.WasAccepted;
         }
@@ -689,20 +726,7 @@ namespace ProjectZ
             {
                 return AcceptanceReport.WasAccepted;
             }
-            switch (why)
-            {
-                case "a roof in the column":
-                    return "PZ_LadderRoofInWay".Translate();
-                case "another link there":
-                case "foot not free":
-                    return "PZ_LadderLinkTaken".Translate();
-                case "column not clear":
-                case "no open air beside the top":
-                case "the column lands elsewhere":
-                    return "PZ_LadderUpBlocked".Translate();
-                default:
-                    return "PZ_LadderNoLedge".Translate();
-            }
+            return LadderSite.Refusal(why, true);
         }
 
         public override void DrawGhost(ThingDef def, IntVec3 center, Rot4 rot, Color ghostCol, Thing thing = null)

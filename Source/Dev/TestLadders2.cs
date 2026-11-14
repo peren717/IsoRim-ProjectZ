@@ -18,6 +18,9 @@ namespace ProjectZ.Dev
     //   MEL  melee across a ladder: over 2 floors the attacker does not hit from the foot, it climbs to its target; over 1
     //        floor it hits from the foot (as across stairs). Work across any span: the emergency ladder built from the
     //        foot (E2, TestLadders).
+    //   ER   the emergency ladder's refusal texts (2026-11-13), last in the mode, through the real placement check: a deck
+    //        over a bigger roofed ground floor (a two-level gravship), the foot taken, a top on the ground, another
+    //        ladder's link on the foot, and one accepted placement.
     public static partial class TestRunner
     {
         private static Pawn ld2Q;
@@ -73,6 +76,9 @@ namespace ProjectZ.Dev
                     return true;
                 case "ld_mel1_check":
                     Ld2MeleeCheck(map, 1);
+                    return true;
+                case "ld_er":
+                    Ld2Refusals(map);
                     return true;
             }
             return StepLadderPoseInner(map);
@@ -338,6 +344,49 @@ namespace ProjectZ.Dev
             }
             Info($"ladder follow-ups: ends cleared {LinkSteps.EndsCleared}, column kills {LadderColumnWatch.Destroyed}");
             stage = "ld_po";
+        }
+
+        // ------------------------------------------------------------------------------------------------ ER
+
+        // The emergency ladder placed on a top cell turned west (toward the column at (19, 13)): what the player is told,
+        // through GenConstruct.CanPlaceBlueprintAt and its place worker, each case on its own fixture. Run last in mode
+        // ladders, so the fixtures it makes change nothing for the checks before it.
+        private static void Ld2Refusals(Map map)
+        {
+            // a two-level gravship: a deck on level 1 over a roofed ground floor that reaches 3 cells past the deck's west edge
+            LdFixture(map, 1, null, false, r2P);
+            foreach (IntVec3 g in new CellRect(LdG(17, 8).x, LdG(17, 8).z, 3, 12))
+            {
+                map.roofGrid.SetRoof(g, RoofDefOf.RoofConstructed);
+            }
+            Ld2Refusal(map, "ER a deck over a bigger roofed ground floor: 'A roof is in the way'", ldTop, LadderSite.WhyRoof, "PZ_LadderRoofInWay");
+
+            LdFixture(map, 2, null, false, r2P);
+            Place(ThingDefOf.Wall, ThingDefOf.WoodLog, ldFoot, map);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            Ld2Refusal(map, "ER a wall on the foot: 'Something is in the way down'", ldTop, LadderSite.WhyFootTaken, "PZ_LadderColumnBlocked");
+
+            LdFixture(map, 2, null, false, r2P);
+            Ld2Refusal(map, "ER a top on the ground: 'Needs open air below its open side'", LdG(12, 13), LadderSite.WhyLowest, "PZ_LadderNoDrop");
+
+            // another emergency ladder, from the north, already stands with its foot on this one's foot
+            LdFixture(map, 2, null, false, r2P);
+            R2Floor(map, CellRect.SingleCell(LdG(19, 14)), 2);
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            Place(PZDefOf.PZ_EmergencyLadder, null, LdL(19, 14, 2, map), map, Rot4.South);
+            Ld2Refusal(map, "ER another ladder's link on the foot: 'Another ladder or stairs is here'", ldTop, LadderSite.WhyLinkThere, "PZ_LadderLinkTaken");
+
+            LdFixture(map, 2, null, false, r2P);
+            AcceptanceReport ok = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_EmergencyLadder, ldTop, Rot4.West, map);
+            Result("ER an open column down to a free foot: accepted", ok.Accepted, ok.Reason);
+            Finish();
+        }
+
+        private static void Ld2Refusal(Map map, string label, IntVec3 top, string wantWhy, string wantKey)
+        {
+            AcceptanceReport r = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_EmergencyLadder, top, Rot4.West, map);
+            LadderSite.Find(top, Rot4.West, map, out _, out _, out string why, true);
+            Result(label, !r.Accepted && r.Reason == wantKey.Translate() && why == wantWhy, $"{(r.Accepted ? "accepted" : r.Reason)} (site: {why ?? "found"})");
         }
     }
 }
