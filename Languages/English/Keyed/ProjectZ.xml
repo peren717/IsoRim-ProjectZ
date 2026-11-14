@@ -52,7 +52,7 @@
   <PZ_OverGravshipUseDeck>No upper floor over a gravship: use a ship upper deck</PZ_OverGravshipUseDeck>
   <PZ_OverGravshipUseStairs>No ordinary stairs on a gravship: use ship stairs</PZ_OverGravshipUseStairs>
   <PZ_ShipUpperCantFly>Ship upper decks can't fly: a ProjectZ patch failed (see the log)</PZ_ShipUpperCantFly>
-  <PZ_ShipNotEnoughFloors>Not enough floors here for the ship upper decks</PZ_ShipNotEnoughFloors>
+  <PZ_ShipNotEnoughFloors>Not enough floors here for the ship</PZ_ShipNotEnoughFloors>
   <PZ_ShipFloorAbove>Blocked by a floor above</PZ_ShipFloorAbove>
   <PZ_ShipStairsOnDeck>Ship stairs must stand on the gravship's deck, their exit over it</PZ_ShipStairsOnDeck>
   <PZ_NoLineOfSight>No line of sight</PZ_NoLineOfSight>
