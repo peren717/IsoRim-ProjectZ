@@ -740,7 +740,6 @@ namespace ProjectZ
                 {
                     StairwellFloor.Mark(__instance);
                 }
-                ShipStairs.ColumnChanged(__instance, __instance.Map);
             }
         }
     }
@@ -766,12 +765,6 @@ namespace ProjectZ
                 }
                 Stairwell.Refresh(__state, __instance.OccupiedRect());
                 StairwellFloor.Unmark(__state, StairShape.RampRect(__instance.Position, __instance.Rotation));
-                if (ShipStairs.Is(__instance.def) || ShipStairs.Is(__instance.def.entityDefToBuild))
-                {
-                    // (their opening is no ship column cell now: a deck over it falls)
-                    ShipStairs.Gone(__instance, __state, mode);
-                }
-                ShipStairs.ColumnChanged(__instance, __state);
             }
         }
     }

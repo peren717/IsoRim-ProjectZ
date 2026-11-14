@@ -387,11 +387,15 @@ namespace ProjectZ.Dev
                 Result($"T0 {bd.defName} in the build menu", menu != null && !menu.Label.NullOrEmpty() && !menu.Desc.NullOrEmpty(),
                     $"[{LanguageDatabase.activeLanguage?.folderName}] {menu?.Label} / {menu?.Desc}");
             }
-            foreach (string key in new[] { "PZ_DeckNeedsShipBelow", "PZ_DeckAboveFirst", "PZ_DeckBelowFirst", "PZ_OverGravship", "PZ_OverGravshipUseDeck",
+            // (3D hull, issue 5, design #21: one text for the deck's link, PZ_DeckNeedsShipLink, at placement and for the
+            // builders' wait; the three column texts are retired)
+            foreach (string key in new[] { "PZ_DeckNeedsShipLink", "PZ_OverGravship", "PZ_OverGravshipUseDeck",
                 "PZ_OverGravshipUseStairs", "PZ_ShipUpperCantFly", "PZ_ShipNotEnoughFloors", "PZ_ShipFloorAbove", "PZ_ShipStairsOnDeck", "PZ_GravshipGroundOnly" })
             {
                 Result($"T0 key {key} translated", key.CanTranslate(), key.Translate());
             }
+            string[] retired = { "PZ_DeckNeedsShipBelow", "PZ_DeckAboveFirst", "PZ_DeckBelowFirst" };
+            Result("T0 the three column texts are retired (no longer in the active language)", !retired.Any(k => k.CanTranslate()), string.Join(", ", retired.Where(k => k.CanTranslate())));
             string onDeck = "PZ_ShipStairsOnDeck".Translate();
             SpExpect("T1 ship stairs on plain ground refused", ss, null, SP(17, 2), Rot4.North, map, onDeck);
             SpExpect("T1 ship stairs overhanging the floor-2 deck edge refused", ss, null, SPF(12, 10, 1, map), Rot4.North, map, onDeck);

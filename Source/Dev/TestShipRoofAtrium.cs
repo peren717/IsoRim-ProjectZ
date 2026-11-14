@@ -23,10 +23,10 @@ namespace ProjectZ.Dev
     //   Y1R (d) colonists lay floor 2 again over one column of the house's hole: the floor's roof below again.
     //   Y1S (f) save and reload: roofs and ladders kept.
     //   Y2 the ship flies to a neighbouring tile and lands (shipfly's flight): the ladder and its column; the atrium under
-    //      two holes one over the other under a kept floor-4 deck lands as one (its cover flies with the ship); under the
-    //      old hole the decks are still gone, the room below is closed and every cell has the roof the column rule gives
-    //      it now. Logged, not checked: the roof over the old hole is lost in flight (the deferred issue-5 hull
-    //      redesign), so those cells land under an ordinary roof and a second ladder there is refused.
+    //      two holes one over the other under a kept floor-4 deck lands as one (its cover flies with the ship); the old
+    //      hole (3D hull, issue 5): its decks are still gone, the ship's roof over it flew with the ship, every cell under
+    //      it has the atrium roof, the rooms above and below are closed, a second ladder may drop into it; no roof is left
+    //      hanging at the old site.
     //   Y3 on the landed ship colonists take up another 2 x 3 of the deck and build a ladder down through it.
     //   V  airtight in vacuum (the same ship built on an orbit map): V0 sealed, V1 the deck taken up under the ship's roof
     //      (no exposure, vacuum 0, temperatures held), V2 the roof over one hole cell removed: the expected leak.
@@ -37,6 +37,7 @@ namespace ProjectZ.Dev
         private static IntVec3 yaN;
         private static readonly List<IntVec3> yaShipHole1 = new List<IntVec3>(), yaShipHole2 = new List<IntVec3>();
         private static readonly List<IntVec3> yaOffs1 = new List<IntVec3>();
+        private static readonly List<string> yaHoleRoofs = new List<string>();   // the roofs over the hole right before the launch, in yaOffs1's order
         private static IntVec3 yaLadderOff1, yaSecondOff1, yaLadder3, yaFoot3;
         private static IntVec3 yaKeptOff;
 
@@ -451,9 +452,9 @@ namespace ProjectZ.Dev
             IntVec3 kept = YaKeptHole(map), keptBelow = FloorRoof.Below(kept, map);
             yaKeptOff = ShipLocal.From(kept, o, map);
             Result("Y1 ship: the floor-2 deck taken up under a hole below a kept floor-4 deck: the stairwell roof below (the ship's roof left over the new hole covers it)",
-                !ProjectZ.HasFloor(kept, map) && ShipColumn.Hole(kept, map) && map.roofGrid.RoofAt(kept) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(keptBelow) == PZDefOf.PZ_StairwellRoof,
-                $"hole {kept}: deck gone {!ProjectZ.HasFloor(kept, map)}, ship hole {ShipColumn.Hole(kept, map)}, roof {YaRoof(kept, map)}, hole above {ShipColumn.Hole(FloorRoof.Above(kept, map), map)} roof {YaRoof(FloorRoof.Above(kept, map), map)}; below {YaRoof(keptBelow, map)}");
-            Info($"Y1 ship set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)}); hole cells in the set {yaShipHole1.Count(c => e.ValidSubstructure.Contains(c))}, ship column open {yaShipHole1.Count(c => ShipColumn.Open(c, map))}");
+                !ProjectZ.HasFloor(kept, map) && HullCompat.Hole(kept, map) && map.roofGrid.RoofAt(kept) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(keptBelow) == PZDefOf.PZ_StairwellRoof,
+                $"hole {kept}: deck gone {!ProjectZ.HasFloor(kept, map)}, ship hole {HullCompat.Hole(kept, map)}, roof {YaRoof(kept, map)}, hole above {HullCompat.Hole(FloorRoof.Above(kept, map), map)} roof {YaRoof(FloorRoof.Above(kept, map), map)}; below {YaRoof(keptBelow, map)}");
+            Info($"Y1 ship set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)}); hole cells in the set {yaShipHole1.Count(c => e.ValidSubstructure.Contains(c))}, open cells over the ship {yaShipHole1.Count(c => HullCompat.OverShip(c, map))}");
             // Y1L: the emergency ladders, built by colonists
             foreach ((IntVec3 top, Rot4 rot) in new[] { (YaHouseTop(map), Rot4.East), (YaShipTop(map), Rot4.East) })
             {
@@ -536,6 +537,9 @@ namespace ProjectZ.Dev
             GlShot(1, YN(3, 3), 12f, "ya_house_f2");
             GlShot(0, YN(3, 3), 12f, "ya_house_ground");
             // Y2: everyone aboard, the flight
+            yaHoleRoofs.Clear();
+            yaHoleRoofs.AddRange(yaShipHole1.Select(c => YaRoof(c, map)));
+            Info($"Y2 before the launch: roofs over the ship's hole {YaRoofs(yaShipHole1, map)}, under it {YaRoofs(YaBelow(yaShipHole1, map), map)}");
             List<Pawn> cols = Colonists(map);
             for (int i = 0; i < cols.Count; i++)
             {
@@ -580,20 +584,22 @@ namespace ProjectZ.Dev
             IntVec3 top = SfAt(yaLadderOff1, sfRoot, sfRot, map);
             Rot4 east = new Rot4((Rot4.East.AsInt + sfRot.AsInt) % 4), west = new Rot4((Rot4.West.AsInt + sfRot.AsInt) % 4);
             IntVec3 colBelow = FloorRoof.Below(Levels.Cell(Levels.Ground(top, map) + east.FacingCell, Levels.LevelOf(top, map), map), map);
-            // (the roof over the hole is lost in flight: the deferred issue-5 hull redesign; recorded here, not checked)
-            Info($"Y2 ship after the flight (issue-5 record): roofs on the hole's own floor {YaRoofs(hole, map)}; roofs below {YaRoofs(below, map)}; covered {below.Count(c => Atrium.Covered(c, map))}/{below.Count}, open above {below.Count(c => Column.OpenAbove(c, map))}, hidden {below.Count(c => YaHidden(c, map))}");
+            Info($"Y2 ship after the flight: roofs on the hole's own floor {YaRoofs(hole, map)}; roofs below {YaRoofs(below, map)}; covered {below.Count(c => Atrium.Covered(c, map))}/{below.Count}, open above {below.Count(c => Column.OpenAbove(c, map))}, hidden {below.Count(c => YaHidden(c, map))}");
             AcceptanceReport second = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_EmergencyLadder, SfAt(yaSecondOff1, sfRoot, sfRot, map), west, map);
-            Info($"Y2 ship after the flight (issue-5 record): a second ladder into the old hole from its east side: {GlRep(second)}");
-            // What holds after the flight whatever became of the roof over the old hole (known issue 5: it is lost): the
-            // decks taken up are still gone, the room below is closed, and every cell under the old hole has the roof the
-            // column rule gives it now.
+            Result("Y2 ship after the flight: a second emergency ladder may drop into the old hole from its east side (the hole is still an atrium under the ship's roof)", second.Accepted, GlRep(second));
+            // (3D hull, issue 5, design #13 and #15: the roof over a hole in the ship is the ship's and flies with it, and the
+            // hidden atrium roof under the hole is put back as such. Before: the roof over the hole was lost in flight, 5
+            // of the 6 cells under it landed under an ordinary roof, and this check only asked for "the roof the column
+            // rule gives now".)
             int stillGone = hole.Count(c => !ProjectZ.HasFloor(c, map));
-            Room roomBelow = below[0].GetRoom(map);
-            int byRule = below.Count(c => map.roofGrid.RoofAt(c) == (Atrium.Covered(c, map) || Stairwell.Well(c, map) ? PZDefOf.PZ_StairwellRoof : RoofDefOf.RoofConstructed));
-            Info($"Y2 ship after the flight (known issue 5, logged): roofs over the old hole lost in flight {hole.Count(c => !map.roofGrid.Roofed(c))}/{hole.Count}");
-            Result("Y2 ship after the flight: the decks taken up are still gone, the room below is closed (no open roof cell), and every cell under the old hole has the roof the column rule gives it now (the stairwell roof under a cover or in a ladder's column, else an ordinary roof)",
-                stillGone == hole.Count && roomBelow != null && roomBelow.OpenRoofCount == 0 && !roomBelow.UsesOutdoorTemperature && byRule == below.Count,
-                $"decks gone {stillGone}/{hole.Count}; roofs below {YaRoofs(below, map)}, by the rule {byRule}/{below.Count} (covered {below.Count(c => Atrium.Covered(c, map))}, ladder column {below.Count(c => Stairwell.Well(c, map))}); room below {(roomBelow == null ? "none" : $"{roomBelow.CellCount} cells, open roof {roomBelow.OpenRoofCount}, outdoor temperature {roomBelow.UsesOutdoorTemperature}")}");
+            // (kept: roofed, and the roof it had right before the launch: the ship's built roof, the ladder's own cell its own)
+            int roofKept = Enumerable.Range(0, hole.Count).Count(i => map.roofGrid.Roofed(hole[i]) && i < yaHoleRoofs.Count && YaRoof(hole[i], map) == yaHoleRoofs[i]);
+            int atrium = below.Count(c => map.roofGrid.RoofAt(c) == PZDefOf.PZ_StairwellRoof);
+            Room roomBelow = below[0].GetRoom(map), roomAbove = hole[0].GetRoom(map);
+            Result("Y2 ship after the flight: the roof over the old hole flew with the ship (none lost: every hole cell roofed as before the launch), every cell under the hole has the atrium roof, the decks taken up are still gone, the rooms above and below are closed (no open roof cell)",
+                stillGone == hole.Count && roofKept == hole.Count && atrium == below.Count && roomBelow != null && roomBelow.OpenRoofCount == 0 && !roomBelow.UsesOutdoorTemperature
+                && roomAbove != null && roomAbove != roomBelow && roomAbove.OpenRoofCount == 0 && !roomAbove.UsesOutdoorTemperature,
+                $"decks gone {stillGone}/{hole.Count}; the roof over the hole kept {roofKept}/{hole.Count}, lost {hole.Count(c => !map.roofGrid.Roofed(c))} (now {YaRoofs(hole, map)}; before the launch {string.Join(", ", yaHoleRoofs.GroupBy(s => s).Select(g => $"{g.Key} x{g.Count()}"))}); atrium roof below {atrium}/{below.Count} ({YaRoofs(below, map)}; covered {below.Count(c => Atrium.Covered(c, map))}, ladder column {below.Count(c => Stairwell.Well(c, map))}); room below {(roomBelow == null ? "none" : $"{roomBelow.CellCount} cells, open roof {roomBelow.OpenRoofCount}, outdoor temperature {roomBelow.UsesOutdoorTemperature}")}; room above {(roomAbove == null ? "none" : $"{roomAbove.CellCount} cells, open roof {roomAbove.OpenRoofCount}, outdoor temperature {roomAbove.UsesOutdoorTemperature}")}");
             Result("Y2 ship after the flight: the ladder flew with the ship and still links down through the hole, its own column the stairwell roof",
                 YaLadderOk(top, colBelow, map, out string note) && map.roofGrid.RoofAt(colBelow) == PZDefOf.PZ_StairwellRoof,
                 $"{note}; roof in its column {YaRoof(colBelow, map)}");
@@ -601,12 +607,12 @@ namespace ProjectZ.Dev
             // the column its roofs from the top down, Atrium.Recheck, so the atrium roof lands as one)
             IntVec3 kept = SfAt(yaKeptOff, sfRoot, sfRot, map), keptBelow = FloorRoof.Below(kept, map);
             Result("Y2 ship after the flight: the atrium under the two holes below the kept floor-4 deck landed as one (the stairwell roof under the roof over the lower hole, which the game puts back after it)",
-                ShipColumn.Hole(kept, map) && map.roofGrid.RoofAt(kept) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(keptBelow) == PZDefOf.PZ_StairwellRoof && Atrium.Covered(keptBelow, map),
-                $"hole {kept}: ship hole {ShipColumn.Hole(kept, map)}, roof {YaRoof(kept, map)}, hole above {ShipColumn.Hole(FloorRoof.Above(kept, map), map)} roof {YaRoof(FloorRoof.Above(kept, map), map)}; below {YaRoof(keptBelow, map)}");
-            if (home != null)
-            {
-                Info($"Y2 home: the old hole's floor-2 roofs {YaRoofs(yaShipHole1, home)}, ground {YaRoofs(YaBelow(yaShipHole1, home), home)}");
-            }
+                HullCompat.Hole(kept, map) && map.roofGrid.RoofAt(kept) == RoofDefOf.RoofConstructed && map.roofGrid.RoofAt(keptBelow) == PZDefOf.PZ_StairwellRoof && Atrium.Covered(keptBelow, map),
+                $"hole {kept}: ship hole {HullCompat.Hole(kept, map)}, roof {YaRoof(kept, map)}, hole above {HullCompat.Hole(FloorRoof.Above(kept, map), map)} roof {YaRoof(FloorRoof.Above(kept, map), map)}; below {YaRoof(keptBelow, map)}");
+            // (nothing is left hanging at the old site: the roof over the old hole went with the ship, the ground under it is open)
+            Result("Y2 the old site: no roof left where the hole was, on floor 2 or on the ground under it",
+                home != null && yaShipHole1.All(c => home.roofGrid.RoofAt(c) == null) && YaBelow(yaShipHole1, home).All(c => home.roofGrid.RoofAt(c) == null),
+                home == null ? "the old map is gone" : $"the old hole's floor-2 roofs {YaRoofs(yaShipHole1, home)}, ground {YaRoofs(YaBelow(yaShipHole1, home), home)}");
             // Y3: another 2 x 3 of the deck (ship offsets x 2..3, z 1..3), a ladder from x 4 facing west
             yaShipHole2.Clear();
             for (int x = 2; x <= 3; x++)

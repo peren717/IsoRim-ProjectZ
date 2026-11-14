@@ -213,14 +213,14 @@ namespace ProjectZ.Dev
             Designator_Build deck = new Designator_Build(PZDefOf.PZ_ShipDeck);
             string useDeck = "PZ_OverGravshipUseDeck".Translate();
             string useStairs = "PZ_OverGravshipUseStairs".Translate();
-            string noShip = "PZ_DeckNeedsShipBelow".Translate();
+            string noShip = "PZ_DeckNeedsShipLink".Translate();   // (3D hull, issue 5: the one link text)
             for (int i = 0; i < dkKinds.Count; i++)
             {
                 TerrainDef t = dkKinds[i];
                 IntVec3 o = dkPatch[i];
                 bool control = i == dkKinds.Count - 1;
                 IntVec3 g = o + new IntVec3(1, 0, 6);
-                Info($"{t.defName}: DeckFoundation {DeckFoundation.Is(t)}, SlabSupport.Gravship {SlabSupport.Gravship(g, map)}, ShipColumn {ShipColumn.Cell(g, map)}, ShipDeck.At (ground) {ShipDeck.At(g, map)}");
+                Info($"{t.defName}: DeckFoundation {DeckFoundation.Is(t)}, SlabSupport.Gravship {SlabSupport.Gravship(g, map)}, ShipDeck.At (ground) {ShipDeck.At(g, map)}");
                 if (control)
                 {
                     DkExpect($"DK1 slab over {t.defName} (control) accepted", slab, DkUp(g, map), true);
@@ -243,7 +243,7 @@ namespace ProjectZ.Dev
             Result("DK4 the ship set has the ship's substructure and none of the kin strips", valid.Count == shipCells && !strip.Any(valid.Contains) && !strip.Any(all.Contains),
                 $"valid {valid.Count} (want {shipCells}), all {all.Count}, strip cells in valid {strip.Count(valid.Contains)}, in all {strip.Count(all.Contains)}");
             IntVec3 cu = DkUp(dkStrip[0] + new IntVec3(1, 0, 0), map);
-            DkExpect("DK5 ship deck over the concrete strip (control) refused: no ship below", deck, cu, false, noShip);
+            DkExpect("DK5 ship deck over the concrete strip (control) refused: no link to the ship", deck, cu, false, noShip);
             DkExpect("DK5 slab over the concrete strip (control) accepted", slab, cu, true);
             for (int i = 1; i < dkStrip.Count; i++)
             {

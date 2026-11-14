@@ -48,9 +48,7 @@
   <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Lay a new upper floor over it to replace it. Replacing or removing it returns no materials.</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>Damaged upper floor: lay a new one over it</PZ_DamagedSlabNoFloor>
   <PZ_ArmoredSlabDesc>Withstands frag grenades and mortar shells.</PZ_ArmoredSlabDesc>
-  <PZ_DeckNeedsShipBelow>Must be built directly above gravship substructure or a ship upper deck</PZ_DeckNeedsShipBelow>
-  <PZ_DeckAboveFirst>Remove the ship upper deck above first</PZ_DeckAboveFirst>
-  <PZ_DeckBelowFirst>Waiting for the deck below to be built</PZ_DeckBelowFirst>
+  <PZ_DeckNeedsShipLink>Must connect to the gravship's deck</PZ_DeckNeedsShipLink>
   <PZ_OverGravshipUseDeck>No upper floor over a gravship: use a ship upper deck</PZ_OverGravshipUseDeck>
   <PZ_OverGravshipUseStairs>No ordinary stairs on a gravship: use ship stairs</PZ_OverGravshipUseStairs>
   <PZ_ShipUpperCantFly>Ship upper decks can't fly: a ProjectZ patch failed (see the log)</PZ_ShipUpperCantFly>

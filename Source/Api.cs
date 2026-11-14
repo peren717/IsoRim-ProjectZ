@@ -156,10 +156,11 @@ namespace ProjectZ
         public static void RequestFogRefresh(Map map) => ReachFog.Request(map);
 
         // Another foundation that counts as a ship upper deck. On an upper floor it is built like the deck itself: directly
-        // on the floor support over open air, right above the ship (the deck's own placement rules), as an alternative to
-        // the deck (or in place of a deck when its own rules allow replacing substructure on the ground; never stacked); its
-        // terrain affordance need is met there by the floor support. ProjectZ then treats it as
-        // a deck: it carries what stands on it, flies with the ship, falls without the ship below it, is removed as a deck.
+        // on the floor support over open air, linked to the gravship's deck (the deck's own placement rules: next to it,
+        // or straight over or under it), as an alternative to the deck (or in place of a deck when its own rules allow
+        // replacing substructure on the ground; never stacked); its terrain affordance need is met there by the floor
+        // support. ProjectZ then treats it as a deck: it carries what stands on it, flies with the ship when it is linked
+        // to the engine, stands or falls by the game's roof support like any upper floor, is removed as a deck.
         // On the ground nothing changes (its own rules). Register once at startup (e.g. a mod's subarmor, a damaged deck).
         public static void RegisterDeckTerrain(TerrainDef def) => ShipDeck.Register(def);
 
@@ -318,8 +319,10 @@ namespace ProjectZ
 
         // ---- the ship's cells (5)
 
-        // Every substructure cell connected to the engine, on every floor (decks and stairs as ProjectZ joins them), with no
-        // substructure limit: what the engine's valid set would be with unlimited support. Into `into` (cleared first). For a
+        // Every substructure cell connected to the engine, on every floor, with no substructure limit: what the engine's
+        // valid set would be with unlimited support. Connected in 3D: 4 ways on a floor (the game's rule) and straight
+        // up or down through open cells (a stairs opening, a hole, the air of a hall), so overhanging decks, decks over a
+        // hollow hull and a second hull joined by a deck bridge are in it; a part cut off from the engine is not. Into `into` (cleared first). For a
         // mod that counts its own cells against the limit (e.g. a foundation it leaves out of the count) on upper decks too.
         // On a map without floors: the game's own flood fill. Main thread.
         public static void ShipCells(Building_GravEngine engine, HashSet<IntVec3> into, bool requireInsideFootprint = true)

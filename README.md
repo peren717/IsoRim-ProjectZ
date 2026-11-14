@@ -62,7 +62,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 
 ## Gravships
 
-- **Ship upper decks** stack on gravship substructure and fly with the ship; ship stairs join the decks.
+- **Ship upper decks** fly with the ship; ship stairs join the decks. A deck joins the ship next to its deck or straight over or under it, so decks may overhang the hull, span a hollow hull or bridge two hulls.
 - Ships with upper decks take off and land in 3D; the landing spot must have room for every deck.
 
 ## Compatibility

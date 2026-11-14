@@ -35,6 +35,7 @@ namespace ProjectZ
             (typeof(JobDriver_Mine), "ResetTicksToPickHit", null, "944e16f6ef2d0fe5", "ProjectZ, MineValues.PickHitTicks (ticks between pick hits)"),
             // (a lambda: the work toil's tick, the one MakeNewToils lambda taking an int; see Find)
             (typeof(JobDriver_AffectRoof), "<MakeNewToils>b__", new[] { typeof(int) }, "ccf76e120c31f25b", "ProjectZ, MineValues.RoofWorkPerTick (Remove roof's work a tick, 1.7)"),
+            (typeof(RimWorld.Planet.Gravship), "CopyCellContents", null, "e7e0c93257da9524", "ProjectZ, ShipRoofs.Take (the room record: a room's temperature and vacuum, once per room not at outdoor temperature)"),
         };
 
         // A method by name and parameters; a name starting with "<" is a compiler-made lambda: the method of the type or

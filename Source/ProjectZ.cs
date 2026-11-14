@@ -273,8 +273,6 @@ namespace ProjectZ
                 FloorRoof.Normalize(map);
                 // atriums: the column rule over the map once loading is done (saves from before, Atrium.cs)
                 Atrium.NormalizeLater(map);
-                // ship decks over cells that lost their substructure fall (ShipDeck)
-                ShipDeck.CheckAllLater(map);
                 // The void rows are a virtual wall (VoidRule): light blocked, no gas left there (older saves).
                 VoidRule.Apply(map);
             }

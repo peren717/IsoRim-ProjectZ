@@ -394,6 +394,18 @@ them from a `NoInlining` method of their own (see Version checks); on an older P
 | `MaxFloors` | the most floors a world or a map plan can have, the ground counted (a `MapFloorPlan` above it is ignored). A property read at run time, so an addon never compiles the number in |
 | `ShipDeckTerrain` | the terrain of the ship upper deck (`PZ_ShipDeck`); null without Odyssey. Other foundations registered with `RegisterDeckTerrain` are not it |
 
+## The ship's cells (Api 5)
+
+`ShipCells(engine, into, requireInsideFootprint = true)` fills `into` (cleared first) with every substructure cell
+connected to the engine on every floor, with no substructure limit: what the engine's valid set would be with unlimited
+support. For a mod that counts its own cells against the limit on upper decks too. Main thread.
+
+- Connected means in 3D: the 4 neighbours on a floor (the game's rule) and straight up or down through open cells (a
+  stairs opening, a hole in a deck, the air of a hall). Overhanging decks, decks over a hollow hull and a second hull
+  joined by a deck bridge are in the set; a part cut off from the engine is not.
+- Cells are map cells: an upper deck's cell lies in its floor's rows (`FloorOf`, `GroundCellOf` give its floor and column).
+- On a map without floors it is the game's own `GravshipUtility.GetConnectedSubstructure`.
+
 ## Interceptors between floors (Api 12)
 
 `InterceptorDistance(incoming, position, centre, map, out distance)` is the one measure ProjectZ's interceptors use between

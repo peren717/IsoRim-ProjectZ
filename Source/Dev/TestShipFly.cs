@@ -55,6 +55,15 @@ namespace ProjectZ.Dev
         private static Rot4 sfRot;
         // (the stage after a landing: shipstairs flies the same way and checks its own landing)
         private static string sfLandedStage = "sf_landed";
+        // (the ground cells of the flying ship: the shipfly, shipstairs and shiproofatrium ships are 13 x 11 with two
+        // thruster stubs; modes shipdump and shiphull fly other ships)
+        private static int sfFootprint = 147;
+        // (a mode's own checks in flight, once, when the ship is travelling; and its own landing on the new map instead of
+        // SfLandNew: it ends with SfConfirm)
+        // (the flown ship has no deck upstairs: the "all floors shown" check of the cutscene does not apply; shiphull H10)
+        private static bool sfOneStorey;
+        private static Action sfMidHook;
+        private static Action<WorldComponent_GravshipController, GravshipLandingMarker> sfLandHook;
         private static readonly Dictionary<IntVec3, SfCellRec> sfCells = new Dictionary<IntVec3, SfCellRec>();
         private static readonly List<SfThing> sfThings = new List<SfThing>();
         private static readonly Dictionary<string, IntVec3> sfPawns = new Dictionary<string, IntVec3>();
@@ -419,7 +428,7 @@ namespace ProjectZ.Dev
                 Draft(carrier, true);
             }
             StartTicks(120, "sf_hole2");
-            Info($"F1 hole: deck at {hole} {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}");
+            Info($"F1 hole: deck at {hole} {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {HullCompat.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}");
         }
 
         private static void SfHole2(Map map)
@@ -427,8 +436,8 @@ namespace ProjectZ.Dev
             IntVec3 hole = SFF(11, 10, 1, map), up = SFF(11, 10, 2, map);
             Building_GravEngine e = GlEngine(map);
             Result("F1 a colonist took the floor-2 deck up: a hole under the floor-3 deck, which stays on its floor roof, aboard (a ship column hole)",
-                !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && ShipColumn.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && e.ValidSubstructure.Contains(up),
-                $"deck {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}, above in the ship set {e.ValidSubstructure.Contains(up)}");
+                !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && HullCompat.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && e.ValidSubstructure.Contains(up),
+                $"deck {ShipDeck.At(hole, map)}, above {ShipDeck.At(up, map)}, hole {HullCompat.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}, above in the ship set {e.ValidSubstructure.Contains(up)}");
             SfWalked2(map);
         }
 
@@ -535,7 +544,7 @@ namespace ProjectZ.Dev
             foreach (IntVec3 c in set.ToList())
             {
                 IntVec3 up = FloorRoof.Above(c, map);
-                if (up.IsValid && ShipColumn.Hole(up, map) && !sfCells.ContainsKey(ShipLocal.From(up, o, map)))
+                if (up.IsValid && HullCompat.Hole(up, map) && !sfCells.ContainsKey(ShipLocal.From(up, o, map)))
                 {
                     sfCells[ShipLocal.From(up, o, map)] = new SfCellRec { found = Def(tg.FoundationAt(up)), terr = Def(tg.TerrainAt(up)), under = Def(tg.UnderTerrainAt(up)), roof = map.roofGrid.RoofAt(up)?.defName ?? "-" };
                     sfHoleOff = ShipLocal.From(up, o, map);
@@ -614,6 +623,10 @@ namespace ProjectZ.Dev
                 Finish();
                 return;
             }
+            if (HdOn)
+            {
+                HdBefore(map, engine, $"leg {sfLeg}");   // (the identity dump, TestShipHullDump)
+            }
             Info($"leg {sfLeg}: launch from {map} (tile {map.Tile}) to tile {dest}: engine {GlCell(engine.Position, map)}, set {engine.ValidSubstructure.Count} ({SsFloors(engine.ValidSubstructure, map)}), fuel {engine.TotalFuel:0}");
             // (leg 1 flies with the ground in view, leg 2 with the top floor in view: what the player sees in each)
             FloorView.Set(sfLeg == 2 ? 2 : 0);
@@ -668,6 +681,16 @@ namespace ProjectZ.Dev
                 sfLastStage = st;
                 sfStageAt = Time.realtimeSinceStartup;
                 sfShotsTaken = 0;
+                if (st == "travelling" && HdOn)
+                {
+                    HdCapture($"leg {sfLeg}");
+                }
+                if (st == "travelling" && sfMidHook != null)
+                {
+                    Action mid = sfMidHook;
+                    sfMidHook = null;
+                    mid();
+                }
                 if (st == "travelling" && sfLeg == 1 && !sfSaved)
                 {
                     SfMidFlight();
@@ -681,7 +704,16 @@ namespace ProjectZ.Dev
             if (cut && sfShotsTaken < at.Length && left > 0f && left <= 10f && progress >= at[sfShotsTaken])
             {
                 Info($"leg {sfLeg}: {st} frame {sfShotsTaken + 1} at progress {progress:0.00}, floor view {FloorView.Current}");
-                if (sfShotsTaken == 0 && IsoRimBridge.Present && IsoRimBridge.View3DOn)
+                if (sfShotsTaken == 0 && st == "takeoff")
+                {
+                    SfEnginePos(ctl);
+                }
+                if (sfShotsTaken == 0 && IsoRimBridge.Present && IsoRimBridge.View3DOn && sfOneStorey)
+                {
+                    // (a ship with no deck upstairs: IsoRim keeps the player's view, as for any one-storey ship)
+                    Info($"leg {sfLeg}: one-storey ship, the player's floor view kept during the {st}: view {FloorView.Current}");
+                }
+                else if (sfShotsTaken == 0 && IsoRimBridge.Present && IsoRimBridge.View3DOn)
                 {
                     AnnexMapComponent an = ProjectZ.Annex(Find.CurrentMap);
                     Result($"leg {sfLeg}: all floors shown during the {st} (IsoRim 3D)", an != null && FloorView.Current == an.floors - 1, $"view {FloorView.Current}, floors {an?.floors}");
@@ -706,7 +738,13 @@ namespace ProjectZ.Dev
                 else if (sfFrames - sfMarkerSeen >= 30)
                 {
                     sfLandQueued = false;
-                    if (sfLeg == 1)
+                    if (sfLeg == 1 && sfLandHook != null)
+                    {
+                        Action<WorldComponent_GravshipController, GravshipLandingMarker> land = sfLandHook;
+                        sfLandHook = null;
+                        land(ctl, marker);
+                    }
+                    else if (sfLeg == 1)
                     {
                         SfLandNew(ctl, marker);
                     }
@@ -721,7 +759,7 @@ namespace ProjectZ.Dev
             {
                 Info($"leg {sfLeg}: landing ended after {sfFrames} frames");
                 Find.TickManager.CurTimeSpeed = TimeSpeed.Paused;
-                Wait(30, sfLandedStage);
+                Wait(30, HdOn ? "hd_landed" : sfLandedStage);   // (the identity dump first, then the mode's own landed stage)
                 return;
             }
             if (sfFrames > 30000)
@@ -798,12 +836,39 @@ namespace ProjectZ.Dev
             stage = "sf_fly";
         }
 
+        private static AccessTools.FieldRef<WorldComponent_GravshipController, GravshipRenderer> sfRendererBound;
+        private static AccessTools.FieldRef<GravshipRenderer, Vector3> sfRendererEngineBound;
+        private static AccessTools.FieldRef<GravshipRenderer, Gravship> sfRendererShipBound;
+
+        // The take-off cutscene's engine position as the game's renderer holds it during the real take-off (read from the
+        // renderer: GravshipRenderer.takeoffOrLandingEnginePos, what BeginCutscene was given): in the engine's ground
+        // column, also for an engine on an upper deck, where the game passes the engine's raw position in the deck's rows
+        // (ShipLocal's BeginCutscene prefix). The flames, the engine's glow and the distortion are drawn from it.
+        private static void SfEnginePos(WorldComponent_GravshipController ctl)
+        {
+            sfRendererBound ??= AccessTools.FieldRefAccess<WorldComponent_GravshipController, GravshipRenderer>("gravshipRenderer");
+            sfRendererEngineBound ??= AccessTools.FieldRefAccess<GravshipRenderer, Vector3>("takeoffOrLandingEnginePos");
+            sfRendererShipBound ??= AccessTools.FieldRefAccess<GravshipRenderer, Gravship>("gravship");
+            GravshipRenderer r = sfRendererBound(ctl);
+            Gravship g = r == null ? null : sfRendererShipBound(r);
+            Map map = Find.CurrentMap;
+            if (g == null || map == null)
+            {
+                Result($"leg {sfLeg}: the take-off cutscene's engine position", false, $"renderer {r != null}, ship {g != null}, map {map}");
+                return;
+            }
+            Vector3 pos = sfRendererEngineBound(r);
+            IntVec3 raw = g.originalPosition, want = ProjectZ.GroundCellOf(raw, map), got = pos.ToIntVec3();
+            Result($"leg {sfLeg}: the take-off cutscene's engine position is in the engine's ground column", want.IsValid && got.x == want.x && got.z == want.z,
+                $"the renderer holds {pos} (cell ({got.x}, {got.z})); the engine stood at {raw} on floor {ProjectZ.FloorOf(raw, map) + 1}, its ground column ({want.x}, {want.z})");
+        }
+
         // F3: the new map's marker; turned East by the move designator next to it.
         private static void SfLandNew(WorldComponent_GravshipController ctl, GravshipLandingMarker marker)
         {
             Map map = marker.Map;
             Info($"new map {map} size {map.Size}, floors {ProjectZ.Annex(map)?.floors}, marker at {marker.Position}, cells {marker.GravshipCells.Count()} (all ground {marker.GravshipCells.All(c => c.y == 0)})");
-            Result("F3 the marker's cells are the footprint", marker.GravshipCells.Count() == 147 && marker.GravshipCells.All(c => c.y == 0), $"{marker.GravshipCells.Count()}");
+            Result("F3 the marker's cells are the footprint", marker.GravshipCells.Count() == sfFootprint && marker.GravshipCells.All(c => c.y == 0), $"{marker.GravshipCells.Count()}");
             IntVec3 start = marker.Position;
             marker.GravshipRotation = Rot4.East;
             Designator_MoveGravship d = ctl.MoveDesignator();
@@ -998,8 +1063,8 @@ namespace ProjectZ.Dev
             if (sfHoles > 0)
             {
                 IntVec3 hc = SfAt(sfHoleOff, sfRoot, sfRot, map), hu = FloorRoof.Above(hc, map);
-                Result($"{leg} the hole under the kept floor-3 deck landed with it: open air with the floor roof, the deck above on it, still a ship column hole", !ShipDeck.At(hc, map) && hu.IsValid && ShipDeck.At(hu, map) && map.roofGrid.RoofAt(hc) == PZDefOf.PZ_FloorRoof && ShipColumn.Hole(hc, map) && e.ValidSubstructure.Contains(hu),
-                    $"hole {hc} f{ProjectZ.FloorOf(hc, map) + 1}: {Def(tg.TerrainAt(hc))}, roof {map.roofGrid.RoofAt(hc)?.defName ?? "none"}, deck above {hu.IsValid && ShipDeck.At(hu, map)}, hole {ShipColumn.Hole(hc, map)}, above aboard {e.ValidSubstructure.Contains(hu)}");
+                Result($"{leg} the hole under the kept floor-3 deck landed with it: open air with the floor roof, the deck above on it, still a ship column hole", !ShipDeck.At(hc, map) && hu.IsValid && ShipDeck.At(hu, map) && map.roofGrid.RoofAt(hc) == PZDefOf.PZ_FloorRoof && HullCompat.Hole(hc, map) && e.ValidSubstructure.Contains(hu),
+                    $"hole {hc} f{ProjectZ.FloorOf(hc, map) + 1}: {Def(tg.TerrainAt(hc))}, roof {map.roofGrid.RoofAt(hc)?.defName ?? "none"}, deck above {hu.IsValid && ShipDeck.At(hu, map)}, hole {HullCompat.Hole(hc, map)}, above aboard {e.ValidSubstructure.Contains(hu)}");
             }
             else
             {

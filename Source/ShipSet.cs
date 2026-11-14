@@ -12,32 +12,47 @@ using Verse;
 
 namespace ProjectZ
 {
-    // Multi-level gravships, phase P2 (isorim-pz-multilevel-gravship.md, v2.1 A/B/F, v2.4): the 3D ship set.
-    //   - Which cells are the ship (GravshipUtility.GetConnectedSubstructure, replaced on maps with floors): the engine's
-    //     ground column first, then vanilla's own ground flood fill from there, then floor by floor upwards. A cell on a
-    //     floor counts only when the cell right below it counts, so the ship is the ground ship plus its stacked deck
-    //     columns, and no accepted cell ever floats. The opening of ship stairs and a hole under a kept deck (Q6 (b)) are
-    //     column cells too (ShipColumn.Open): not in the
-    //     set itself (no foundation; its roof flies with ShipStairs.TakeOpeningRoofs), but the column goes on through it,
-    //     so a deck over it is aboard. The limit (SubstructureSupport) cuts the order: over it, the top floors
-    //     drop out first. An engine standing on a deck is always aboard (its own columns up to its floor come right after
-    //     the ground cell it starts from; the ground flood keeps room for them).
+    // Multi-level gravships (isorim-pz-multilevel-gravship.md, v2.1 A/B/F, v2.4; the 3D hull: isorim-pz-hull3d-design.md
+    // A): the 3D ship set.
+    //   - Which cells are the ship (GravshipUtility.GetConnectedSubstructure, replaced on maps with floors): everything
+    //     linked to the engine over gravship floor: 4 ways on a floor (vanilla's rule) and straight up or down through
+    //     open cells (ShipLink). The engine is the only root. So decks may overhang the ground ship, span a hollow hull or
+    //     bridge two ground hulls; a part cut off from the engine is not in the set.
+    //   - The order (it is the order the limit, SubstructureSupport, cuts): the floor part the engine stands over first
+    //     (the lowest gravship floor straight under it: the ground for a stacked ship), by the game's own flood fill; then
+    //     always the lowest floor that has cells linked to the set from above or below, flooded from those cells in the
+    //     order their columns came into the set. So the set is always linked to the engine, lower floors come first
+    //     wherever they can be reached and the top floors drop out first. A ship of stacked decks is filled ground first,
+    //     then floor by floor in the ground's order, exactly as before the 3D hull.
+    //   - The engine is always aboard, also on a deck and over the limit: its own block (the cells under it, and those of
+    //     its columns between the first floor part and its floor) comes right after the first floor part, which keeps
+    //     room for it. A block cell comes with the set straight under it, or, with no gravship floor under it at all (a
+    //     hollow), with a block cell beside it; a cell under the engine itself also comes with a cell beside it whatever is
+    //     under it (a ground cell cut off from the hull). These rules are repeated until nothing changes, so every cell
+    //     under the engine is aboard. One exception, as before the 3D hull and as vanilla with fewer cells than its own
+    //     fill needs to cover the engine: a limit so small that the first fill ends inside the engine's own columns
+    //     (starved); then only what stands straight over cells aboard comes.
+    //   - When the limit cuts the first floor part, the room kept goes to the block and to what stands straight over the
+    //     cells aboard, nothing spreads sideways or downward any more (as before the 3D hull).
     //   - The engine and extender footprint is a true 3D sphere: ground distance plus the height between the floors
     //     (Range3D.Storey per floor), no height bonus. On one floor it is vanilla's circle.
-    //   - The 4 vanilla sites that read the ship set as a flat area get its ground cells only: the capture bounds
-    //     (GravshipCapturer.BeginGravshipRender), Gravship.engineToCenter and the two indoor-mask bakes of the take-off and
-    //     landing cutscenes (WorldComponent_GravshipController).
+    //   - The 4 vanilla sites that read the ship set as a flat area get the ship's shadow, the ground cell under every
+    //     ship cell (Ground): the capture bounds (GravshipCapturer.BeginGravshipRender), Gravship.engineToCenter and the two
+    //     indoor-mask bakes of the take-off and landing cutscenes (WorldComponent_GravshipController).
     //   - A thruster's exhaust zone stays on the thruster's floor (map-cell callers only: IsBlocked and the placing ghost).
-    //   - Upper floors fly with the ship since P4 (ShipLocal.cs, ShipLanding.cs).
+    //   - Upper floors fly with the ship (ShipLocal.cs, ShipRoofs.cs, ShipLanding.cs).
     // Maps without floors, and ships without decks, behave exactly as vanilla.
     public static class ShipSet
     {
         // Test switch (-projectznoshipset): vanilla's flat flood fill and ground-projection footprint of P1.
         public static bool Off;
 
-        private static readonly List<IntVec3> tmpPrev = new List<IntVec3>();
-        private static readonly List<IntVec3> tmpCur = new List<IntVec3>();
-        private static readonly List<IntVec3> tmpGround = new List<IntVec3>();
+        // scratch of one Fill (main thread; cleared when it ends)
+        private static readonly List<IntVec3> tmpWave = new List<IntVec3>();
+        private static readonly List<IntVec3> tmpRoots = new List<IntVec3>();
+        private static readonly List<List<IntVec3>> tmpSeeds = new List<List<IntVec3>>();
+        private static readonly HashSet<IntVec3> tmpSeeded = new HashSet<IntVec3>();
+        private static readonly Dictionary<int, int> tmpColumn = new Dictionary<int, int>();
 
         // GetConnectedSubstructure on a map with floors.
         public static void Fill(Building_GravEngine engine, HashSet<IntVec3> cells, int maxCells, bool requireInsideFootprint)
@@ -57,21 +72,31 @@ namespace ProjectZ
                 // without the tag, e.g. another faction's ship, never flies with the player's ship)
                 return f != null && f.IsSubstructure && (!requireInsideFootprint || GravshipUtility.InsideFootprint(x, map, makers));
             }
+            Predicate<IntVec3> ok = Ok;
+            // (a cell of floor f; the ground by its rows, as the flood fill here always asked)
+            bool OnFloor(IntVec3 x, int f) => f == 0 ? x.z < an.groundZ : ProjectZ.FloorOf(x, map) == f;
 
-            IntVec3 eg = ProjectZ.GroundCellOf(engine.Position, map);
             int ke = ProjectZ.FloorOf(engine.Position, map);
-            if (!eg.IsValid || ke < 0)
+            // the root: the engine's own cell, as vanilla (no gravship floor under the engine: no ship)
+            if (ke < 0 || !Ok(engine.Position))
             {
                 return;
             }
-            // the engine's own columns above the ground, up to its floor (an engine on a deck)
+            // where the fill starts: the lowest gravship floor straight under the engine (a stacked ship: the ground)
+            IntVec3 start = engine.Position;
+            for (IntVec3 b = ShipLink.Down(start, map, ok); b.IsValid; b = ShipLink.Down(start, map, ok))
+            {
+                start = b;
+            }
+            int startFloor = ProjectZ.FloorOf(start, map);
+            // the engine's own block on the floors above that, up to its floor (an engine on a deck)
             List<IntVec3> pinned = new List<IntVec3>();
-            if (ke >= 1)
+            if (ke > startFloor)
             {
                 foreach (IntVec3 c in engine.OccupiedRect())
                 {
                     IntVec3 g = ProjectZ.GroundCellOf(c, map);
-                    for (int k = 1; k <= ke; k++)
+                    for (int k = startFloor + 1; k <= ke; k++)
                     {
                         IntVec3 u = ProjectZ.CellOnFloor(g, k, map);
                         if (u.IsValid && Ok(u))
@@ -81,70 +106,186 @@ namespace ProjectZ
                     }
                 }
             }
-            int groundMax = maxCells == int.MaxValue ? int.MaxValue : Math.Max(1, maxCells - pinned.Count);
-            // the ground: vanilla's own flood fill (same order, so a one-storey ship is cut exactly as vanilla cuts it)
-            tmpGround.Clear();
-            map.floodFiller.FloodFill(eg, x => x.z < an.groundZ && Ok(x), x =>
+            tmpSeeded.Clear();
+            tmpColumn.Clear();
+            while (tmpSeeds.Count <= an.MaxLevel)
             {
-                cells.Add(x);
-                tmpGround.Add(x);
-                return false;
-            }, groundMax);
-            // the engine's columns, bottom-up: only on a cell that counts below
-            foreach (IntVec3 u in pinned.OrderBy(c => c.z))
+                tmpSeeds.Add(new List<IntVec3>());
+            }
+            for (int k = 0; k < tmpSeeds.Count; k++)
             {
-                if (cells.Count >= maxCells)
+                tmpSeeds[k].Clear();   // (also at the start: a fill that threw must not leave its seeds to the next)
+            }
+            // a cell came into the set: its column's place in the order, and the cells linked to it from above and below
+            // wait as seeds for their floor's turn
+            void Seed(IntVec3 s)
+            {
+                int k = s.IsValid ? ProjectZ.FloorOf(s, map) : -1;
+                if (k >= 0 && k < tmpSeeds.Count && !cells.Contains(s) && tmpSeeded.Add(s))
                 {
-                    break;
-                }
-                IntVec3 b = FloorRoof.Below(u, map);
-                while (!cells.Contains(b) && ShipColumn.Open(b, map))
-                {
-                    b = FloorRoof.Below(b, map);   // (through a ship stairs opening or a hole, ShipColumn.Open)
-                }
-                if (cells.Contains(b))
-                {
-                    cells.Add(u);
+                    tmpSeeds[k].Add(s);
                 }
             }
-            // floor by floor, in the order of the floor below
-            tmpPrev.Clear();
-            tmpPrev.AddRange(tmpGround);
-            for (int k = 1; k <= an.MaxLevel && tmpPrev.Count > 0 && cells.Count < maxCells; k++)
+            // (the limit cut the first floor part: only what stands straight over the cells aboard still comes)
+            bool cut = false;
+            void Came(IntVec3 x)
             {
-                tmpCur.Clear();
-                for (int i = 0; i < tmpPrev.Count; i++)
+                int col = map.cellIndices.CellToIndex(ProjectZ.GroundCellOf(x, map));
+                if (!tmpColumn.ContainsKey(col))
                 {
-                    IntVec3 u = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(tmpPrev[i], map), k, map);
-                    if (!u.IsValid)
+                    tmpColumn.Add(col, tmpColumn.Count);
+                }
+                Seed(ShipLink.Up(x, map, ok));
+                if (!cut)
+                {
+                    Seed(ShipLink.Down(x, map, ok));
+                }
+            }
+            int ColumnOrder(IntVec3 x) => tmpColumn.TryGetValue(map.cellIndices.CellToIndex(ProjectZ.GroundCellOf(x, map)), out int o) ? o : int.MaxValue;
+
+            // the first floor part: vanilla's own flood fill (same order, so a one-storey ship is cut exactly as vanilla
+            // cuts it); room is kept for the engine's block
+            int firstMax = maxCells == int.MaxValue ? int.MaxValue : Math.Max(1, maxCells - pinned.Count);
+            tmpWave.Clear();
+            map.floodFiller.FloodFill(start, x => OnFloor(x, startFloor) && Ok(x), x =>
+            {
+                cells.Add(x);
+                tmpWave.Add(x);
+                return false;
+            }, firstMax);
+            cut = tmpWave.Count >= firstMax;
+            for (int i = 0; i < tmpWave.Count; i++)
+            {
+                Came(tmpWave[i]);
+            }
+            // The first fill ended inside the engine's own columns: a cell of them on the first floor, joined to the start
+            // cell within them, is not aboard. So little room that the cells under the engine can't all come (a limit of a
+            // few cells; the game's own fill needs more than that to cover an engine too).
+            bool starved = false;
+            if (cut && pinned.Count > 0)
+            {
+                HashSet<IntVec3> own = new HashSet<IntVec3>();
+                foreach (IntVec3 c in engine.OccupiedRect())
+                {
+                    IntVec3 s = ProjectZ.CellOnFloor(ProjectZ.GroundCellOf(c, map), startFloor, map);
+                    if (s.IsValid && Ok(s))
                     {
-                        continue;
+                        own.Add(s);
                     }
-                    if (cells.Contains(u))
+                }
+                tmpRoots.Clear();
+                tmpRoots.Add(start);
+                own.Remove(start);
+                for (int i = 0; i < tmpRoots.Count && !starved; i++)
+                {
+                    for (int d = 0; d < 4; d++)
                     {
-                        tmpCur.Add(u);   // (an engine column cell, already in)
-                        continue;
+                        IntVec3 n = tmpRoots[i] + GenAdj.CardinalDirections[d];
+                        if (own.Remove(n))
+                        {
+                            starved |= !cells.Contains(n);
+                            tmpRoots.Add(n);
+                        }
                     }
+                }
+                tmpRoots.Clear();
+            }
+            // The engine's block, bottom-up, until nothing changes:
+            //   - a cell with the set straight under it;
+            //   - a cell with no gravship floor under it at all (a block partly over a hollow), next to a cell aboard;
+            //   - a cell under the engine itself, next to a cell aboard, whatever is under it (not when starved).
+            // The cells next to the block wait as seeds too: the block is no flood of its own.
+            tmpWave.Clear();
+            List<IntVec3> block = pinned.OrderBy(c => c.z).ToList();
+            for (bool more = true; more && cells.Count < maxCells;)
+            {
+                more = false;
+                foreach (IntVec3 u in block)
+                {
                     if (cells.Count >= maxCells)
                     {
                         break;
                     }
-                    if (Ok(u))
+                    if (cells.Contains(u))
+                    {
+                        continue;
+                    }
+                    IntVec3 b = ShipLink.Down(u, map, ok);
+                    bool join = b.IsValid && cells.Contains(b);
+                    if (!join && (!b.IsValid || !starved && ProjectZ.FloorOf(u, map) == ke))
+                    {
+                        for (int d = 0; d < 4 && !join; d++)
+                        {
+                            IntVec3 n = u + GenAdj.CardinalDirections[d];
+                            join = cells.Contains(n) && ProjectZ.SameBand(n, u, map);
+                        }
+                    }
+                    if (join)
                     {
                         cells.Add(u);
-                        tmpCur.Add(u);
-                    }
-                    else if (ShipColumn.Open(u, map))
-                    {
-                        tmpCur.Add(u);   // (a ship stairs opening or a hole: the column goes on, the cell itself is no substructure)
+                        tmpWave.Add(u);
+                        more = true;
                     }
                 }
-                tmpPrev.Clear();
-                tmpPrev.AddRange(tmpCur);
             }
-            tmpPrev.Clear();
-            tmpCur.Clear();
-            tmpGround.Clear();
+            for (int i = 0; i < tmpWave.Count; i++)
+            {
+                Came(tmpWave[i]);
+                for (int d = 0; d < 4 && !cut; d++)
+                {
+                    IntVec3 n = tmpWave[i] + GenAdj.CardinalDirections[d];
+                    if (n.InBounds(map) && ProjectZ.SameBand(n, tmpWave[i], map) && Ok(n))
+                    {
+                        Seed(n);
+                    }
+                }
+            }
+            // then always the lowest floor with seeds: flooded from them in their columns' order
+            while (cells.Count < maxCells)
+            {
+                int f = -1;
+                for (int k = 0; k < tmpSeeds.Count && f < 0; k++)
+                {
+                    if (tmpSeeds[k].Count > 0)
+                    {
+                        f = k;
+                    }
+                }
+                if (f < 0)
+                {
+                    break;
+                }
+                tmpRoots.Clear();
+                foreach (IntVec3 s in tmpSeeds[f].Where(s => !cells.Contains(s)).OrderBy(ColumnOrder))   // (a stable sort)
+                {
+                    tmpRoots.Add(s);
+                }
+                tmpSeeds[f].Clear();
+                if (tmpRoots.Count == 0)
+                {
+                    continue;
+                }
+                tmpWave.Clear();
+                int floor = f;
+                map.floodFiller.FloodFill(IntVec3.Invalid, x => !cut && OnFloor(x, floor) && Ok(x) && !cells.Contains(x), x =>
+                {
+                    cells.Add(x);
+                    tmpWave.Add(x);
+                    return false;
+                }, maxCells == int.MaxValue ? int.MaxValue : maxCells - cells.Count, false, tmpRoots);
+                for (int i = 0; i < tmpWave.Count; i++)
+                {
+                    Came(tmpWave[i]);
+                }
+            }
+            for (int k = 0; k < tmpSeeds.Count; k++)
+            {
+                tmpSeeds[k].Clear();
+            }
+            tmpSeeded.Clear();
+            tmpColumn.Clear();
+            tmpWave.Clear();
+            tmpRoots.Clear();
         }
 
         // Is loc inside the field of one of the makers: a true 3D sphere around each.
@@ -176,7 +317,9 @@ namespace ProjectZ
             return false;
         }
 
-        // The ship's cells on the ground (the set itself when it has none upstairs).
+        // The ship read as a flat area: its shadow, the ground cell under every ship cell (the set itself when it has no
+        // cell upstairs). A stacked ship's shadow is its ground cells; an overhang or a deck over a hollow adds the ground
+        // under it, as the game's own Gravship.bounds does (built from the keys' x and z).
         public static HashSet<IntVec3> Ground(Building_GravEngine engine)
         {
             HashSet<IntVec3> all = engine.ValidSubstructure;
@@ -186,7 +329,16 @@ namespace ProjectZ
             {
                 return all;
             }
-            return new HashSet<IntVec3>(all.Where(c => c.z < an.groundZ));
+            HashSet<IntVec3> flat = new HashSet<IntVec3>();
+            foreach (IntVec3 c in all)
+            {
+                IntVec3 g = c.z < an.groundZ ? c : ProjectZ.GroundCellOf(c, map);
+                if (g.IsValid)
+                {
+                    flat.Add(g);
+                }
+            }
+            return flat;
         }
 
         // Cells of the ship on an upper floor (0 on maps without floors).
@@ -253,7 +405,7 @@ namespace ProjectZ
         }
     }
 
-    // ---- the ship set read as a flat area: its ground cells only
+    // ---- the ship set read as a flat area: its shadow (ShipSet.Ground)
 
     [HarmonyPatch]
     public static class ShipSetGround_Patch

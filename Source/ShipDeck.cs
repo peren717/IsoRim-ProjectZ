@@ -6,81 +6,153 @@ using Verse.AI;
 
 namespace ProjectZ
 {
-    // Multi-level gravships, phase P1 (isorim-pz-multilevel-gravship.md, v2.0 - v2.4): the ship upper deck PZ_ShipDeck.
-    // It IS vanilla gravship substructure (a copy of the Substructure def with its tag and affordances), laid as the
-    // foundation over open air on an upper floor, only right above the ship's column: ground substructure, another deck
-    // or the opening of ship stairs (ShipColumn; no overhang).
+    // Multi-level gravships (isorim-pz-multilevel-gravship.md, v2.0 - v2.4; the 3D hull: isorim-pz-hull3d-design.md): the
+    // ship upper deck PZ_ShipDeck. It IS vanilla gravship substructure (a copy of the Substructure def with its tag and
+    // affordances), laid as the foundation over open air on an upper floor.
     // Because of the tag, vanilla treats deck cells as substructure by itself (ship parts placed on them, the
     // substructure overlay, "remove foundation"); ordinary slabs and stairs over it are refused by SlabSupport.BuildBlocked.
-    //   - Placement: PlaceWorker_ShipDeck (Check); a planned deck waits for the deck or substructure below (CanConstruct).
+    //   - Placement: PlaceWorker_ShipDeck (Check). A deck must be linked to the gravship's deck (ShipLink.Would): next to
+    //     substructure or a deck on its floor, or straight above or below one through open cells; built or planned. So a
+    //     deck may overhang the ship or span a hollow hull, a loose island is refused. A planned deck waits until it is
+    //     linked to a built one (CanConstruct): decks are built outward from the ship.
     //   - Support (user decision 2026-10-17): the game's roof rules, as for any upper floor: the roof under a deck
     //     (PZ_FloorRoof) needs a wall, column or stairs within range below, at placement (planned decks next to it count)
-    //     and when built; without one it collapses with the deck. Separately, a deck needs a ship column cell right
-    //     below it (placement, and the fall below).
-    //   - Removal: the vanilla remove-foundation tool. An upper deck may go from under a deck (removal design Q6 (b), user
-    //     2026-11-01): the deck above stays over the hole and flies (ShipColumn.Hole); only the ground substructure under a
-    //     deck is refused ("remove the deck above first"), the deck would lose the ship under it. What stands on
-    //     a removed deck falls to the floor below (Slab.MoveOff, the gravity rule; the worker stands on a next cell,
-    //     WorkSpot), what was laid on it goes. Automatic work takes upper decks up in the slabs' peel order (SlabPeel, user
-    //     2026-11-14: farthest from the stairs first, so none is cut off); a forced order skips it.
-    //   - Falling: a deck whose cell below lost its substructure falls through the slab collapse (SlabCollapse): its roof
-    //     cell is marked to collapse, the game's collapse buffer drops it with the deck (one hook there, S1). Decks above it
-    //     follow. This runs on any foundation removal, after a gravship takes off (decks left out of the ship set stay
-    //     behind and fall) and once when a map loads.
-    // Ship set, footprint and launch (P2): ShipSet.cs. Decks over the ship are ship cells; the engine and extender
-    // footprint is a 3D sphere.
+    //     and when built; without one it collapses with the deck (SlabCollapse). Nothing else makes a deck fall.
+    //   - Removal: the vanilla remove-foundation tool. A deck or the substructure under one may go (removal design Q6 (b),
+    //     user 2026-11-01; hull3d G4): what is over it stays, resting on its roof. Whatever that cuts off from the engine
+    //     is no longer in the ship set (ShipSet) and stays behind at a take-off, as vanilla's disconnected substructure.
+    //     What stands on a removed deck falls to the floor below (Slab.MoveOff, the gravity rule; the worker stands on a
+    //     next cell, WorkSpot), what was laid on it goes. Automatic work takes upper decks up in the slabs' peel order
+    //     (SlabPeel, user 2026-11-14: farthest from the stairs first, so none is cut off); a forced order skips it.
+    // Ship set, footprint and launch: ShipSet.cs. The engine and extender footprint is a 3D sphere.
     // Without Odyssey the def is not loaded (MayRequire) and nothing here does anything.
 
-    // The ship's column (fix 2026-10-17, user rule "a staircase governs only its own next floor"): a cell that counts as
-    // part of the ship for anything above it. Gravship substructure or a ship upper deck; with countPlanned also a
-    // blueprint or frame of one; the stairwell opening of ship stairs (open air over a ramp, built or planned,
-    // ShipStairs.Opening): it flies with the ship, so a deck may go over it as over any deck; and a hole left by a deck taken
-    // up under a deck (Hole, Q6 (b)). Every "is there ship right
-    // below" question asks this: deck placement and construction, the ship stairs' exit, the deck fall (runtime and at
-    // load), the ship set's column walk, and the ordinary-slab and ordinary-stairs refusal over a ship.
-    public static class ShipColumn
+    // How the ship hangs together across floors (hull3d rule 1): the one place for the link rule. Only floors count,
+    // walls and roofs play no part.
+    //   - Gravship floor: ground substructure or a ship deck (Floor).
+    //   - On one floor: the 4 neighbours (as vanilla's substructure).
+    //   - Between floors: the vertical link (Up, Down). From a cell, its column is walked through open cells (the opening
+    //     of ship stairs, a hole, an atrium, plain open air); the first cell that is not open is linked if it is gravship
+    //     floor. So a deck over a tall hall or over a hole is linked to the floor under it, and a deck with another floor
+    //     (an ordinary slab) between it and the ship is not.
+    // Asked by: the ship set (ShipSet.Fill, with the game's own "is substructure" test), deck placement and construction
+    // (Would), the ship stairs' exit, the roofs that fly (ShipRoofs), the ordinary-slab and ordinary-stairs refusal over a
+    // ship and IsoRim's ship roofs (OverShip).
+    public static class ShipLink
     {
-        public static bool Cell(IntVec3 c, Map map, bool countPlanned = false)
+        // An open cell: an upper-floor cell with no foundation and open air as its top terrain.
+        public static bool Open(IntVec3 c, Map map)
         {
-            return SlabSupport.Gravship(c, map) || Open(c, map) || countPlanned && ShipDeck.Planned(c, map);
+            return c.IsValid && c.InBounds(map) && ProjectZ.FloorOf(c, map) >= 1
+                && map.terrainGrid.FoundationAt(c) == null && map.terrainGrid.TopTerrainAt(c) == PZDefOf.PZ_OpenAir;
         }
 
-        // An open cell of the ship's column: the opening of ship stairs, or a hole (Hole). Not in the ship set itself (no
-        // foundation; its roof flies with ShipStairs.TakeOpeningRoofs), but the column goes on through it.
-        public static bool Open(IntVec3 c, Map map) => ShipStairs.Opening(c, map) || Hole(c, map);
-
-        // A hole in the ship (removal design Q6 (b), user 2026-11-01): an upper-floor deck taken up under a deck that stays.
-        // An open-air cell with no foundation, a ship deck above it (over more such holes) and the ship's column below it
-        // (over more holes or stairs openings). The deck above keeps resting on the roof over the hole and still flies.
-        public static bool Hole(IntVec3 c, Map map)
+        // Gravship floor at c: ground substructure or a ship deck; with planned also a blueprint or frame of one.
+        public static bool Floor(IntVec3 c, Map map, bool planned = false)
         {
-            if (PZDefOf.PZ_ShipDeck == null || !c.IsValid || !c.InBounds(map) || ProjectZ.FloorOf(c, map) < 1 || !Air(c, map) || ShipStairs.Opening(c, map))
+            return SlabSupport.Gravship(c, map) || planned && ShipDeck.Planned(c, map);
+        }
+
+        // The vertical link up (or down) from c: the first cell over (under) it that is not open, when it is gravship
+        // floor; else Invalid. With planned, a deck planned on an open cell on the way counts as that floor.
+        public static IntVec3 Up(IntVec3 c, Map map, bool planned = false) => Walk(c, map, true, planned, null);
+
+        public static IntVec3 Down(IntVec3 c, Map map, bool planned = false) => Walk(c, map, false, planned, null);
+
+        // The same with the caller's own "is ship floor" test (the ship set: the game's tag and the engine's footprint).
+        public static IntVec3 Up(IntVec3 c, Map map, System.Predicate<IntVec3> isShip) => Walk(c, map, true, false, isShip);
+
+        public static IntVec3 Down(IntVec3 c, Map map, System.Predicate<IntVec3> isShip) => Walk(c, map, false, false, isShip);
+
+        // The open cells straight over c, bottom-up into run (cleared first), up to the next floor or the top; returns the
+        // cell that ends the run (the first that is not open), Invalid at the top. The roofs that fly ask this (ShipRoofs).
+        public static IntVec3 OpenRunUp(IntVec3 c, Map map, List<IntVec3> run)
+        {
+            run.Clear();
+            return End(c, map, true, false, run);
+        }
+
+        private static IntVec3 Walk(IntVec3 c, Map map, bool up, bool planned, System.Predicate<IntVec3> isShip)
+        {
+            IntVec3 x = End(c, map, up, planned, null);
+            if (!x.IsValid)
+            {
+                return IntVec3.Invalid;
+            }
+            if (planned && ShipDeck.Planned(x, map))
+            {
+                return x;
+            }
+            return (isShip != null ? isShip(x) : SlabSupport.Gravship(x, map)) ? x : IntVec3.Invalid;
+        }
+
+        // The one column walk: from c up (or down) through open cells to the cell that ends the run: the first that is not
+        // open or, with planned, the first with a deck planned on it. Invalid: the run goes on to the top (or c is no
+        // cell). The open cells passed go into run.
+        private static IntVec3 End(IntVec3 c, Map map, bool up, bool planned, List<IntVec3> run)
+        {
+            if (!c.IsValid || !c.InBounds(map))
+            {
+                return IntVec3.Invalid;
+            }
+            for (IntVec3 x = up ? FloorRoof.Above(c, map) : FloorRoof.Below(c, map); x.IsValid && x.InBounds(map); x = up ? FloorRoof.Above(x, map) : FloorRoof.Below(x, map))
+            {
+                if (planned && ShipDeck.Planned(x, map) || !Open(x, map))
+                {
+                    return x;
+                }
+                run?.Add(x);
+            }
+            return IntVec3.Invalid;
+        }
+
+        // A deck at upper-floor cell c would be linked to the gravship's deck: a vertical link, or gravship floor next to
+        // it on its floor. With planned (placement), blueprints and frames count, and so do the cells of the drag in
+        // progress that are linked through the drag (SlabDrag.Linked: one drag lays a whole overhang).
+        public static bool Would(IntVec3 c, Map map, bool planned)
+        {
+            if (planned && SlabDrag.Sorting)
+            {
+                return true;   // (the drag's cells are being sorted: the other rules decide, as for support)
+            }
+            if (Touches(c, map, planned))
+            {
+                return true;
+            }
+            return planned && SlabDrag.Linked(c, map);
+        }
+
+        // c itself touches gravship floor: straight above or below it, or next to it on its floor.
+        public static bool Touches(IntVec3 c, Map map, bool planned)
+        {
+            if (!c.IsValid || !c.InBounds(map))
             {
                 return false;
             }
-            IntVec3 u = FloorRoof.Above(c, map);
-            while (u.IsValid && Air(u, map))
+            if (Up(c, map, planned).IsValid || Down(c, map, planned).IsValid)
             {
-                u = FloorRoof.Above(u, map);
+                return true;
             }
-            if (!u.IsValid || !ShipDeck.At(u, map))
+            for (int i = 0; i < 4; i++)
             {
-                return false;
+                IntVec3 n = c + GenAdj.CardinalDirections[i];
+                if (n.InBounds(map) && ProjectZ.SameBand(n, c, map) && Floor(n, map, planned))
+                {
+                    return true;
+                }
             }
-            IntVec3 b = FloorRoof.Below(c, map);
-            while (b.IsValid && Air(b, map) && ProjectZ.FloorOf(b, map) >= 1 && !ShipStairs.Opening(b, map))
-            {
-                b = FloorRoof.Below(b, map);
-            }
-            return b.IsValid && (SlabSupport.Gravship(b, map) || ShipStairs.Opening(b, map));
+            return false;
         }
 
-        private static bool Air(IntVec3 c, Map map) => map.terrainGrid.FoundationAt(c) == null && map.terrainGrid.TopTerrainAt(c) == PZDefOf.PZ_OpenAir;
+        // An open cell over the ship: gravship floor straight below it through open cells (the opening of ship stairs, a
+        // hole in a deck, the air of a tall hall). No ship cell itself (no foundation), but its roof is the ship's
+        // (ShipRoofs, IsoRim) and only ship decks and ship stairs go on or over it (SlabSupport.BuildBlocked).
+        public static bool OverShip(IntVec3 c, Map map) => Open(c, map) && Down(c, map).IsValid;
     }
 
     // A gravship deck foundation: Substructure's tag (TerrainDef.IsSubstructure), or the game's Substructure terrain
     // affordance (only a gravship deck carries it; modded decks may have it without the tag). The same rule as IsoRim's
-    // ship roofs. ProjectZ's "is this a gravship deck" questions ask this (SlabSupport.Gravship, so ShipColumn too; a
+    // ship roofs. ProjectZ's "is this a gravship deck" questions ask this (SlabSupport.Gravship, so ShipLink too; a
     // planned deck; a removed deck foundation), except the ship set (ShipSet.Fill), which keeps the game's own test (the
     // tag) so the cells that fly are exactly vanilla's.
     public static class DeckFoundation
@@ -242,9 +314,11 @@ namespace ProjectZ
             return false;
         }
 
-        // Where a deck may go: an upper floor cell (open air: the game's affordance check) right above the ship's column
-        // (substructure or a deck, built or planned, or a ship stairs opening: ShipColumn); not over a stairwell or
-        // anything too tall for the storey (as slabs).
+        // Where a deck may go: an upper floor cell (open air: the game's affordance check) linked to the gravship's deck
+        // (ShipLink.Would: substructure or a deck next to it, or straight above or below it through open cells; built,
+        // planned or being dragged); not over a thick roof, a stairwell or anything too tall for the storey (as slabs);
+        // and where the game's roof rules hold it. The engine's range is the deck def's own vanilla place worker.
+        // (The link is asked after the cell's own rules: a dragged cell counts for the link only if it passes those.)
         public static AcceptanceReport Check(IntVec3 loc, Map map)
         {
             if (ProjectZ.FloorOf(loc, map) < 1)
@@ -252,10 +326,6 @@ namespace ProjectZ
                 return PlaceWorker_UpperFloor.ViewFloorAbove();
             }
             IntVec3 below = FloorRoof.Below(loc, map);
-            if (!ShipColumn.Cell(below, map, countPlanned: true))
-            {
-                return "PZ_DeckNeedsShipBelow".Translate();
-            }
             if (SlabSupport.ThickRoof(below, map))
             {
                 return "PZ_ThickRoof".Translate();
@@ -273,6 +343,10 @@ namespace ProjectZ
             {
                 return "PZ_TallBelow".Translate(tall.LabelShort);
             }
+            if (!ShipLink.Would(loc, map, planned: true))
+            {
+                return "PZ_DeckNeedsShipLink".Translate();
+            }
             // roof support as for any upper floor (the game's roof rules; decks planned or being dragged next to it count)
             if (!SlabSupport.Supported(below, map, countPlanned: true))
             {
@@ -281,96 +355,16 @@ namespace ProjectZ
             return AcceptanceReport.WasAccepted;
         }
 
-        // Why the substructure (or deck) at c can't be removed now. Null: no reason. Ground substructure: a deck built or
-        // planned right above it (the deck would lose the ship's column). An upper deck under a built deck may go (removal
-        // design Q6 (b), user 2026-11-01): the deck above stays over the hole and flies (ShipColumn.Hole); under a deck that
-        // is only planned it may not (the plan waits for a deck or substructure below). A deck over a ship stairs ramp
-        // (forWell: about to be one) may go anyway: it becomes the stairs' opening, still the ship's column (ShipColumn).
-        public static string Blocker(IntVec3 c, Map map, bool forWell = false)
+        // Why the deck at c can't be removed now. Null: no reason. Only the exit of ship stairs stays while they stand, as
+        // a slab landing does (P5). Nothing else of the ship blocks a removal (hull3d G4): the substructure under a deck
+        // and a deck under a deck may go, what is over them rests on its roof (the game's roof support).
+        public static string Blocker(IntVec3 c, Map map)
         {
-            if (!SlabSupport.Gravship(c, map))
-            {
-                return null;
-            }
-            IntVec3 up = StairShape.Above(c, map);
-            bool upper = ProjectZ.FloorOf(c, map) >= 1;
-            if (up.IsValid && (upper ? !At(up, map) && Planned(up, map) : At(up, map) || Planned(up, map)) && !forWell && !ShipStairs.OverRamp(c, map))
-            {
-                return "PZ_DeckAboveFirst".Translate();
-            }
-            // (P5: the exit of ship stairs stays while they stand, as a slab landing does)
-            if (ProjectZ.FloorOf(c, map) >= 1 && StairwellFloor.IsStairsExit(c, map))
+            if (SlabSupport.Gravship(c, map) && ProjectZ.FloorOf(c, map) >= 1 && StairwellFloor.IsStairsExit(c, map))
             {
                 return "PZ_StairsLandHere".Translate();
             }
             return null;
-        }
-
-        // The cell 'below' lost its substructure (it is no ship column cell now): a deck right above it falls (the slab
-        // collapse, through the game's collapse buffer: the roof cell under the deck drops with it next tick). Without that roof (a gravship took it
-        // with the ground cells) the deck falls at once.
-        public static void SupportLost(IntVec3 below, Map map)
-        {
-            IntVec3 up = StairShape.Above(below, map);
-            if (!At(up, map) || ShipColumn.Cell(below, map))
-            {
-                return;
-            }
-            if (map.roofGrid.RoofAt(below) == PZDefOf.PZ_FloorRoof)
-            {
-                map.roofCollapseBuffer.MarkToCollapse(below);
-            }
-            else
-            {
-                SlabCollapse.BufferCollapse(below, map, null);
-            }
-            ProjectZ.DebugLog($"ship deck at {up} lost its support at {below}: falls");
-        }
-
-        // Every deck over a cell that is no ship column cell falls (after a take-off, at load). Returns how many were found.
-        public static int CheckAll(Map map)
-        {
-            AnnexMapComponent a = ProjectZ.Annex(map);
-            if (a == null || PZDefOf.PZ_ShipDeck == null)
-            {
-                return 0;
-            }
-            int n = 0;
-            for (int k = 1; k <= a.MaxLevel; k++)
-            {
-                for (int z = 0; z < a.groundZ; z++)
-                {
-                    for (int x = 0; x < map.Size.x; x++)
-                    {
-                        IntVec3 u = ProjectZ.CellOnFloor(new IntVec3(x, 0, z), k, map);
-                        if (At(u, map) && !ShipColumn.Cell(FloorRoof.Below(u, map), map))
-                        {
-                            SupportLost(FloorRoof.Below(u, map), map);
-                            n++;
-                        }
-                    }
-                }
-            }
-            if (n > 0)
-            {
-                ProjectZ.DebugLog($"map {map}: {n} ship deck cell(s) without support");
-            }
-            return n;
-        }
-
-        // At load (after everything is spawned).
-        public static void CheckAllLater(Map map)
-        {
-            if (PZDefOf.PZ_ShipDeck != null)
-            {
-                LongEventHandler.ExecuteWhenFinished(() =>
-                {
-                    if (map != null && Find.Maps.Contains(map))
-                    {
-                        CheckAll(map);
-                    }
-                });
-            }
         }
     }
 
@@ -414,21 +408,30 @@ namespace ProjectZ
         }
     }
 
-    // A substructure foundation removed (the remove tool, god mode, a destroyed foundation, a falling deck): a deck above
-    // it falls; a deck taken away leaves open air and what stood on it falls (Slab.MoveOff).
+    // A terrain change on an upper floor.
+    //   - A cell opened or closed in a column with gravship floor straight above or below it: the vertical link through
+    //     it may have come or gone (ShipLink), so the ship set is asked again. (The game does this itself for substructure
+    //     changes; this covers any other floor.)
+    //   - A deck taken away (the remove tool, god mode, a destroyed foundation, a falling deck) leaves open air and what
+    //     stood on it falls (Slab.MoveOff).
     [HarmonyPatch(typeof(TerrainGrid), "DoTerrainChangedEffects")]
     public static class TerrainChanged_ShipDeck_Patch
     {
         private static readonly AccessTools.FieldRef<TerrainGrid, Map> mapRef = AccessTools.FieldRefAccess<TerrainGrid, Map>("map");
 
-        public static void Postfix(TerrainGrid __instance, IntVec3 c, TerrainDef oldFoundation)
+        public static void Postfix(TerrainGrid __instance, IntVec3 c, TerrainDef oldTerr, TerrainDef newTerr, TerrainDef oldFoundation)
         {
-            if (!DeckFoundation.Is(oldFoundation) || __instance.FoundationAt(c) != null)
+            Map map = mapRef(__instance);
+            if (map == null || ProjectZ.Annex(map) == null)
             {
                 return;
             }
-            Map map = mapRef(__instance);
-            if (map == null || ProjectZ.Annex(map) == null)
+            if (oldTerr != newTerr && (oldTerr == PZDefOf.PZ_OpenAir || newTerr == PZDefOf.PZ_OpenAir) && ModsConfig.OdysseyActive
+                && ProjectZ.IsAnnex(c, map) && (ShipLink.Up(c, map).IsValid || ShipLink.Down(c, map).IsValid))
+            {
+                map.substructureGrid?.MarkDirty();
+            }
+            if (!DeckFoundation.Is(oldFoundation) || __instance.FoundationAt(c) != null)
             {
                 return;
             }
@@ -442,13 +445,12 @@ namespace ProjectZ
                 Slab.DropZoneCell(c, map);
                 Slab.MoveOff(c, map);
             }
-            ShipDeck.SupportLost(c, map);
         }
     }
 
-    // ---- removal: not under a deck
+    // ---- removal
 
-    // Under a deck: blocked. On an upper floor deck itself, as for slabs: only built things block (vanilla would also count
+    // An upper floor deck, as for slabs: only built things (and the exit of ship stairs) block (vanilla would also count
     // items and pawns, whose affordance open air lacks; they are moved off instead).
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.AnyBuildingBlockingFoundationRemoval))]
     public static class FoundationRemovalBlocked_ShipDeck_Patch
@@ -461,14 +463,6 @@ namespace ProjectZ
             }
             __result = ShipDeck.RemovalBlocked(c, map);
             return false;
-        }
-
-        public static void Postfix(IntVec3 c, Map map, ref bool __result)
-        {
-            if (!__result && ProjectZ.Annex(map) != null && ShipDeck.Blocker(c, map) != null)
-            {
-                __result = true;
-            }
         }
     }
 
@@ -520,7 +514,8 @@ namespace ProjectZ
         }
     }
 
-    // A planned deck is built after the deck or substructure below it.
+    // A planned deck is built once it is linked to the gravship's deck as built (ShipLink.Would: decks go up outward from
+    // the ship, never as a loose frame), and where the game's roof rules hold it now.
     [HarmonyPatch(typeof(GenConstruct), nameof(GenConstruct.CanConstruct), new[] { typeof(Thing), typeof(Pawn), typeof(bool), typeof(bool), typeof(JobDef) })]
     public static class CanConstruct_ShipDeck_Patch
     {
@@ -531,9 +526,9 @@ namespace ProjectZ
             {
                 return true;
             }
-            if (!ShipColumn.Cell(FloorRoof.Below(t.Position, t.Map), t.Map))
+            if (!ShipLink.Would(t.Position, t.Map, planned: false))
             {
-                JobFailReason.Is("PZ_DeckBelowFirst".Translate());
+                JobFailReason.Is("PZ_DeckNeedsShipLink".Translate());
                 __result = false;
                 return false;
             }
@@ -544,24 +539,6 @@ namespace ProjectZ
                 return false;
             }
             return true;
-        }
-    }
-
-    // After a take-off the ship's ground cells are gone (vanilla, without terrain events): the decks over them fall.
-    [HarmonyPatch(typeof(GravshipUtility), nameof(GravshipUtility.GenerateGravship))]
-    public static class GenerateGravship_ShipDeck_Patch
-    {
-        public static void Prefix(Building_GravEngine engine, out Map __state)
-        {
-            __state = engine?.Map;
-        }
-
-        public static void Postfix(Map __state)
-        {
-            if (__state != null)
-            {
-                ShipDeck.CheckAll(__state);
-            }
         }
     }
 }

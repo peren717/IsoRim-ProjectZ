@@ -190,6 +190,15 @@ namespace ProjectZ.Dev
     //                                   cutting the top floor first, the 3D footprint sphere, an extender built on a deck,
     //                                   thrusters on decks, the engine installed on a deck, the launch allowed since P4);
     //                                   -projectzfloors=3, Odyssey (TestShipSet; -projectznoshipset: the flat P1 set)
+    //                                   shipdump: the old-ship identity dump (3D hull, issue 5): the shipset fixture flown to a
+    //                                   neighbouring tile; its set in fill order, cut sets, Gravship keys and landed cells go
+    //                                   to shipdump.txt; -projectzfloors=3 (-projectzshipdumpengineup: the engine on a floor-2
+    //                                   deck). The switch -projectzshipdump writes the same for the flights of shipfly and
+    //                                   shipstairs -projectzshipstack (TestShipHullDump)
+    //                                   shiphull: the 3D connected hull (issue 5): one check per run, -projectzhull=h1 ... h11
+    //                                   (placement and building of an overhang, overhang flight, hollow hull, bridge and the
+    //                                   limit cut, hole under a roof, disconnection by removal, tall hall and engine on an
+    //                                   overhang, the orbit vacuum table); -projectzfloors=3 (h7: 4), Odyssey (TestShipHull)
     //                                   shiprange: the footprint range preview (multi-level gravships P3: cross-section rings
     //                                   on the ground and the viewed floor, the sphere shell of the selected or placed engine
     //                                   or extender, the facility ring cut on other floors; shots); -projectzfloors=3, Odyssey (TestShipRange)
@@ -514,7 +523,7 @@ namespace ProjectZ.Dev
             {
                 PatchDragTimer(h);
             }
-            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "m228" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4" || mode == "hudslot")
+            if (mode == "floorui" || mode == "slabdrag" || mode == "slabremove" || mode == "bugs4" || mode == "slabstuff" || mode == "qol1" || mode == "thick" || mode == "space" || mode == "power" || mode == "powerfloors" || mode == "m228" || mode == "riser" || mode == "shiprange" || mode == "mtn" || mode == "stairs4" || mode == "hudslot" || mode == "shiphull")
             {
                 PatchMouse(h);
             }
@@ -1290,6 +1299,16 @@ namespace ProjectZ.Dev
                 StepShipRoofAtrium(map);
                 return;
             }
+            if (stage.StartsWith("hd_"))
+            {
+                StepShipDump(map);
+                return;
+            }
+            if (stage.StartsWith("hu_"))
+            {
+                StepShipHull(map);
+                return;
+            }
             if (stage.StartsWith("xd_"))
             {
                 // (reprodrops: each stage under a fixed random state; fires and ticks seeded per run inside)
@@ -1872,6 +1891,14 @@ namespace ProjectZ.Dev
                     else if (mode == "shiproofatrium")
                     {
                         stage = "ya_setup";
+                    }
+                    else if (mode == "shipdump")
+                    {
+                        stage = "hd_setup";
+                    }
+                    else if (mode == "shiphull")
+                    {
+                        stage = "hu_setup";
                     }
                     else if (mode == "reprodrops")
                     {

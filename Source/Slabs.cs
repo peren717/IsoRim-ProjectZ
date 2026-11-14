@@ -213,9 +213,10 @@ namespace ProjectZ
         // (user decision 2026-10-16; otherwise a mountain roof could be swapped for a thin, collapsible one).
         public static bool ThickRoof(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && (map.roofGrid.RoofAt(c)?.isThickRoof ?? false);
 
-        // No upper floor over a gravship, no stairs on one (user decision 2026-10-16): a launch takes only the ground floor
-        // on the substructure and would leave the floor above behind. (Two-storey gravships: backlog.) Any gravship deck
-        // counts (DeckFoundation: the tag or the Substructure affordance, so another faction's ship deck too).
+        // A gravship deck at c: ground substructure or a ship upper deck. No ordinary upper floor goes over one and no
+        // ordinary stairs on one (user decision 2026-10-16; a ship is built with ship decks and ship stairs, which fly
+        // with it: BuildBlocked). Any gravship deck counts (DeckFoundation: the tag or the Substructure affordance, so
+        // another faction's ship deck too).
         public static bool Gravship(IntVec3 c, Map map) => c.IsValid && c.InBounds(map) && DeckFoundation.Is(map.terrainGrid.FoundationAt(c));
 
         // Mountains foundation F4: "may build" and "may use" are two rules.
@@ -228,14 +229,15 @@ namespace ProjectZ
         //    own roof (Column.OpenAbove, DropRules), never the column under it, so they already use any floor.
         //
         // Thick roof or gravship under a cell: the reason no floor or stairs may be built over it, or null. The ship is its
-        // column (ShipColumn: a ship stairs opening too; over it only ship decks and ship stairs go).
+        // deck and the open cells over it (ShipLink.OverShip: the opening of ship stairs, a hole, the air of a tall hall;
+        // over them only ship decks and ship stairs go).
         public static string BuildBlocked(IntVec3 c, Map map)
         {
             if (ThickRoof(c, map))
             {
                 return "PZ_ThickRoof";
             }
-            return ShipColumn.Cell(c, map) ? "PZ_OverGravship" : null;
+            return Gravship(c, map) || ShipLink.OverShip(c, map) ? "PZ_OverGravship" : null;
         }
 
         // The same for a slab (or a stairs landing): over a gravship it points to the ship upper deck (Odyssey).
@@ -355,6 +357,7 @@ namespace ProjectZ
     //     asks every dragged cell every frame. They are renewed every RefreshFrames, so what is built or removed during an
     //     unpaused drag shows in the preview. "Does not change" is the whole cell list, compared once a frame: count and
     //     ends alone can match for two shapes (two ovals, an angled line drawn the other way).
+    //   - For a ship deck the drag's cells count for the link to the gravship's deck too (Linked, kept the same way).
     //   - The release never uses them: the game's mouse-up takes DragCells, which DrawPanelReadout may already have
     //     filled this frame, then asks each cell again. Release drops everything first, the dragger's list too.
     public static class SlabDrag
@@ -384,6 +387,48 @@ namespace ProjectZ
 
         public static void Remember(IntVec3 below, bool supported) => answers[below] = supported;
 
+        // A dragged ship deck cell that is linked to the gravship's deck through the drag (ShipLink.Would): it touches
+        // gravship floor itself (built or planned, ShipLink.Touches), or dragged cells join it 4 ways to one that does. So
+        // one drag lays a whole overhang, as it does for support. Found once per sorted drag shape and kept with it.
+        public static bool Linked(IntVec3 c, Map map)
+        {
+            HashSet<IntVec3> drag = Cells(map);
+            if (drag == null || !drag.Contains(c) || !(designator is Designator_Build d) || !ShipDeck.Is(d.PlacingDef))
+            {
+                return false;
+            }
+            if (!linkedKnown)
+            {
+                linkedKnown = true;
+                linked.Clear();
+                Queue<IntVec3> q = new Queue<IntVec3>();
+                foreach (IntVec3 x in drag)
+                {
+                    if (ShipLink.Touches(x, map, planned: true))
+                    {
+                        linked.Add(x);
+                        q.Enqueue(x);
+                    }
+                }
+                while (q.Count > 0)
+                {
+                    IntVec3 x = q.Dequeue();
+                    for (int i = 0; i < 4; i++)
+                    {
+                        IntVec3 n = x + GenAdj.CardinalDirections[i];
+                        if (drag.Contains(n) && linked.Add(n))
+                        {
+                            q.Enqueue(n);
+                        }
+                    }
+                }
+            }
+            return linked.Contains(c);
+        }
+
+        private static readonly HashSet<IntVec3> linked = new HashSet<IntVec3>();
+        private static bool linkedKnown;
+
         // The drag ended: nothing is kept for the next one.
         public static void Clear()
         {
@@ -393,6 +438,8 @@ namespace ProjectZ
             shape.Clear();
             cells.Clear();
             answers.Clear();
+            linked.Clear();
+            linkedKnown = false;
             nearW = nearH = 0;
             comparedFrame = -1;
         }
@@ -441,6 +488,8 @@ namespace ProjectZ
                 shape.Clear();
                 shape.AddRange(buffer);
                 answers.Clear();
+                linked.Clear();
+                linkedKnown = false;
                 Sort(d, buffer);
                 MarkHolders(map);
             }
@@ -976,7 +1025,7 @@ namespace ProjectZ
                 }
             }
             // S1 (ship decks): a deck is a foundation, SetTerrain left it; it goes once everything on it has fallen (a
-            // no-op for slabs). The decks above it follow (ShipDeck).
+            // no-op for slabs). A deck above it stays or falls by its own roof support, as a slab above does.
             if (map.terrainGrid.FoundationAt(u) != null)
             {
                 map.terrainGrid.RemoveFoundation(u, false);

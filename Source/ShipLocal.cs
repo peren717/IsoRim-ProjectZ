@@ -22,8 +22,11 @@ namespace ProjectZ
     //     The ship set already holds the deck cells (P2), so the decks, things, pawns, items, filth, zones, areas, roofs,
     //     gases, designations, power links and room temperatures of upper floors are captured by vanilla's own code.
     //     An upper cell's foundation is its deck (never null), its terrain the deck or what is laid on it.
-    //   - Take-off removal is vanilla's (top = under ?? top = open air, the foundation and roofs go); afterwards
-    //     ProjectZ's caches are refreshed (GenerateGravship postfix; left-behind decks fall: ShipDeck.CheckAll).
+    //   - Take-off removal is vanilla's (top = under ?? top = open air, the foundation and roofs go); the roofs on the
+    //     open cells over the ship go with it and the floor roofs it leaves hanging are put right (ShipRoofs); afterwards
+    //     ProjectZ's caches are refreshed (GenerateGravship postfix).
+    //   - The ship's flat rects (the area a new map clears for it) cover its whole shadow: a deck with no ship cell on
+    //     the ground under it (an overhang, a deck over a hollow hull) counts as its ground cell (UpdateBoundingBoxes).
     //   - Placement (GravshipPlacementUtility, MoveableStockpile / GrowZone / Area_Allowed): every "root + local" is To:
     //     the ground cell root + (x, 0, z) lifted to floor y on the target map.
     //   - Safety net: a cell with y != 0 reaching GenSpawn, the terrain, roof, zone or area grids is an error (logged once)
@@ -74,6 +77,34 @@ namespace ProjectZ
                 return g;
             }
             return c;
+        }
+
+        // A ship key's flat cell: its ground column, floor 0.
+        public static IntVec3 Flat(IntVec3 key) => key.y == 0 ? key : new IntVec3(key.x, 0, key.z);
+
+        // The ship's columns with no key on the ground (a deck over non-ship ground: an overhang, a deck over a hollow
+        // hull): the flat cell of each with the lowest floor that has a key, into 'into' (cleared first). With the keys
+        // on the ground this is the ship's shadow. The one place for it: the flat rects (UpdateBoundingBoxes), the
+        // landing marker's cells, the landing check and the trees cleared for a landing (ShipLanding) all ask this.
+        public static void NoGround(IEnumerable<IntVec3> keys, Predicate<IntVec3> has, Dictionary<IntVec3, int> into)
+        {
+            into.Clear();
+            foreach (IntVec3 key in keys)
+            {
+                if (key.y == 0)
+                {
+                    continue;
+                }
+                IntVec3 flat = Flat(key);
+                if (has(flat))
+                {
+                    continue;
+                }
+                if (!into.TryGetValue(flat, out int lo) || key.y < lo)
+                {
+                    into[flat] = key.y;
+                }
+            }
         }
 
         // Transpiled into the capture: "a - origin".
@@ -203,7 +234,7 @@ namespace ProjectZ
             Map map = engine?.Map;
             if (map != null && ProjectZ.Annex(map) != null && ModsConfig.OdysseyActive)
             {
-                ShipStairs.TakeOpeningRoofs(__instance, engine, map);
+                ShipRoofs.Take(__instance, engine, map);
             }
             if (map != null && ProjectZ.FloorOf(engine.Position, map) > 0 && ModsConfig.OdysseyActive)
             {
@@ -321,8 +352,8 @@ namespace ProjectZ
         }
     }
 
-    // After the take-off removal (vanilla, without terrain events): ProjectZ's caches. (Left-behind decks fall:
-    // GenerateGravship_ShipDeck_Patch.)
+    // After the take-off removal (vanilla, without terrain events): the floor roofs the ship left hanging or took from
+    // under a floor that stayed (ShipRoofs.Left), then ProjectZ's caches.
     [HarmonyPatch(typeof(GravshipUtility), nameof(GravshipUtility.GenerateGravship))]
     public static class GenerateGravship_ShipLocal_Patch
     {
@@ -331,9 +362,39 @@ namespace ProjectZ
             __state = engine?.Map;
         }
 
-        public static void Postfix(Map __state)
+        public static void Postfix(Gravship __result, Map __state)
         {
+            if (ModsConfig.OdysseyActive)
+            {
+                ShipRoofs.Left(__result, __state);
+            }
             ShipLocal.Refresh(__state);
+        }
+    }
+
+    // The ship's flat rects (Gravship.occupiedRects: what GenStep_ReserveGravshipArea clears on a new map) are built from
+    // the keys on the ground only: the game asks for (x, 0, z). A key upstairs with no key on the ground under it (an
+    // overhang, a deck over a hollow hull) is added as its ground cell, so the rects cover the ship's shadow as the game's
+    // own bounds do. A ship of stacked decks has a ground key under every deck: nothing is added.
+    [HarmonyPatch(typeof(Gravship), "UpdateBoundingBoxes")]
+    public static class UpdateBoundingBoxes_ShipLocal_Patch
+    {
+        private static readonly Dictionary<IntVec3, int> tmp = new Dictionary<IntVec3, int>();
+
+        public static void Prefix(ref HashSet<IntVec3> occupiedCells)
+        {
+            if (occupiedCells == null)
+            {
+                return;
+            }
+            HashSet<IntVec3> keys = occupiedCells;
+            ShipLocal.NoGround(keys, keys.Contains, tmp);
+            if (tmp.Count > 0)
+            {
+                occupiedCells = new HashSet<IntVec3>(keys);
+                occupiedCells.UnionWith(tmp.Keys);
+                tmp.Clear();
+            }
         }
     }
 

@@ -517,8 +517,8 @@ namespace ProjectZ.Dev
                         DkLeft(map) == 0 && foOnCell == 0 && errors == foErrAt,
                         $"{DkReport(map)}; errors {errors - foErrAt}");
                     Result("F6c the level-2 deck stays over the hole: a ship column hole with the floor roof under the deck, nothing collapsed",
-                        !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && ShipColumn.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && PZStats.slabCollapses == dkCollapsesAt,
-                        $"hole {hole}: deck {ShipDeck.At(hole, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}; deck above {ShipDeck.At(up, map)}; collapses {PZStats.slabCollapses - dkCollapsesAt}");
+                        !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && HullCompat.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && PZStats.slabCollapses == dkCollapsesAt,
+                        $"hole {hole}: deck {ShipDeck.At(hole, map)}, hole {HullCompat.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}; deck above {ShipDeck.At(up, map)}; collapses {PZStats.slabCollapses - dkCollapsesAt}");
                     stage = "fo_6d";
                     return true;
                 }

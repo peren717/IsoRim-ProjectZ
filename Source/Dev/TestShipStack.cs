@@ -6,20 +6,21 @@ using Verse;
 namespace ProjectZ.Dev
 {
     // Test mode shipstairs -projectzshipstack (fix 2026-10-17, "a staircase governs only its own next floor"): ship stairs
-    // stacked on a fresh gravship. The ship stairs opening on the floor above them is a ship column cell (ShipColumn): a
-    // deck may go over it, so stairs can go on upwards.
+    // stacked on a fresh gravship. The ship stairs opening on the floor above them is an open cell over the ship: a deck
+    // may go over it (it links down through the opening), so stairs can go on upwards.
+    // (3D hull, issue 5: K1 and K5 expect the link rule: plain open air links too, with or without stairs.)
     //   F0-F3 of -projectzshipfresh: colonists build ship stairs 1 (ground up to floor 2, their landing deck laid) and a
     //   colonist walks up; then
     //   K1 placement: ship stairs on the opening refused (no deck under them), an ordinary slab over the opening refused
-    //      (ship: use a deck), a ship deck over it not refused for want of ship below; floor-2 decks planned beside the
-    //      opening, colonists build them from up there;
+    //      (ship: use a deck), a ship deck over it not refused for want of a link to the ship (only: nothing holds its roof
+    //      yet); floor-2 decks planned beside the opening, colonists build them from up there;
     //   K2 ship stairs 2 on the floor-2 decks: their exit over the opening (the variant of the bug) refused since the 1x4
     //      stairs (2026-10-20: their solid end would stand on the opening's open air); the variant whose exit is over a
     //      floor-2 deck accepted and built by colonists: its landing deck laid over its solid end, part of the ship, the
     //      link usable;
     //   K3 a colonist walks from the ground up both stairs to floor 3; floor-3 decks planned over the whole opening
     //      and built by colonists from up there; part of the ship; ship stairs 1 may still be designated for deconstruction
-    //      (user decision: nothing blocks it, the decks over the opening fall when they go);
+    //      (user decision: nothing blocks it);
     //   K4 save and reload: the decks over the opening stay (also after ticks: nothing falls), the load-time deck check
     //      finds none to drop;
     //   then the flight and landing turned of -projectzshipfresh (every deck flies and lands, both links usable, a walk up
@@ -27,9 +28,9 @@ namespace ProjectZ.Dev
     //   old site's opening;
     //   K5 a floor-3 deck over the opening is removed with the remove-foundation tool (a colonist's job; the roof under it
     //      stays as an ordinary roof, as for any deck), the other decks
-    //      stay; then colonists deconstruct ship stairs 1 (a real job): their opening is gone, so the decks over it fall
-    //      (no ship column under them any more; ship stairs 2 keep their landing over their own solid end) and no deck
-    //      may be planned there now.
+    //      stay; then colonists deconstruct ship stairs 1 (a real job): the old opening is plain open air over the ship
+    //      now, so the decks over it stay (held by ship stairs 2, still ship cells, linked down through the open air;
+    //      ship stairs 2 keep their landing) and a deck may be planned over it again where the one was removed.
     public static partial class TestRunner
     {
         private static bool spStack;
@@ -87,13 +88,15 @@ namespace ProjectZ.Dev
         private static void SkPlan(Map map)
         {
             List<IntVec3> open = SkOpening(map);
-            Result("K1 the opening of ship stairs 1: open air on floor 2, a ship column cell", open.All(c => ShipStairs.Opening(c, map) && ShipColumn.Cell(c, map)),
+            Result("K1 the opening of ship stairs 1: open air on floor 2, a ship column cell", open.All(c => ShipStairs.Opening(c, map) && HullCompat.OverShip(c, map)),
                 string.Join(", ", open.Select(c => $"{SpCell(c, map)} {c.GetTerrain(map)?.defName}")));
             SpExpect("K1 ship stairs on the opening refused (no deck under them)", PZDefOf.PZ_ShipStairs, null, SPF(1, 2, 1, map), Rot4.North, map, "PZ_ShipStairsOnDeck".Translate());
             AcceptanceReport slab = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_UpperFloor, SPF(1, 1, 2, map), Rot4.North, map);
             Result("K1 an ordinary slab over the opening refused (over a ship: a ship deck)", !slab.Accepted && slab.Reason == "PZ_OverGravshipUseDeck".Translate(), GlRep(slab));
             AcceptanceReport deck = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_ShipDeck, SPF(1, 1, 2, map), Rot4.North, map);
-            Result("K1 a ship deck over the opening is not refused for want of ship below (nothing holds its roof yet)", deck.Accepted || deck.Reason != "PZ_DeckNeedsShipBelow".Translate(), GlRep(deck));
+            // (3D hull, issue 5: the link text is PZ_DeckNeedsShipLink; the only refusal left here is the roof support)
+            Result("K1 a ship deck over the opening is not refused for want of a link to the ship (only: nothing holds its roof yet)",
+                deck.Accepted || deck.Reason != "PZ_DeckNeedsShipLink".Translate() && deck.Reason == "PZ_NoSupportBelow".Translate(), GlRep(deck));
             skF2.Clear();
             for (int x = 2; x <= 5; x++)
             {
@@ -247,7 +250,7 @@ namespace ProjectZ.Dev
             Building_Stairs s1 = SpShipStairs(map)[0];
             AcceptanceReport dec = new Designator_Deconstruct().CanDesignateThing(s1);
             Result("K3 ship stairs 1 may still be designated for deconstruction with decks over their opening", dec.Accepted, GlRep(dec));
-            Result("K3 the load-time deck check finds no deck to drop", ShipDeck.CheckAll(map) == 0, "");
+            Result("K3 the load-time deck check finds no deck to drop", HullCompat.DeckCheckAll(map) == 0, "");
             GlShot(0, SP(2, 2), 6f, "sp_k1_stack_ground");
             GlShot(1, SP(2, 2), 6f, "sp_k1_stack_f2");
             GlShot(2, SP(2, 2), 6f, "sp_k1_stack_f3");
@@ -285,7 +288,7 @@ namespace ProjectZ.Dev
             StairGrid g = StairGrid.For(map);
             int usable = g == null ? 0 : g.links.Count(l => st.Contains(l.stairs) && g.Usable(l));
             Result("K4 600 ticks after the reload nothing fell: decks over the opening, both stairs and links, all in the ship",
-                over.All(c => ShipDeck.At(c, map) && e.ValidSubstructure.Contains(c)) && st.Count == 2 && usable == 2 && ShipDeck.CheckAll(map) == 0,
+                over.All(c => ShipDeck.At(c, map) && e.ValidSubstructure.Contains(c)) && st.Count == 2 && usable == 2 && HullCompat.DeckCheckAll(map) == 0,
                 $"decks {over.Count(c => ShipDeck.At(c, map))}/3, stairs {st.Count}, usable {usable}; set {e.ValidSubstructure.Count} ({SsFloors(e.ValidSubstructure, map)})");
             skOpenOff.Clear();
             foreach (IntVec3 c in SkOpening(map))
@@ -375,7 +378,8 @@ namespace ProjectZ.Dev
             Result("K5 a colonist removed it: open air, the roof under it an ordinary roof again (as for any deck); the other decks over the opening stay",
                 skRm.GetTerrain(map) == PZDefOf.PZ_OpenAir && !ShipDeck.At(skRm, map) && map.roofGrid.RoofAt(well) == RoofDefOf.RoofConstructed && ShipDeck.At(skKeep, map) && ShipDeck.At(skLanding2, map),
                 $"{SpCell(skRm, map)} {skRm.GetTerrain(map)?.defName}, roof below {map.roofGrid.RoofAt(well)?.defName ?? "none"}; kept {ShipDeck.At(skKeep, map)} landing 2 {ShipDeck.At(skLanding2, map)}; after {ticksTotal} ticks");
-            // the rule for stairs that are gone: their opening is no ship column cell any more, the decks over it fall
+            // the rule for stairs that are gone (3D hull, issue 5): their old opening is plain open air over the ship; the
+            // decks over it link down through it and stay while their roofs are held
             List<Building_Stairs> st = SpShipStairs(map);
             Building_Stairs s1 = st[0];
             skStairs2 = st[1].ThingID;
@@ -407,21 +411,28 @@ namespace ProjectZ.Dev
         private static void SkFell(Map map)
         {
             tickWatch = null;
-            Result("K5 the decks over the old opening of ship stairs 1 fell (no ship column under them now)", !ShipDeck.At(skKeep, map) && !ShipDeck.At(skThird, map),
-                $"{SpCell(skKeep, map)} {skKeep.GetTerrain(map)?.defName}, {SpCell(skThird, map)} {skThird.GetTerrain(map)?.defName}");
+            // (3D hull, issue 5: was "they fall". Ship stairs 2 hold their roofs; the old opening under them is open air over
+            // the ship's ground deck, so they link down through it and are still ship cells.)
+            Building_GravEngine e = GlEngine(map);
+            bool held = new[] { skKeep, skThird }.All(c => map.roofGrid.RoofAt(FloorRoof.Below(c, map)) == PZDefOf.PZ_FloorRoof);
+            bool aboard = e != null && e.ValidSubstructure.Contains(skKeep) && e.ValidSubstructure.Contains(skThird);
+            Result("K5 the decks over the old opening of ship stairs 1 stay: held by ship stairs 2, still ship cells (linked down through the open air to the ship)",
+                ShipDeck.At(skKeep, map) && ShipDeck.At(skThird, map) && held && aboard && HullCompat.OverShip(FloorRoof.Below(skKeep, map), map),
+                $"{SpCell(skKeep, map)} {skKeep.GetTerrain(map)?.defName}, {SpCell(skThird, map)} {skThird.GetTerrain(map)?.defName}; floor roofs under them {held}, in the ship set {aboard}, open air over the ship under them {HullCompat.OverShip(FloorRoof.Below(skKeep, map), map)}");
             // ship stairs 2 (their landing is over their own solid end, not over the opening): reported as they are
             Building_Stairs s2 = SpShipStairs(map).FirstOrDefault(s => s.ThingID == skStairs2);
             StairGrid g = StairGrid.For(map);
             bool usable = s2 != null && g != null && g.links.Any(l => l.stairs == s2 && g.Usable(l));
-            Info($"K5 ship stairs 2 after the decks fell: standing {s2 != null && s2.Spawned}, exit {(s2 == null ? "-" : SpCell(s2.TopCell, map) + " " + s2.TopCell.GetTerrain(map)?.defName + ", standable " + s2.TopCell.Standable(map))}, link usable {usable}; hit points {s2?.HitPoints}/{s2?.MaxHitPoints}");
+            Info($"K5 ship stairs 2 after ship stairs 1 went: standing {s2 != null && s2.Spawned}, exit {(s2 == null ? "-" : SpCell(s2.TopCell, map) + " " + s2.TopCell.GetTerrain(map)?.defName + ", standable " + s2.TopCell.Standable(map))}, link usable {usable}; hit points {s2?.HitPoints}/{s2?.MaxHitPoints}");
             foreach (Pawn p in Colonists(map))
             {
                 Info($"K5 colonist {p.LabelShort} at {SpCell(p.Position, map)}, health {p.health.summaryHealth.SummaryHealthPercent:0.00}, downed {p.Downed}");
             }
             Result("K5 ship stairs 2 stand on with their landing (over their own solid end), their link usable", s2 != null && s2.Spawned && ShipDeck.At(s2.TopCell, map) && usable,
                 $"standing {s2 != null}, link usable {usable}");
-            AcceptanceReport r = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_ShipDeck, skKeep, Rot4.North, map);
-            Result("K5 and no ship deck may be planned there now", !r.Accepted && r.Reason == "PZ_DeckNeedsShipBelow".Translate(), GlRep(r));
+            // (was "no ship deck may be planned there now", asked on a cell that still held its deck)
+            AcceptanceReport r = GenConstruct.CanPlaceBlueprintAt(PZDefOf.PZ_ShipDeck, skRm, Rot4.North, map);
+            Result("K5 and a ship deck may be planned again over the old opening where the one was removed (open air links down to the ship)", r.Accepted, $"{SpCell(skRm, map)}: {GlRep(r)}");
             Wait(10, "sp_end");
         }
     }
