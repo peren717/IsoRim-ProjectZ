@@ -15,8 +15,8 @@ namespace ProjectZ
     //     A floor laid on the slab (carpet) is a separate vanilla job first. Half the slab's stuff back, pawns and items moved off.
     //   - Blocker: what keeps a slab from being taken up (built things on it, stairs landing there). A slab above does not
     //     (Q6 (b), user 2026-11-01): it stays, resting on the roof over the new hole (vanilla roof support, SlabCollapse).
-    //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer); automatic
-    //     work only, a forced order skips it.
+    //   - SlabPeel: the order of work (farthest from the stairs first, the worker on the cell one step nearer), for slabs
+    //     and ship upper decks alike; automatic work only, a forced order skips it.
     //   - SlabCollapse: the roof under a slab collapses (vanilla support rules), the slab falls with everything on it.
     public static class Slab
     {
@@ -568,6 +568,7 @@ namespace ProjectZ
     // every step is one a pawn can walk). Only the designated slabs farthest away are worked (same distance in
     // parallel), from the cell one step nearer the stairs. A slab's shortest way to the stairs only passes nearer cells,
     // so taking a farthest one up cuts no other designated slab off. Designated slabs no stairs reach are never worked.
+    // Ship upper decks are taken up in this same order, one order per floor for both (Peeled; user 2026-11-14).
     // The order is for automatic work only: a forced order (the player's right-click) skips it and the stairs-exit
     // cut-off check (K2), user 2026-11-02; what that cuts off is the player's. Its worker stands on the cell one step
     // nearer the stairs, else on a cell next to it (WorkSpot).
@@ -710,20 +711,27 @@ namespace ProjectZ
             foreach (Designation des in map.designationManager.SpawnedDesignationsOfDef(DesignationDefOf.RemoveFoundation))
             {
                 IntVec3 c = des.target.Cell;
-                if (!Slab.At(c, map))
+                if (!Peeled(c, map))
                 {
                     continue;
                 }
                 int d = dist[map.cellIndices.CellToIndex(c)];
                 int k = ProjectZ.FloorOf(c, map) - lowest;
-                if (d > maxDist[k] && Slab.Blocker(c, map) == null)
+                if (d > maxDist[k] && !Blocked(c, map))
                 {
                     maxDist[k] = d;
                 }
             }
         }
 
-        // The designated slab at c may be worked now: reached from the stairs, and among the farthest on its floor.
+        // The cells taken up in this order: slabs and ship upper decks.
+        public static bool Peeled(IntVec3 c, Map map) => Slab.At(c, map) || ShipDeck.Upper(c, map);
+
+        // A peeled cell its own rules keep from being taken up now (Slab.Blocker, ShipDeck.RemovalBlocked): left out of
+        // the order, so it holds no other cell up.
+        private static bool Blocked(IntVec3 c, Map map) => Slab.At(c, map) ? Slab.Blocker(c, map) != null : ShipDeck.RemovalBlocked(c, map);
+
+        // The designated slab or deck at c may be worked now: reached from the stairs, and among the farthest on its floor.
         public bool Workable(IntVec3 c)
         {
             Ensure();
@@ -1103,8 +1111,9 @@ namespace ProjectZ
         }
     }
 
-    // Peel order: only the farthest designated slabs have work. A forced order skips it and K2 (user 2026-11-02): only
-    // the physical rules stand (vanilla's and Slab.Blocker, already in __result) and a spot to stand on next to the cell.
+    // Peel order: only the farthest designated slabs and upper decks have work. A forced order skips it and K2 (user
+    // 2026-11-02): only the physical rules stand (vanilla's and Slab.Blocker, already in __result) and a spot to stand on
+    // next to the cell (a deck's: RemoveFoundationHasJob_ShipDeck_Patch).
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.HasJobOnCell))]
     public static class RemoveFoundationHasJob_Slab_Patch
     {
@@ -1129,7 +1138,7 @@ namespace ProjectZ
                 }
                 return;
             }
-            if (__result && Slab.At(c, pawn.Map) && SlabPeel.For(pawn.Map)?.Workable(c) != true)
+            if (__result && !forced && SlabPeel.Peeled(c, pawn.Map) && SlabPeel.For(pawn.Map)?.Workable(c) != true)
             {
                 if (SlabPeel.For(pawn.Map)?.Distance(c) > 0)
                 {
@@ -1153,8 +1162,8 @@ namespace ProjectZ
         }
     }
 
-    // ... and the worker stands one step nearer the stairs (job target B), for the covering and for the slab (a forced
-    // order on a cell the stairs don't reach: a cell next to it, SlabPeel.WorkSpot).
+    // ... and the worker stands one step nearer the stairs (job target B), for the covering and for the slab or deck (a
+    // forced order on a slab the stairs don't reach: a cell next to it, SlabPeel.WorkSpot; on a deck: ShipDeck.WorkSpot).
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.JobOnCell))]
     public static class RemoveFoundationJob_Slab_Patch
     {
@@ -1170,8 +1179,8 @@ namespace ProjectZ
             }
             else if (__result != null && ShipDeck.Upper(c, pawn.Map))
             {
-                // (a deck has no peel order: the worker stands on a next cell, never on the deck it takes up; G2)
-                IntVec3 from = ShipDeck.WorkSpot(pawn, c);
+                // (as a slab: one step nearer the stairs, a forced order on a next cell; never on the deck it takes up, G2)
+                IntVec3 from = forced ? ShipDeck.WorkSpot(pawn, c) : SlabPeel.For(pawn.Map)?.Parent(c) ?? IntVec3.Invalid;
                 if (from.IsValid)
                 {
                     __result.targetB = from;

@@ -23,6 +23,17 @@ namespace ProjectZ.Dev
     //      order takes it up (the worker stays on the platform)
     //   F5 physical rules: a table on the cell: forced refused; a slab with a slab above (Q6 (b)): forced taken up, the
     //      floor above stays; a slab no one can stand next to: forced refused
+    //   F6 ship upper decks follow the same peel order (user 2026-11-14; Odyssey). A two-level gravship
+    //      (TestGravLand.BuildShip, 13 x 11) with ship decks over all of it on level 1 but the stairwell, ship stairs inside
+    //      it up to the deck; the workers start on the ship's ground floor and walk up. Automatic work:
+    //      F6a two 3 x 3 blocks designated (the deck's far corner and an inner block), three workers: every cell taken up
+    //          within the time bound, none left stranded with no cell to stand on, farthest from the stairs first;
+    //      F6b the inner block, a forced order on its middle cell: taken up first (out of order); the rest after it;
+    //      F6c the inner block with a level-2 deck kept over its middle (Q6 (b)): all nine taken up, the level-2 deck stays
+    //          over the hole (ShipColumn.Hole, the floor roof under it), nothing collapses;
+    //      F6d a one-wide dead-end deck corridor, all designated, a chunk on its second-to-last cell (a cell a pawn walks
+    //          over but may not stand on; the chunk stays: hauled only when marked, and the workers only construct): the
+    //          end cell is taken up first, from the chunk's cell as a slab's would be, then the rest.
     public static partial class TestRunner
     {
         private static IntVec3 foTarget;
@@ -430,6 +441,105 @@ namespace ProjectZ.Dev
                     Result("F5 a designated slab no one can stand next to: no forced order, it stays after 1500 ticks",
                         foOk && ProjectZ.HasFloor(foTarget, map) && errors == foErrAt,
                         $"{foNote}; still there {ProjectZ.HasFloor(foTarget, map)}, errors {errors - foErrAt}");
+                    stage = "fo_6a";
+                    return true;
+                }
+
+                // ---- F6: ship upper decks in the same peel order
+                case "fo_6a":
+                {
+                    if (!DkFixture(map, 3, DkBlockA().Concat(DkBlockB()), false))
+                    {
+                        stage = "fo_end";
+                        return true;
+                    }
+                    SeedTicks("fo_6a");
+                    TickUntil(DkMaxTicks, () => DkWatch(map), "fo_6a_done", 1);
+                    return true;
+                }
+                case "fo_6a_done":
+                {
+                    tickWatch = null;
+                    Result("F6a two 3 x 3 deck blocks designated (far corner, inner block): colonists take every cell up within the bound, none left stranded",
+                        DkLeft(map) == 0 && foOnCell == 0 && errors == foErrAt,
+                        $"{DkReport(map)}; block A left {DkBlockA().Count(g => ShipDeck.At(Levels.Cell(g, 1, map), map))}/9, block B left {DkBlockB().Count(g => ShipDeck.At(Levels.Cell(g, 1, map), map))}/9; errors {errors - foErrAt}");
+                    Result("F6a the decks were taken up farthest from the stairs first (the slabs' order)",
+                        dkOrderBad == 0 && DkLeft(map) == 0,
+                        $"{dkOrderBad} cells taken while a farther designated deck waited; order {dkOrder}");
+                    stage = "fo_6b";
+                    return true;
+                }
+                case "fo_6b":
+                {
+                    if (!DkFixture(map, 1, DkBlockB(), false))
+                    {
+                        stage = "fo_end";
+                        return true;
+                    }
+                    foTarget = FoL(12, 13, 1, map);
+                    dkForced = foTarget;
+                    foNote = FoDist(map, foTarget);
+                    foOk = FoForce(r2P, foTarget, out string shown);
+                    foNote += "; " + shown;
+                    SeedTicks("fo_6b");
+                    TickUntil(DkMaxTicks, () => DkWatch(map), "fo_6b_done", 1);
+                    return true;
+                }
+                case "fo_6b_done":
+                {
+                    tickWatch = null;
+                    Result("F6b inner deck block, a forced order on its middle cell (not the farthest): offered and taken up first, the worker never on it",
+                        foOk && foFirst == foTarget && foOnCell == 0,
+                        $"{foNote}; first {foFirst} after {foFirstTick} ticks, ticks on the cell {foOnCell}, worker at {r2P.Position}");
+                    Result("F6b then automatic work takes the other eight up, none left stranded",
+                        DkLeft(map) == 0 && errors == foErrAt,
+                        $"{DkReport(map)}; errors {errors - foErrAt}");
+                    stage = "fo_6c";
+                    return true;
+                }
+                case "fo_6c":
+                {
+                    if (!DkFixture(map, 3, DkBlockB(), true))
+                    {
+                        stage = "fo_end";
+                        return true;
+                    }
+                    dkCollapsesAt = PZStats.slabCollapses;
+                    SeedTicks("fo_6c");
+                    TickUntil(DkMaxTicks, () => DkWatch(map), "fo_6c_done", 1);
+                    return true;
+                }
+                case "fo_6c_done":
+                {
+                    tickWatch = null;
+                    IntVec3 hole = FoL(12, 13, 1, map), up = FoL(12, 13, 2, map);
+                    Result("F6c inner deck block under a kept level-2 deck (Q6 (b)): colonists take all nine up, none left stranded",
+                        DkLeft(map) == 0 && foOnCell == 0 && errors == foErrAt,
+                        $"{DkReport(map)}; errors {errors - foErrAt}");
+                    Result("F6c the level-2 deck stays over the hole: a ship column hole with the floor roof under the deck, nothing collapsed",
+                        !ShipDeck.At(hole, map) && ShipDeck.At(up, map) && ShipColumn.Hole(hole, map) && map.roofGrid.RoofAt(hole) == PZDefOf.PZ_FloorRoof && PZStats.slabCollapses == dkCollapsesAt,
+                        $"hole {hole}: deck {ShipDeck.At(hole, map)}, hole {ShipColumn.Hole(hole, map)}, roof {map.roofGrid.RoofAt(hole)?.defName ?? "none"}; deck above {ShipDeck.At(up, map)}; collapses {PZStats.slabCollapses - dkCollapsesAt}");
+                    stage = "fo_6d";
+                    return true;
+                }
+                case "fo_6d":
+                {
+                    if (!DkFixture(map, 2, DkCorridor(), false, corridor: true))
+                    {
+                        stage = "fo_end";
+                        return true;
+                    }
+                    SeedTicks("fo_6d");
+                    TickUntil(DkMaxTicks, () => DkWatch(map), "fo_6d_done", 1);
+                    return true;
+                }
+                case "fo_6d_done":
+                {
+                    tickWatch = null;
+                    IntVec3 end = FoL(18, 13, 1, map);
+                    Result("F6d one-wide dead-end deck corridor, a chunk on its second-to-last cell (walked over, not stood on): the end cell is taken up first, then the rest, as slabs are",
+                        dkChunkOk && DkLeft(map) == 0 && foFirst == end && dkOrderBad == 0 && foOnCell == 0 && errors == foErrAt,
+                        $"{dkNote}; first {foFirst} (the end {end}) after {foFirstTick} ticks, order{dkOrder} ({dkOrderBad} out of order); {DkReport(map)}; chunk now at {dkChunk?.PositionHeld} (spawned {dkChunk?.Spawned}); errors {errors - foErrAt}");
                     stage = "fo_end";
                     return true;
                 }
@@ -452,6 +562,233 @@ namespace ProjectZ.Dev
             map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
             IntVec3 top = FoL(20, 13, 1, map);
             Info($"slabforce: ladder {foLadder} at {foLadder?.Position} top {foLadder?.top}; top designated {foCells.Contains(top)}, blocker '{Slab.Blocker(top, map)}'");
+        }
+
+        // ---- F6 fixture: the ship. Origin (6, 8) (ground cells 6..18 x 8..18), ship stairs at (7, 11) facing north (ramp
+        // 7 x 10..12, solid end (7, 13) under the exit, level 1), decks on level 1 over the whole ship but the stairwell.
+        // Block A: the deck's far corner (16..18, 16..18); block B: an inner block (11..13, 12..14), its middle (12, 13).
+        private const int DkMaxTicks = 40000;    // the bound for a block's removal (the probe saw cells stuck after 40000)
+        private const int DkIdleTicks = 3000;    // no worker on a removal job this long: the rest is stuck, stop early
+        private static readonly List<Pawn> dkWorkers = new List<Pawn>();
+        private static readonly Dictionary<IntVec3, int> dkDist = new Dictionary<IntVec3, int>();
+        private static readonly HashSet<IntVec3> dkGone = new HashSet<IntVec3>();
+        private static IntVec3 dkForced = IntVec3.Invalid;
+        private static int dkOrderBad, dkLastBusy, dkCollapsesAt;
+        private static string dkOrder = "", dkNote = "";
+        private static Thing dkChunk;
+        private static bool dkChunkOk;
+
+        private static IEnumerable<IntVec3> DkBlock(int x0, int z0) => new CellRect(FoG(x0, z0).x, FoG(x0, z0).z, 3, 3).Cells;
+
+        private static IEnumerable<IntVec3> DkBlockA() => DkBlock(16, 16);
+
+        private static IEnumerable<IntVec3> DkBlockB() => DkBlock(11, 12);
+
+        // The corridor (F6d): level 1 has no deck east of x 13 but the row (14..18, 13), a dead end one cell wide; the
+        // chunk lies on (17, 13).
+        private static IEnumerable<IntVec3> DkCorridor() => new CellRect(FoG(14, 13).x, FoG(14, 13).z, 5, 1).Cells;
+
+        private static int DkLeft(Map map) => foCells.Count(c => ShipDeck.At(c, map));
+
+        // The fixture: the area cleared (foundations too: R2Clear keeps them), the ship built, the designated ground
+        // cells' level-1 decks marked with the vanilla tool, n workers (Construction only) on the ship's ground floor.
+        // upperDeck: a level-2 deck over block B's middle, its roof held by a wall on the level-1 deck. corridor: the deck
+        // east of x 13 is only the corridor row, a chunk on its second-to-last cell (not marked for hauling: it stays).
+        private static bool DkFixture(Map map, int n, IEnumerable<IntVec3> designate, bool upperDeck, bool corridor = false)
+        {
+            if (!ModsConfig.OdysseyActive || PZDefOf.PZ_ShipDeck == null || PZDefOf.PZ_ShipStairs == null)
+            {
+                Result("F6 ship decks: Odyssey loaded", false, $"Odyssey {ModsConfig.OdysseyActive}, deck def {PZDefOf.PZ_ShipDeck?.defName}");
+                return false;
+            }
+            R2Clear(map);
+            CellRect big = r2Area.ExpandedBy(3).ClipInsideMap(map);
+            for (int L = Levels.Max(map); L >= Levels.Min(map); L--)
+            {
+                foreach (IntVec3 g in big)
+                {
+                    IntVec3 c = Levels.Cell(g, L, map);
+                    if (c.IsValid && c.InBounds(map) && map.terrainGrid.FoundationAt(c) != null)
+                    {
+                        map.terrainGrid.RemoveFoundation(c, false);
+                    }
+                }
+            }
+            for (int L = Levels.Max(map); L >= Levels.Min(map); L--)
+            {
+                foreach (IntVec3 g in big)
+                {
+                    IntVec3 c = Levels.Cell(g, L, map);
+                    if (c.IsValid && c.InBounds(map))
+                    {
+                        map.roofGrid.SetRoof(c, null);
+                    }
+                }
+            }
+            map.roofCollapseBuffer.Clear();
+            foreach (Designation d in map.designationManager.SpawnedDesignationsOfDef(DesignationDefOf.RemoveFoundation).ToList())
+            {
+                d.Delete();
+            }
+            dkWorkers.Clear();
+            dkWorkers.AddRange(Colonists(map).Where(p => !p.Downed && !p.WorkTypeIsDisabled(WorkTypeDefOf.Construction)).OrderBy(p => p == r2P ? 0 : 1).ThenBy(p => p.thingIDNumber).Take(n));
+            if (dkWorkers.Count == 0 || dkWorkers[0] != r2P)
+            {
+                Result("F6 ship decks: workers", false, $"{dkWorkers.Count} (the forced order's worker {r2P} first)");
+                return false;
+            }
+            R2Park(map, dkWorkers.ToArray());
+            R2Feed(map);
+            LinkSteps.For(map)?.steps.Clear();
+            Find.ResearchManager.gravEngineInspected = true;
+            IntVec3 o = FoG(6, 8);
+            BuildShip(map, o, 13, 11);
+            Building_GravEngine e = GlEngine(map);
+            if (e != null)
+            {
+                e.nameHidden = false;
+            }
+            IntVec3 st = FoG(7, 11);
+            HashSet<IntVec3> well = new HashSet<IntVec3>(StairShape.Ramp(st, Rot4.North));
+            for (int x = 0; x < 13; x++)
+            {
+                for (int z = 0; z < 11; z++)
+                {
+                    IntVec3 g = o + new IntVec3(x, 0, z);
+                    if (corridor && x >= 8 && z != 5)
+                    {
+                        continue;
+                    }
+                    if (!well.Contains(g))
+                    {
+                        map.terrainGrid.SetTerrain(Levels.Cell(g, 1, map), PZDefOf.PZ_ShipDeck);
+                    }
+                }
+            }
+            foreach (IntVec3 g in well)
+            {
+                map.roofGrid.SetRoof(g, null);
+            }
+            AcceptanceReport stOk = ShipStairs.Check(st, Rot4.North, map);
+            Building_Stairs stairs = Place(PZDefOf.PZ_ShipStairs, null, st, map, Rot4.North) as Building_Stairs;
+            if (upperDeck)
+            {
+                Place(ThingDefOf.Wall, ThingDefOf.WoodLog, FoL(12, 16, 1, map), map);
+                map.terrainGrid.SetTerrain(FoL(12, 13, 2, map), PZDefOf.PZ_ShipDeck);
+            }
+            dkChunk = null;
+            dkChunkOk = false;
+            dkNote = "";
+            if (corridor)
+            {
+                IntVec3 at = FoL(17, 13, 1, map);
+                dkChunk = GenSpawn.Spawn(ThingMaker.MakeThing(ThingDefOf.ChunkSlagSteel), at, map);
+                dkChunkOk = dkChunk.Position == at && at.Walkable(map) && !at.Standable(map);
+                dkNote = $"chunk {dkChunk} at {dkChunk.Position} (walkable {at.Walkable(map)}, standable {at.Standable(map)}, marked for hauling {map.designationManager.DesignationOn(dkChunk, DesignationDefOf.Haul) != null})";
+            }
+            e?.ForceSubstructureDirty();
+            map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
+            StairGrid sg = StairGrid.For(map);
+            bool usable = stairs != null && sg != null && sg.links.Any(l => l.stairs == stairs && sg.Usable(l));
+            foCells.Clear();
+            Designator_RemoveFoundation tool = new Designator_RemoveFoundation();
+            List<string> refused = new List<string>();
+            FloorView.Set(1);
+            foreach (IntVec3 g in designate)
+            {
+                IntVec3 c = Levels.Cell(g, 1, map);
+                AcceptanceReport r = tool.CanDesignateCell(c);
+                if (r.Accepted)
+                {
+                    tool.DesignateSingleCell(c);
+                    foCells.Add(c);
+                }
+                else
+                {
+                    refused.Add($"{c} '{r.Reason}'");
+                }
+            }
+            FloorView.Set(0);
+            dkDist.Clear();
+            SlabPeel peel = SlabPeel.For(map);
+            foreach (IntVec3 c in foCells)
+            {
+                dkDist[c] = peel?.Distance(c) ?? -1;
+            }
+            for (int i = 0; i < dkWorkers.Count; i++)
+            {
+                Pawn w = dkWorkers[i];
+                IntVec3 at = o + new IntVec3(2 + i, 0, 1);
+                Teleport(w, at);
+                Draft(w, false);
+                R2Work(w, WorkTypeDefOf.Construction);
+            }
+            dkGone.Clear();
+            dkForced = IntVec3.Invalid;
+            dkOrderBad = 0;
+            dkOrder = "";
+            dkLastBusy = 0;
+            foFirst = IntVec3.Invalid;
+            foFirstTick = -1;
+            foTick = 0;
+            foOnCell = 0;
+            foErrAt = errors;
+            foNote = "";
+            bool ok = stairs != null && usable && refused.Count == 0 && foCells.Count == designate.Count();
+            Info($"F6 fixture: ship {o} engine {e?.Position}, ship stairs {stairs?.Position} (check '{(stOk.Accepted ? "accepted" : stOk.Reason)}', link usable {usable}, exit {stairs?.TopCell}), designated {foCells.Count} (refused {string.Join(", ", refused)}), distances {string.Join(" ", foCells.Select(c => dkDist[c]))}, workers {string.Join(", ", dkWorkers)}, level-2 deck {upperDeck}");
+            if (!ok)
+            {
+                Result("F6 ship decks: fixture (ship stairs up to the deck, link usable, every block cell designated)", false, $"stairs {stairs}, usable {usable}, refused {string.Join(", ", refused)}");
+            }
+            return ok;
+        }
+
+        // Per tick: the workers never on the deck they take up; each cell gone, in order (none while a farther designated
+        // deck waited, the forced cell aside); done when all are gone or no one has worked for DkIdleTicks.
+        private static bool DkWatch(Map map)
+        {
+            foTick++;
+            foreach (Pawn w in dkWorkers)
+            {
+                Job j = w.CurJob;
+                if (j != null && (j.def == JobDefOf.RemoveFoundation || j.def == JobDefOf.RemoveFloor))
+                {
+                    dkLastBusy = foTick;
+                    if (!w.pather.Moving && w.Position == j.targetA.Cell)
+                    {
+                        foOnCell++;
+                    }
+                }
+            }
+            foreach (IntVec3 c in foCells)
+            {
+                if (dkGone.Contains(c) || ShipDeck.At(c, map))
+                {
+                    continue;
+                }
+                dkGone.Add(c);
+                if (!foFirst.IsValid)
+                {
+                    foFirst = c;
+                    foFirstTick = foTick;
+                }
+                int far = foCells.Where(x => !dkGone.Contains(x) && ShipDeck.At(x, map)).Select(x => dkDist[x]).DefaultIfEmpty(-1).Max();
+                if (c != dkForced && dkDist[c] < far)
+                {
+                    dkOrderBad++;
+                }
+                dkOrder += $" {dkDist[c]}";
+            }
+            return DkLeft(map) == 0 || foTick - dkLastBusy > DkIdleTicks;
+        }
+
+        // What is left: the cells still designated and whether anyone could stand next to them (stranded: no cell to stand
+        // on, ShipDeck.WorkSpot).
+        private static string DkReport(Map map)
+        {
+            List<IntVec3> left = foCells.Where(c => ShipDeck.At(c, map)).ToList();
+            List<IntVec3> stranded = left.Where(c => !ShipDeck.WorkSpot(dkWorkers[0], c).IsValid).ToList();
+            return $"{foCells.Count - left.Count}/{foCells.Count} taken up after {foTick} ticks (last work at {dkLastBusy}); left {string.Join(" ", left)}; stranded (no cell to stand on) {stranded.Count}: {string.Join(" ", stranded)}; ticks a worker stood on its cell {foOnCell}";
         }
     }
 }

@@ -21,7 +21,8 @@ namespace ProjectZ
     //     2026-11-01): the deck above stays over the hole and flies (ShipColumn.Hole); only the ground substructure under a
     //     deck is refused ("remove the deck above first"), the deck would lose the ship under it. What stands on
     //     a removed deck falls to the floor below (Slab.MoveOff, the gravity rule; the worker stands on a next cell,
-    //     WorkSpot), what was laid on it goes.
+    //     WorkSpot), what was laid on it goes. Automatic work takes upper decks up in the slabs' peel order (SlabPeel, user
+    //     2026-11-14: farthest from the stairs first, so none is cut off); a forced order skips it.
     //   - Falling: a deck whose cell below lost its substructure falls through the slab collapse (SlabCollapse): its roof
     //     cell is marked to collapse, the game's collapse buffer drops it with the deck (one hook there, S1). Decks above it
     //     follow. This runs on any foundation removal, after a gravship takes off (decks left out of the ship set stay
@@ -177,9 +178,30 @@ namespace ProjectZ
         // A deck on an upper floor (the ground's substructure is vanilla's).
         public static bool Upper(IntVec3 c, Map map) => ProjectZ.Annex(map) != null && At(c, map) && ProjectZ.FloorOf(c, map) >= 1;
 
-        // Where a worker stands to take deck c up (compat G2: what stands on a removed deck falls, so never on c itself):
-        // a cell next to it (4 ways) on its floor that the pawn can stand on and reach; one not marked for removal itself
-        // first, then the nearest to the pawn. Invalid: none.
+        // An upper deck that can't be taken up now: the deck rules (Blocker), or a building, blueprint or frame on it (as
+        // for slabs; items and pawns are moved off instead). The remove tool's work giver asks it
+        // (FoundationRemovalBlocked_ShipDeck_Patch), and the peel order leaves such a deck out (SlabPeel).
+        public static bool RemovalBlocked(IntVec3 c, Map map)
+        {
+            if (Blocker(c, map) != null)
+            {
+                return true;
+            }
+            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] is Building || list[i] is Blueprint || list[i] is Frame)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Where the worker of a forced order stands to take deck c up (compat G2: what stands on a removed deck falls, so
+        // never on c itself; automatic work follows the peel order, SlabPeel.Parent): a cell next to it (4 ways) on its
+        // floor that the pawn can stand on and reach; one not marked for removal itself first, then the nearest to the
+        // pawn. Invalid: none.
         public static IntVec3 WorkSpot(Pawn pawn, IntVec3 c)
         {
             Map map = pawn.Map;
@@ -437,12 +459,7 @@ namespace ProjectZ
             {
                 return true;
             }
-            __result = ShipDeck.Blocker(c, map) != null;
-            List<Thing> list = map.thingGrid.ThingsListAtFast(c);
-            for (int i = 0; i < list.Count && !__result; i++)
-            {
-                __result = list[i] is Building || list[i] is Blueprint || list[i] is Frame;
-            }
+            __result = ShipDeck.RemovalBlocked(c, map);
             return false;
         }
 
@@ -487,13 +504,15 @@ namespace ProjectZ
         }
     }
 
-    // An upper deck is taken up from a cell next to it (WorkSpot; the job's target B, Slabs.cs): none, no job.
+    // A forced order on an upper deck needs a cell next to it to stand on (WorkSpot, the forced job's target B, Slabs.cs):
+    // none, no job. As for slabs, automatic work is not asked this: the peel order decides (SlabPeel.Workable, the worker
+    // on SlabPeel.Parent: RemoveFoundationHasJob_Slab_Patch, RemoveFoundationJob_Slab_Patch).
     [HarmonyPatch(typeof(WorkGiver_ConstructRemoveFoundation), nameof(WorkGiver_ConstructRemoveFoundation.HasJobOnCell))]
     public static class RemoveFoundationHasJob_ShipDeck_Patch
     {
-        public static void Postfix(Pawn pawn, IntVec3 c, ref bool __result)
+        public static void Postfix(Pawn pawn, IntVec3 c, bool forced, ref bool __result)
         {
-            if (__result && ShipDeck.Upper(c, pawn.Map) && !ShipDeck.WorkSpot(pawn, c).IsValid)
+            if (__result && forced && ShipDeck.Upper(c, pawn.Map) && !ShipDeck.WorkSpot(pawn, c).IsValid)
             {
                 JobFailReason.Is("PZ_NoWorkSpot".Translate());
                 __result = false;
