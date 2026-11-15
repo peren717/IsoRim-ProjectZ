@@ -44,6 +44,8 @@
   <PZ_FartherFirst>Cells farther from the stairs go first</PZ_FartherFirst>
   <PZ_WouldCutOff>The worker would be cut off</PZ_WouldCutOff>
   <PZ_NoWorkSpot>Nowhere to stand next to it</PZ_NoWorkSpot>
+  <PZ_AlertFloorStalled>Marked floor out of reach</PZ_AlertFloorStalled>
+  <PZ_AlertFloorStalledDesc>Floors are taken up from the far end. No colonist can work on the next cell, so the rest waits.\n\nLet a colonist reach that cell, or cancel its removal.</PZ_AlertFloorStalledDesc>
   <PZ_DamagedSlab>damaged {0}</PZ_DamagedSlab>
   <PZ_DamagedSlabDesc>A cracked upper floor. Nothing can be laid on it. Lay a new upper floor over it to replace it. Replacing or removing it returns no materials.</PZ_DamagedSlabDesc>
   <PZ_DamagedSlabNoFloor>Damaged upper floor: lay a new one over it</PZ_DamagedSlabNoFloor>

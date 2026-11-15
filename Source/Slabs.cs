@@ -788,6 +788,20 @@ namespace ProjectZ
             return d > 0 && d == maxDist[ProjectZ.FloorOf(c, map) - maxLowest];
         }
 
+        // The marked cells that are next in the order now, the ones automatic work is handed: workable and not held back
+        // by their own rules (FloorStall asks, for its alert).
+        public void Next(List<IntVec3> into)
+        {
+            foreach (Designation des in map.designationManager.SpawnedDesignationsOfDef(DesignationDefOf.RemoveFoundation))
+            {
+                IntVec3 c = des.target.Cell;
+                if (Peeled(c, map) && Workable(c) && !Blocked(c, map))
+                {
+                    into.Add(c);
+                }
+            }
+        }
+
         // Where the worker stands: the cell one step nearer the stairs. Invalid when the slab isn't reached.
         public IntVec3 Parent(IntVec3 c)
         {

@@ -36,10 +36,13 @@ namespace ProjectZ
             // (a lambda: the work toil's tick, the one MakeNewToils lambda taking an int; see Find)
             (typeof(JobDriver_AffectRoof), "<MakeNewToils>b__", new[] { typeof(int) }, "ccf76e120c31f25b", "ProjectZ, MineValues.RoofWorkPerTick (Remove roof's work a tick, 1.7)"),
             (typeof(RimWorld.Planet.Gravship), "CopyCellContents", null, "e7e0c93257da9524", "ProjectZ, ShipRoofs.Take (the room record: a room's temperature and vacuum, once per room not at outdoor temperature)"),
+            // (a local function: the work scan's test of a cell, the one of that name in TryIssueJobPackage; any parameters)
+            (typeof(JobGiver_Work), "<TryIssueJobPackage>g__ProcessCell", null, "0b99a450e5027aa1", "ProjectZ, FloorStall.Hands (the work scan's tests of a cell: allowed area, the work giver's answer, reach)"),
         };
 
-        // A method by name and parameters; a name starting with "<" is a compiler-made lambda: the method of the type or
-        // its nested types whose name starts with it and whose parameters are args (exactly one, or none found).
+        // A method by name and parameters; a name starting with "<" is a compiler-made lambda or local function: the method
+        // of the type or its nested types whose name starts with it and whose parameters are args (no args given: any
+        // parameters; exactly one, or none found).
         private static MethodBase Find(Type type, string method, Type[] args)
         {
             if (!method.StartsWith("<"))
@@ -52,7 +55,7 @@ namespace ProjectZ
             {
                 foreach (MethodInfo m in AccessTools.GetDeclaredMethods(t))
                 {
-                    if (m.Name.StartsWith(method) && m.GetParameters().Select(p => p.ParameterType).SequenceEqual(args ?? Type.EmptyTypes))
+                    if (m.Name.StartsWith(method) && (args == null || m.GetParameters().Select(p => p.ParameterType).SequenceEqual(args)))
                     {
                         found = m;
                         n++;
