@@ -5,8 +5,9 @@ using Verse;
 namespace ProjectZ
 {
     // Everything that touches IsoRim's types lives here, so ProjectZ also loads (headless tests) without IsoRim. It uses
-    // only IsoRim's public API (IsoRim.Api, IsoRim.Api.Dev for tests, IsoRim.IFloorLayout, IsoRim.ProjectileCardHook),
-    // never IsoRim's internals, so IsoRim can change those freely.
+    // only IsoRim's public API (IsoRim.Api, IsoRim.Api.Dev for tests, IsoRim.IFloorLayout, IsoRim.ProjectileCardHook, and
+    // the model def fields of ProjectZ's own IsoRim.ModelDefs: FitStoreyModels), never IsoRim's internals, so IsoRim can
+    // change those freely.
     public static class IsoRimBridge
     {
         public static bool Present;
@@ -40,9 +41,11 @@ namespace ProjectZ
         private static void Hook()
         {
             // Decisions D10/D11: the 3D view is always on with ProjectZ, on every map.
-            // Storeys stand on the walls: the wall height is fixed (user 2026-10-15), so stairs, models and the slab
-            // height rule all work to one storey.
-            IsoRim.Api.LockView("IsoRim ProjectZ", LockedWall);
+            // Storeys stand on the walls: the wall height is locked (user 2026-10-15) to the player's storey height
+            // setting (user 2026-11-16), so stairs, models and the slab height rule all work to one storey.
+            LockWall();
+            // the storey-tall model defs load after this (mod constructor): fitted once they are there
+            LongEventHandler.ExecuteWhenFinished(FitStoreyModels);
             IsoRim.Api.HiddenRoof = r => r == PZDefOf.PZ_StairwellRoof;
             IsoRim.Api.Floors = new FloorLayout();
             if (ApiVersion >= 19)
@@ -84,23 +87,88 @@ namespace ProjectZ
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static void HoldFacing() => IsoRim.Api.AddFacingHold(p => Links.LadderPose(p, out _, out _));
 
-        // The wall height under ProjectZ (IsoRim's option is locked to it).
-        public static readonly float LockedWall = DevWallHeight(1.65f);
+        // The wall height under ProjectZ (IsoRim's option is locked to it): the storey height setting
+        // (ProjectZSettings.wallHeight), or the dev override, which wins (tests pin the height with it).
+        public static float LockedWall => DevWall > 0f ? DevWall : ProjectZMod.Settings?.wallHeight ?? ProjectZSettings.DefaultWallHeight;
 
-        // Dev only: -projectzwallheight=X starts the game with another locked wall height (wall-height comparison shots).
-        private static float DevWallHeight(float normal)
+        private static readonly float DevWall = DevWallHeight();
+
+        // Dev only: -projectzwallheight=X starts the game with another locked wall height (wall-height comparison shots);
+        // 0 without it.
+        private static float DevWallHeight()
         {
             if (GenCommandLine.TryGetCommandLineArg("projectzwallheight", out string s) && float.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float h) && h >= 0.5f && h <= 4f)
             {
                 Log.Warning("[ProjectZ] dev: wall height " + h + " (-projectzwallheight)");
                 return h;
             }
-            return normal;
+            return 0f;
         }
+
+        // Locks IsoRim's view to LockedWall and fits the storey-tall models to it: at the start and whenever the storey
+        // height setting changes (IsoRim rebuilds the maps itself when its wall height changes).
+        public static void ApplyWallHeight()
+        {
+            if (Present)
+            {
+                LockWall();
+                FitStoreyModels();
+            }
+        }
+
+        private static void LockWall() => IsoRim.Api.LockView("IsoRim ProjectZ", LockedWall);
 
         // Height of one storey, in cells: the wall height and a little more, so a floor never meets the tops of the
         // walls below it in one plane.
         public static float StoreyHeight => WallHeight + 0.02f;
+
+        // The storey ProjectZ's storey-tall models were built for, in cells (wall 1.65 + 0.02): the stairs and ship stairs
+        // (pz_stairs.obj, pz_ship_stairs.obj: 6 risers of a storey over the ramp), the elevator's base and shaft segment,
+        // the ladder segment and the lift's base and mast (pz_elevator_*, pz_ladder_segment, pz_lift_*) are this tall.
+        public const float ModelStorey = 1.67f;
+
+        // Float noise of the storey sum around ModelStorey: closer than this counts as the built-for storey.
+        private const float ModelStoreySnap = 0.0005f;
+
+        // How much those models are stretched up to the storey drawn now (StoreyHeight / ModelStorey), so their treads and
+        // tops meet the slab as the walk ramp does (Jumps.RampRise); exactly 1 at the built-for storey (drawn as before).
+        public static float ModelStretch
+        {
+            get
+            {
+                float k = StoreyHeight / ModelStorey;
+                return Mathf.Abs(k - 1f) < ModelStoreySnap ? 1f : k;
+            }
+        }
+
+        // ProjectZ's own IsoRim model defs whose model is a storey tall (IsoRim/Defs/PZ_Models.xml).
+        private static readonly string[] StoreyModelDefs = { "R3D_PZ_Stairs", "R3D_PZ_ShipStairs", "R3D_PZ_Elevator" };
+
+        // Stretches those defs by ModelStretch through IsoRim's own wallFit (drawn height x WallHeight / wallFit; IsoRim
+        // rebuilds with the new wall height): wallFit = WallHeight / ModelStretch, and 0 (fixed height, as in the XML) at
+        // the built-for storey. LiftModels stretches the pieces it draws itself by the same ModelStretch.
+        private static void FitStoreyModels()
+        {
+            if (Present)
+            {
+                FitStoreyModelsInner();
+            }
+        }
+
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static void FitStoreyModelsInner()
+        {
+            float k = ModelStretch;
+            float fit = k == 1f ? 0f : WallHeight / k;
+            for (int i = 0; i < StoreyModelDefs.Length; i++)
+            {
+                IsoRim.ModelDef d = DefDatabase<IsoRim.ModelDef>.GetNamedSilentFail(StoreyModelDefs[i]);
+                if (d != null)
+                {
+                    d.wallFit = fit;
+                }
+            }
+        }
 
         public static float WallHeight => Present ? WallHeightInner() : LockedWall;
 

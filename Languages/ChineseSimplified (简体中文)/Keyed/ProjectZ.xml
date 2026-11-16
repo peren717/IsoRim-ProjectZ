@@ -10,6 +10,8 @@
   <PZ_FloorsWarn6>小人们正在联名请愿要电梯。</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>你的电脑现在是一台取暖器。</PZ_FloorsWarn10>
   <PZ_FloorsWarn13>十三层：你的 13×13 基地终于变成了 13×13×13。能出什么问题呢？</PZ_FloorsWarn13>
+  <PZ_StoreyHeight>层高（墙高，格）</PZ_StoreyHeight>
+  <PZ_StoreyHeightTip>墙和每层楼的高度。默认 1.65。</PZ_StoreyHeightTip>
   <PZ_Debug>调试模式</PZ_Debug>
   <PZ_DebugTip>额外的日志和开发工具。</PZ_DebugTip>
   <PZ_FloorLabel>{0} 楼</PZ_FloorLabel>

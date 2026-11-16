@@ -1241,6 +1241,11 @@ namespace ProjectZ.Dev
                 StepWallHeight(map);
                 return;
             }
+            if (stage.StartsWith("sy_"))
+            {
+                StepStoreyHeight(map);
+                return;
+            }
             if (stage.StartsWith("e_"))
             {
                 StepSpace(map);
@@ -1796,6 +1801,10 @@ namespace ProjectZ.Dev
                     else if (mode == "wallheight")
                     {
                         stage = "wh_setup";
+                    }
+                    else if (mode == "storeyheight")
+                    {
+                        stage = "sy_setup";
                     }
                     else if (mode == "staircolour")
                     {

@@ -25,6 +25,27 @@ namespace ProjectZ
         // The one-time floor scroll hint was shown (the first click on a floor HUD bar, per install).
         public bool floorScrollHintShown = false;
 
+        // Storey height (user 2026-11-16): the wall height ProjectZ locks IsoRim's view to (IsoRimBridge.LockedWall), one
+        // of WallHeights, global and changeable at any time (IsoRimBridge.ApplyWallHeight). The default is the wall height
+        // ProjectZ was built at, so nothing changes unless the player picks another.
+        public const float DefaultWallHeight = 1.65f;
+        public static readonly float[] WallHeights = { DefaultWallHeight, 2.0f, 2.4f };
+        public float wallHeight = DefaultWallHeight;
+
+        // The choice nearest to h (a hand-edited or outdated saved value lands on a listed one).
+        public static float NearestWallHeight(float h)
+        {
+            float best = DefaultWallHeight;
+            for (int i = 0; i < WallHeights.Length; i++)
+            {
+                if (Mathf.Abs(WallHeights[i] - h) < Mathf.Abs(best - h))
+                {
+                    best = WallHeights[i];
+                }
+            }
+            return best;
+        }
+
         public override void ExposeData()
         {
             base.ExposeData();
@@ -36,7 +57,9 @@ namespace ProjectZ
             Scribe_Values.Look(ref floorHudRight, "floorHudRight", 0f);
             Scribe_Values.Look(ref floorHudBottom, "floorHudBottom", 0f);
             Scribe_Values.Look(ref floorScrollHintShown, "floorScrollHintShown", false);
+            Scribe_Values.Look(ref wallHeight, "storeyWallHeight", DefaultWallHeight);
             floors = Mathf.Clamp(floors, 1, MaxFloors);
+            wallHeight = NearestWallHeight(wallHeight);
         }
     }
 
@@ -74,6 +97,17 @@ namespace ProjectZ
             list.Label("PZ_Floors".Translate(Settings.floors), tooltip: "PZ_FloorsTip".Translate());
             Settings.floors = Mathf.RoundToInt(list.Slider(Settings.floors, 1f, ProjectZSettings.MaxFloors));
             FloorsUI.DrawWarning(list, Settings.floors);
+            list.Gap();
+            list.Label("PZ_StoreyHeight".Translate(), tooltip: "PZ_StoreyHeightTip".Translate());
+            for (int i = 0; i < ProjectZSettings.WallHeights.Length; i++)
+            {
+                float h = ProjectZSettings.WallHeights[i];
+                if (list.RadioButton(h.ToString("0.0#", System.Globalization.CultureInfo.InvariantCulture), Settings.wallHeight == h, 12f, "PZ_StoreyHeightTip".Translate()) && Settings.wallHeight != h)
+                {
+                    Settings.wallHeight = h;
+                    IsoRimBridge.ApplyWallHeight();
+                }
+            }
             list.Gap();
             // hidden (field and key kept) while the HeightAccuracy combat part is off (Api 6: Combat Extended, or released)
             if (Combat.CombatGate.On(CombatPart.HeightAccuracy))

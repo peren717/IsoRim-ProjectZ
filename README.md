@@ -35,7 +35,7 @@ Requires Harmony and IsoRim Waylith. Load IsoRimZ after IsoRim Waylith.
 - **Peek** key (no default key, set it in the key bindings): while held, the floors above are drawn faded.
 - Fog: every place your pawns can reach is revealed, and from every edge they can see down.
 - Sun and moon shadows still fall on the ground below while an upper floor is viewed.
-- On a map with floors the 3D view stays on and the wall height is fixed.
+- On a map with floors the 3D view stays on and the wall height is locked to the storey height setting (1.65, 2.0 or 2.4 cells).
 
 ## Raids and the vertical axis
 

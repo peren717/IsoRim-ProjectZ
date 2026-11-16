@@ -7,7 +7,9 @@ namespace ProjectZ
     // The 3D look of the elevator's shaft, the improvised ladders and the mechanoids' lift (models approved by the user,
     // Grok 2026-10-20: Models/pz_elevator_*.obj, pz_ladder_*.obj, pz_lift_*.obj with their own pz_lifts.mtl: fixed
     // colours, the lift's lamp faces glow_ = lit by IsoRim). Every model is built facing north (-z of the file), one
-    // storey (1.67) a stacked piece, the cell's centre at the origin.
+    // storey (IsoRimBridge.ModelStorey) a stacked piece, the cell's centre at the origin. The storey-tall pieces
+    // (StoreyTall) are stretched up to the storey drawn now (IsoRimBridge.ModelStretch, the player's storey height); the
+    // caps, feet and hooks keep their size and sit at their storey's height.
     //   - the elevator's base: IsoRim's ModelDef (IsoRim/Defs/PZ_Models.xml, baked like any building, turned to the door
     //     side). Over it, drawn here each frame: a shaft segment on every level up to the shaft's top (Building_Elevator
     //     .LinkedTop: a cap ends it), then the top piece on the last segment; under a cap (the shaft ends below the map's
@@ -33,6 +35,9 @@ namespace ProjectZ
             "pz_elevator_shaft", "pz_elevator_top", "pz_elevator_platform", "pz_ladder_foot", "pz_ladder_segment", "pz_ladder_top",
             "pz_lift_base", "pz_lift_mast", "pz_lift_top",
         };
+
+        // The pieces a storey tall (ModelStorey), stretched with the storey height; the others keep their size.
+        private static bool StoreyTall(int part) => part == ElevatorShaft || part == LadderSegment || part == LiftBase || part == LiftMast;
 
         // The platform's deck top over its origin (pz_elevator_platform.obj: the floor plate y 0.02..0.07).
         public const float PlatformDeck = 0.07f;
@@ -187,7 +192,8 @@ namespace ProjectZ
             {
                 return 0;
             }
-            IsoRim.Api.DrawModel(m, new Vector3(c.x + 0.5f, y, c.z + 0.5f), yaw, Vector3.one, Color.white);
+            Vector3 scale = StoreyTall(part) ? new Vector3(1f, IsoRimBridge.ModelStretch, 1f) : Vector3.one;
+            IsoRim.Api.DrawModel(m, new Vector3(c.x + 0.5f, y, c.z + 0.5f), yaw, scale, Color.white);
             return 1;
         }
     }

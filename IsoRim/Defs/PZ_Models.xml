@@ -6,7 +6,9 @@
        the treads centred on the walk ramp (Jumps.RampRise), so a pawn's feet sit on the treads; the solid 4th cell under
        the exit ends just under the floor slab IsoRim draws there (1.54), so the slab is the landing. Treads, sides and back
        plain "stuff" so the stairs read like walls of the same stuff, risers "stuff_dark", the hidden bottom "stuff_deep".
-       Written by tools/projectz/stairs1x4_blender.py (supersedes stairs_obj.js). -->
+       Written by tools/projectz/stairs1x4_blender.py (supersedes stairs_obj.js). Built for a storey of 1.67
+       (IsoRimBridge.ModelStorey); at another storey height ProjectZ stretches it (and the ship stairs and the elevator's
+       base below) up to the storey through wallFit at run time (IsoRimBridge.FitStoreyModels). -->
   <IsoRim.ModelDef>
     <defName>R3D_PZ_Stairs</defName>
     <thingDef>PZ_Stairs</thingDef>

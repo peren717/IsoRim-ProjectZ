@@ -136,7 +136,8 @@ abilities, unconverted mod weapons).
 
 Virtual space: x and z are over the ground rows (a cell spans `[x, x + 1)`, as in map positions); y is the absolute
 height in cells (floor k's floor is at `k * StoreyHeight`; negative below the ground). A height "over a floor" is in
-cells over that floor's floor. `WallHeight` is IsoRim's locked wall height; `StoreyHeight` is 0.02 more.
+cells over that floor's floor. `WallHeight` is IsoRim's locked wall height; `StoreyHeight` is 0.02 more. Both follow
+ProjectZ's storey height setting, which the player can change during a game: read them when needed, don't cache them.
 
 | Call | Wraps | Notes |
 |---|---|---|

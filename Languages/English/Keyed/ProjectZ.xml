@@ -10,6 +10,8 @@
   <PZ_FloorsWarn6>Your colonists are drafting a petition for elevators.</PZ_FloorsWarn6>
   <PZ_FloorsWarn10>Your PC is now a space heater.</PZ_FloorsWarn10>
   <PZ_FloorsWarn13>13 floors: your 13x13 base is finally a 13x13x13 cube. What could possibly go wrong?</PZ_FloorsWarn13>
+  <PZ_StoreyHeight>Storey height (wall height, cells)</PZ_StoreyHeight>
+  <PZ_StoreyHeightTip>How tall walls and floors are. 1.65 is the default.</PZ_StoreyHeightTip>
   <PZ_Debug>Debug mode</PZ_Debug>
   <PZ_DebugTip>Extra log lines and dev tools.</PZ_DebugTip>
   <PZ_FloorLabel>Floor {0}</PZ_FloorLabel>
