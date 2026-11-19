@@ -35,6 +35,10 @@ namespace ProjectZ.Dev
     //                                   between floors (AimFloor), -projectzfloors=3 -projectzseed=7 (TestFlame)
     //                                   aimedge: burner streams cast at the map's edges, on one floor and between floors
     //                                   (AimFloor), -projectzfloors=2 -projectzseed=7 (TestAimEdge)
+    //                                   warmupaim: a warm-up's aim line, charge and target motes between floors (hellsphere
+    //                                   cannon, fleshmelter bolt, beam repeater: real orders and a Diabolus on its own), one
+    //                                   floor to the bit, -projectzfloors=3 -projectzseed=7; -projectzfloors=1: the map
+    //                                   without floors (TestWarmupAim)
     //                                   stairsreentry: stairs killed by a real IED's blast with something on their landing
     //                                   (issue 7), alone or with CE and its pack, -projectzfloors=3 -projectzseed=7 (TestStairsReentry)
     //                                   routerfix: the router's failure handling (a forced failure: answered, memo,
@@ -1246,6 +1250,11 @@ namespace ProjectZ.Dev
                 StepStoreyHeight(map);
                 return;
             }
+            if (stage.StartsWith("wa_"))
+            {
+                StepWarmupAim(map);
+                return;
+            }
             if (stage.StartsWith("e_"))
             {
                 StepSpace(map);
@@ -1643,7 +1652,7 @@ namespace ProjectZ.Dev
 
                 // ---- main / gen
                 case "gencheck":
-                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi" || mode == "floorplan" || mode == "smartcon") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi, floorplan, smartcon without floors: no annex to check)
+                    if (!((mode == "locustjump" || mode == "powerfloors1" || mode == "stairapi" || mode == "floorplan" || mode == "smartcon" || mode == "warmupaim") && FloorsOverride == 1))   // (locustjump, powerfloors1, stairapi, floorplan, smartcon, warmupaim without floors: no annex to check)
                     {
                         GenCheck(map, "after generation");
                         FogLidCheck("after generation");
@@ -1805,6 +1814,10 @@ namespace ProjectZ.Dev
                     else if (mode == "storeyheight")
                     {
                         stage = "sy_setup";
+                    }
+                    else if (mode == "warmupaim")
+                    {
+                        stage = "wa_setup";
                     }
                     else if (mode == "staircolour")
                     {

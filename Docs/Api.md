@@ -120,6 +120,8 @@ addon can't release them:
   `PawnFlyer_CheckDestination_Patch`: flights drawn and kept between floors.
 - `GenDraw_RadiusRing_Band_Patch`: any ring clipped to its band.
 - `TurretTop_Aim_Patch`: guns turn toward a target on another floor.
+- `Stance_Warmup_AimDir_Patch` and `Stance_Warmup_TargetPos_Patch`: a warm-up's aim line and motes point at a target on
+  another floor.
 - `AIFightEnemy_ShouldLoseTarget_Patch`.
 - `PermitRange_Patch`.
 - The BandRadial and Dist3D lists.
