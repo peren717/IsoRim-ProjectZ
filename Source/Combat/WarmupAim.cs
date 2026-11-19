@@ -39,12 +39,13 @@ namespace ProjectZ.Combat
         // Copied from vanilla Stance_Warmup.AimDir (watched, CopyWatches): the target's centre less the caster's drawn
         // position, flat and normalised, here with the rows between the two floors taken off z first. (The game's own
         // result is normalised already: the rows cannot be taken off it afterwards.)
+        // When another mod skipped the game's AimDir (its own direction), the result is left alone: that mod's value stands.
         [HarmonyPatch(typeof(Stance_Warmup), "AimDir")]
         private static class Stance_Warmup_AimDir_Patch
         {
-            private static void Postfix(Stance_Warmup __instance, ref Vector3 __result)
+            private static void Postfix(Stance_Warmup __instance, ref Vector3 __result, bool __runOriginal)
             {
-                if (!CrossFloor(__instance, out int rows))
+                if (!__runOriginal || !CrossFloor(__instance, out int rows))
                 {
                     return;
                 }
@@ -56,14 +57,19 @@ namespace ProjectZ.Combat
             }
         }
 
+        // The far end of the aim line. Between floors a fixed-length aim line (the hellsphere cannon, the fleshmelter bolt)
+        // ends on the target instead of at its fixed length from the caster: what the player sees is a line to the target on
+        // its floor, shorter or longer than on one floor. This restates the other branch of vanilla Stance_Warmup.TargetPos
+        // (without a fixed length: the target's centre) and rests on its present shape (watched, CopyWatches).
+        // When another mod skipped the game's TargetPos (its own end point), the result is left alone.
         [HarmonyPatch(typeof(Stance_Warmup), "TargetPos")]
         private static class Stance_Warmup_TargetPos_Patch
         {
-            private static void Postfix(Stance_Warmup __instance, ref Vector3 __result)
+            private static void Postfix(Stance_Warmup __instance, ref Vector3 __result, bool __runOriginal)
             {
                 // The renderer resolves the floor from each mote link's map position.
                 // A fixed-length offset from the caster loses the target floor.
-                if (__instance.verb?.verbProps.aimingLineMoteFixedLength.HasValue == true &&
+                if (__runOriginal && __instance.verb?.verbProps.aimingLineMoteFixedLength.HasValue == true &&
                     CrossFloor(__instance, out _))
                 {
                     __result = __instance.focusTarg.CenterVector3;

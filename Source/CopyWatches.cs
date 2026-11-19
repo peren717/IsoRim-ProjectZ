@@ -39,6 +39,7 @@ namespace ProjectZ
             // (a local function: the work scan's test of a cell, the one of that name in TryIssueJobPackage; any parameters)
             (typeof(JobGiver_Work), "<TryIssueJobPackage>g__ProcessCell", null, "0b99a450e5027aa1", "ProjectZ, FloorStall.Hands (the work scan's tests of a cell: allowed area, the work giver's answer, reach)"),
             (typeof(Stance_Warmup), "AimDir", null, "b230910b2667c638", "ProjectZ, Stance_Warmup_AimDir_Patch (a warm-up's aim direction: target centre less the caster's drawn position, flat, normalised)"),
+            (typeof(Stance_Warmup), "TargetPos", null, "c99e71aedb36369a", "ProjectZ, Stance_Warmup_TargetPos_Patch (the aim line's far end: the target's centre, or a fixed length from the caster along the aim direction)"),
         };
 
         // A method by name and parameters; a name starting with "<" is a compiler-made lambda or local function: the method
