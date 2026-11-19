@@ -4,49 +4,67 @@ using Verse;
 
 namespace ProjectZ.Combat
 {
+    // A warm-up's aim indicators between floors (Stance_Warmup: the aim line, the charge mote and the target mote of the
+    // verbs that have them: the hellsphere cannon, the fleshmelter bolt, the beam repeater). The game works the aim
+    // direction out in map rows, where another floor is a whole band of rows away: it points (nearly) due north or south.
+    // Drawing only: what the shot does is not touched. On one floor, on a map without floors and for void rows the game's
+    // own values stay.
+    // Not a combat part (always on, as TurretTop_Aim_Patch): the patches act only on a warm-up that already aims at
+    // another floor, whichever combat system allowed that shot.
     internal static class WarmupAim
     {
-        private static bool TryGetLevels(Stance_Warmup stance, out Map map, out int source, out int target)
+        // The stance's caster aims at another floor (Heights.CrossFloor: THE test of two cells for it): the map rows from
+        // the caster's floor to the target's. False without a caster on a map or without a target.
+        private static bool CrossFloor(Stance_Warmup stance, out int rows)
         {
+            rows = 0;
             Thing caster = stance.verb?.Caster;
-            map = caster?.Map;
-            source = target = Levels.None;
-            if (map == null || !stance.focusTarg.IsValid || !ProjectZ.HasAnnex(map))
+            Map map = caster?.Map;
+            if (map == null || !stance.focusTarg.IsValid)
             {
                 return false;
             }
 
-            source = Levels.LevelOf(caster.Position, map);
-            target = Levels.LevelOf(stance.focusTarg.Cell, map);
-            return source != target && source != Levels.None && target != Levels.None;
+            IntVec3 from = caster.Position;
+            IntVec3 to = stance.focusTarg.Cell;
+            if (!Heights.CrossFloor(from, to, map))
+            {
+                return false;
+            }
+
+            rows = Levels.Shift(map, Levels.LevelOf(to, map)) - Levels.Shift(map, Levels.LevelOf(from, map));
+            return true;
         }
 
+        // Copied from vanilla Stance_Warmup.AimDir (watched, CopyWatches): the target's centre less the caster's drawn
+        // position, flat and normalised, here with the rows between the two floors taken off z first. (The game's own
+        // result is normalised already: the rows cannot be taken off it afterwards.)
         [HarmonyPatch(typeof(Stance_Warmup), "AimDir")]
-        private static class DirectionPatch
+        private static class Stance_Warmup_AimDir_Patch
         {
             private static void Postfix(Stance_Warmup __instance, ref Vector3 __result)
             {
-                if (!TryGetLevels(__instance, out Map map, out int source, out int target))
+                if (!CrossFloor(__instance, out int rows))
                 {
                     return;
                 }
 
                 Vector3 direction = __instance.focusTarg.CenterVector3 - __instance.verb.Caster.DrawPos;
                 direction.y = 0f;
-                direction.z -= Levels.Shift(map, target) - Levels.Shift(map, source);
+                direction.z -= rows;
                 __result = direction.normalized;
             }
         }
 
         [HarmonyPatch(typeof(Stance_Warmup), "TargetPos")]
-        private static class EndpointPatch
+        private static class Stance_Warmup_TargetPos_Patch
         {
             private static void Postfix(Stance_Warmup __instance, ref Vector3 __result)
             {
                 // The renderer resolves the floor from each mote link's map position.
                 // A fixed-length offset from the caster loses the target floor.
                 if (__instance.verb?.verbProps.aimingLineMoteFixedLength.HasValue == true &&
-                    TryGetLevels(__instance, out _, out _, out _))
+                    CrossFloor(__instance, out _))
                 {
                     __result = __instance.focusTarg.CenterVector3;
                 }
